@@ -62,20 +62,18 @@ def _controller_card(default_ctype, default_limits) -> dbc.Card:
                          style={'width': '60px'})
 
     return dbc.Card([
-        dbc.CardHeader(html.Strong('Controller')),
-        dbc.CardBody([
-            # Structure type
+        dbc.CardHeader(
             dbc.Row([
-                dbc.Col(html.Label('Structure type', style={'fontWeight': 'bold', 'fontSize': '13px'}),
-                        width='auto', className='align-self-center'),
+                dbc.Col(html.Strong('Controller'), width='auto', className='align-self-center'),
                 dbc.Col(dcc.Dropdown(
                     id='dropdown-ctype',
                     options=[{'label': t, 'value': t} for t in ('I', 'PI', 'PID')],
                     value=default_ctype, clearable=False,
                     style={'minWidth': '80px'},
-                ), width='auto'),
-            ], align='center', className='mb-2'),
-
+                ), width='auto', className='ms-auto'),
+            ], align='center', justify='between', className='g-2'),
+        ),
+        dbc.CardBody([
             # Sliders
             dbc.Row([
                 _slider('slider-kp', 'Kp ×'),
@@ -104,7 +102,7 @@ def _controller_card(default_ctype, default_limits) -> dbc.Card:
 
             # Feature limits
             dbc.Row([
-                dbc.Col(html.Small('Feature limits:', style={'color': '#777'}), width='auto'),
+                dbc.Col(html.Small('Limits:', style={'color': '#777'}), width='auto'),
                 dbc.Col([html.Small('F1: ', style={'color': '#777'}), _limit_input('limit-1', lim1)],
                         width='auto', className='d-flex align-items-center gap-1'),
                 dbc.Col([html.Small('F2: ', style={'color': '#777'}), _limit_input('limit-2', lim2)],
@@ -114,6 +112,32 @@ def _controller_card(default_ctype, default_limits) -> dbc.Card:
             ], align='center'),
         ]),
     ], className='h-100')
+
+
+def _step_response_card() -> dbc.Card:
+    return dbc.Card([
+        dbc.CardHeader(html.Strong('Step Response')),
+        dbc.CardBody([
+            dcc.Graph(id='graph-time', style=GRAPH_STYLE,
+                      config={'displayModeBar': False}),
+        ]),
+    ])
+
+
+def _features_card() -> dbc.Card:
+    return dbc.Card([
+        dbc.CardHeader(html.Strong('Features')),
+        dbc.CardBody([
+            dbc.Row([
+                dbc.Col(dcc.Graph(id='graph-f1', style=GRAPH_STYLE,
+                                  config={'displayModeBar': False}), width=6, md=4),
+                dbc.Col(dcc.Graph(id='graph-f2', style=GRAPH_STYLE,
+                                  config={'displayModeBar': False}), width=6, md=4),
+                dbc.Col(dcc.Graph(id='graph-f3', style=GRAPH_STYLE,
+                                  config={'displayModeBar': False}), width=6, md=4),
+            ]),
+        ]),
+    ])
 
 
 def make_layout(default_tau: str = '[5,5,5,5]',
@@ -135,23 +159,11 @@ def make_layout(default_tau: str = '[5,5,5,5]',
                     width=12, md=8, className='mb-2'),
         ], className='mb-1'),
 
-        # ── Time domain plot ──────────────────────────────────────────────────
-        dbc.Row(
-            dbc.Col(dcc.Graph(id='graph-time', style=GRAPH_STYLE,
-                              config={'displayModeBar': False}), width=12),
-            className='mb-1',
-        ),
+        # ── Step Response ──────────────────────────────────────────────────
+        dbc.Row(dbc.Col(_step_response_card(), width=12), className='mb-1'),
 
-        # ── Features area ──────────────────────────────────────────────────────
-        html.H6('Features', className='mb-1'),
-        dbc.Row([
-            dbc.Col(dcc.Graph(id='graph-f1', style=GRAPH_STYLE,
-                              config={'displayModeBar': False}), width=6, md=4),
-            dbc.Col(dcc.Graph(id='graph-f2', style=GRAPH_STYLE,
-                              config={'displayModeBar': False}), width=6, md=4),
-            dbc.Col(dcc.Graph(id='graph-f3', style=GRAPH_STYLE,
-                              config={'displayModeBar': False}), width=6, md=4),
-        ]),
+        # ── Features ──────────────────────────────────────────────────────
+        dbc.Row(dbc.Col(_features_card(), width=12), className='mb-1'),
 
         # ── Hidden state ────────────────────────────────────────────────────
         dcc.Store(id='base-gains', data={'Kp': 1.0, 'Ki': 1.0, 'Kd': 0.0,

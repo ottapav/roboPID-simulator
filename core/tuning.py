@@ -8,6 +8,7 @@ Mirrors MATLAB pidtool.pid_tuning exactly:
 """
 
 from __future__ import annotations
+from typing import Callable
 import numpy as np
 
 from .features import loop_response_features, FeatureDescription
@@ -32,6 +33,7 @@ def pid_tuning(
     simtype: int = 0,
     minu: float = -1.0, maxu: float = 1.0,
     dist_a: float = 0.0, dist_b: float = 0.0,
+    on_iteration: Callable[[int, int, float, float, float], None] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Run N iterations of feature-driven gain search.
@@ -41,6 +43,9 @@ def pid_tuning(
 
     feature_limits: tuple of 3 phase limits (one per feature); defaults to
                     the limit stored in each FeatureDescription.
+    on_iteration: optional callback invoked as on_iteration(i, N, Fp_cur, Fi_cur, Fd_cur)
+                  once per iteration with the pre-update multipliers, plus once more
+                  after the loop with (N, N, <final multipliers>).
     """
     if feature_limits is None:
         feature_limits = tuple(d.limit for d in description)
@@ -58,6 +63,9 @@ def pid_tuning(
         Fp_cur = Fp_hist[i - 1]
         Fi_cur = Fi_hist[i - 1]
         Fd_cur = Fd_hist[i - 1]
+
+        if on_iteration is not None:
+            on_iteration(i, N, float(Fp_cur), float(Fi_cur), float(Fd_cur))
 
         feats, _, _, _, pr = loop_response_features(
             description, PR_NAMES,
@@ -106,5 +114,8 @@ def pid_tuning(
         Fp_hist[i] = Fp_new
         Fi_hist[i] = Fi_new
         Fd_hist[i] = Fd_new
+
+    if on_iteration is not None:
+        on_iteration(N, N, float(Fp_hist[-1]), float(Fi_hist[-1]), float(Fd_hist[-1]))
 
     return Fp_hist, Fi_hist, Fd_hist

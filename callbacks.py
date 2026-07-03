@@ -5,7 +5,8 @@ Flow:
   1. User edits plant params (tau, K, Td) → no immediate effect
   2. User clicks Optimize → run_optimize → updates base-gains store → triggers full figure rebuild
   3. User drags sliders → update_figures_patch sends only changed trace data (fast)
-  4. User clicks Tune → run_tune → updates sliders → triggers patch update
+  4. User clicks Tune → run_tune (background) → streams live sliders/plots/status via
+     set_progress, reusing the same patch-building logic as update_figures_patch
 
 Split into two figure-update callbacks for performance:
   update_figures_full  — triggered by base-gains / ctype / limits changes → returns go.Figure
@@ -15,6 +16,7 @@ Split into two figure-update callbacks for performance:
 from __future__ import annotations
 import ast
 import os
+import time
 
 import numpy as np
 from dash import Input, Output, State, Patch, no_update
@@ -25,7 +27,7 @@ from core.features import standard_pid_features, loop_response_features
 from core.optimizer import pid_design
 from core.tuning import pid_tuning
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'pidtool.config')
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'robopid.config')
 
 # Trace indices in the time-domain figure
 _T_Y, _T_R, _T_U = 0, 1, 2
@@ -85,6 +87,30 @@ def _simulate(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3, cfg, dist_a, 
     return feats, sigs, gains_text
 
 
+def _patch_figures(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3, cfg, dist_a, dist_b):
+    """Simulate once and return (patch_f1, patch_f2, patch_f3, patch_time, gains_text)."""
+    feats, sigs, gains_text = _simulate(
+        tau, K, Td, Ts, Kp, Ki, Kd, ctype,
+        lim1, lim2, lim3, cfg, dist_a, dist_b)
+
+    patches_f = []
+    for i, feat in enumerate(feats):
+        p = Patch()
+        p['data'][0]['x'] = feat['xdata'].tolist()
+        p['data'][0]['y'] = feat['ydata'].tolist()
+        p['layout']['title']['text'] = (
+            f'F{i+1}: {feat["phase"]:.2f} circles (limit {feat["limit"]})')
+        patches_f.append(p)
+
+    pt = Patch()
+    t = sigs['t']
+    pt['data'][_T_Y]['y'] = sigs['y'].tolist()
+    pt['data'][_T_R]['y'] = np.ones(len(t)).tolist()
+    pt['data'][_T_U]['y'] = sigs['u'].tolist()
+
+    return patches_f[0], patches_f[1], patches_f[2], pt, gains_text
+
+
 # ── Full-figure builders ──────────────────────────────────────────────────────
 
 def _build_feature_fig(feat: dict, idx: int) -> go.Figure:
@@ -119,7 +145,7 @@ def _build_time_fig(sigs: dict) -> go.Figure:
                    name='u (action)', line={'color': _C['u']}),
     ])
     fig.update_layout(
-        title={'text': 'Time Domain', 'font': {'size': 11}},
+        title={'text': 'Step Response', 'font': {'size': 11}},
         xaxis_title='time', yaxis_title='value',
         margin={'l': 40, 'r': 8, 't': 38, 'b': 50},
         legend={'font': {'size': 10}, 'orientation': 'h', 'y': -0.3, 'x': 0},
@@ -219,28 +245,11 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Kd = Fd * float(base_gains.get('Kd', 0.0))
 
         cfg, dist_a, dist_b = _load_cfg(default_Ts)
-        feats, sigs, gains_text = _simulate(
+        p_f1, p_f2, p_f3, p_time, gains_text = _patch_figures(
             tau, K, Td, default_Ts, Kp, Ki, Kd, ctype,
             lim1, lim2, lim3, cfg, dist_a, dist_b)
 
-        # Patch feature plots — only update trajectory data and title
-        patches_f = []
-        for i, feat in enumerate(feats):
-            p = Patch()
-            p['data'][0]['x'] = feat['xdata'].tolist()
-            p['data'][0]['y'] = feat['ydata'].tolist()
-            p['layout']['title']['text'] = (
-                f'F{i+1}: {feat["phase"]:.2f} circles (limit {feat["limit"]})')
-            patches_f.append(p)
-
-        # Patch time-domain plot — update all signal traces
-        pt = Patch()
-        t = sigs['t']
-        pt['data'][_T_Y]['y'] = sigs['y'].tolist()
-        pt['data'][_T_R]['y'] = np.ones(len(t)).tolist()
-        pt['data'][_T_U]['y'] = sigs['u'].tolist()
-
-        return patches_f[0], patches_f[1], patches_f[2], pt, gains_text
+        return p_f1, p_f2, p_f3, p_time, gains_text
 
     # ── 2. Optimize button ─────────────────────────────────────────────────
     @app.callback(
@@ -266,6 +275,9 @@ def register_callbacks(app, default_Ts: float = 1.0):
         return {'Kp': Kp, 'Ki': Ki, 'Kd': Kd, 'optimized': True}, 1.0, 1.0, 1.0
 
     # ── 3. Tune button ────────────────────────────────────────────────────
+    # Background callback: runs pid_tuning() in a worker process (DiskcacheManager)
+    # and streams live progress (sliders, status text, and the same figure patches
+    # update_figures_patch builds) back via set_progress.
     @app.callback(
         Output('slider-kp', 'value'),
         Output('slider-ki', 'value'),
@@ -283,9 +295,26 @@ def register_callbacks(app, default_Ts: float = 1.0):
         State('limit-2', 'value'),
         State('limit-3', 'value'),
         State('base-gains', 'data'),
+        background=True,
+        progress=[
+            Output('slider-kp', 'value', allow_duplicate=True),
+            Output('slider-ki', 'value', allow_duplicate=True),
+            Output('slider-kd', 'value', allow_duplicate=True),
+            Output('tune-status', 'children', allow_duplicate=True),
+            Output('graph-time', 'figure', allow_duplicate=True),
+            Output('graph-f1', 'figure', allow_duplicate=True),
+            Output('graph-f2', 'figure', allow_duplicate=True),
+            Output('graph-f3', 'figure', allow_duplicate=True),
+            Output('gains-display', 'children', allow_duplicate=True),
+        ],
+        running=[
+            (Output('btn-tune', 'disabled'), True, False),
+            (Output('btn-optimize', 'disabled'), True, False),
+        ],
+        interval=150,
         prevent_initial_call=True,
     )
-    def run_tune(n_clicks, Fp, Fi, Fd,
+    def run_tune(set_progress, n_clicks, Fp, Fi, Fd,
                  tau_str, K_val, Td_val, ctype,
                  lim1, lim2, lim3, base_gains):
         if not n_clicks:
@@ -312,6 +341,28 @@ def register_callbacks(app, default_Ts: float = 1.0):
         desc = standard_pid_features(limits=(lim1, lim2, lim3))
         smin, smax = 0.01, 5.0
 
+        last_push = [0.0]
+        MIN_PUSH_INTERVAL = 0.08  # seconds; well under interval=150ms poll above
+
+        def on_iteration(i, N, Fp_cur, Fi_cur, Fd_cur):
+            now = time.monotonic()
+            if i < N and (now - last_push[0]) < MIN_PUSH_INTERVAL:
+                return
+            last_push[0] = now
+            # Fp_cur/Fi_cur/Fd_cur are multipliers relative to the (Kp*Fp, Ki*Fi, Kd*Fd)
+            # baseline passed into pid_tuning below — re-multiply by the slider-scale
+            # Fp/Fi/Fd to land back in slider.value units, same conversion as new_Fp below.
+            p_Fp = float(np.clip(Fp_cur * Fp, smin, smax))
+            p_Fi = float(np.clip(Fi_cur * Fi, smin, smax))
+            p_Fd = float(np.clip(Fd_cur * Fd, smin, smax))
+
+            p_f1, p_f2, p_f3, p_time, gains_text = _patch_figures(
+                tau, K, Td, default_Ts, p_Fp * Kp, p_Fi * Ki, p_Fd * Kd, ctype,
+                lim1, lim2, lim3, cfg, dist_a, dist_b)
+
+            set_progress((p_Fp, p_Fi, p_Fd, f'Tuning… iter {i}/{N}',
+                          p_time, p_f1, p_f2, p_f3, gains_text))
+
         Fp_hist, Fi_hist, Fd_hist = pid_tuning(
             desc, tau, K, Td, default_Ts,
             Kp * Fp, Ki * Fi, Kd * Fd,
@@ -325,6 +376,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
             minu=float(cfg.get('minu', -1.0)),
             maxu=float(cfg.get('maxu', 1.0)),
             dist_a=dist_a, dist_b=dist_b,
+            on_iteration=on_iteration,
         )
 
         new_Fp = float(np.clip(Fp_hist[-1] * Fp, smin, smax))

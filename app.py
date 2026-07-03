@@ -8,9 +8,12 @@ Then open http://localhost:8050 in your browser.
 """
 
 import argparse
+import os
 import numpy as np
 import dash
 import dash_bootstrap_components as dbc
+import diskcache
+from dash import DiskcacheManager
 
 from layout import make_layout
 from callbacks import register_callbacks
@@ -33,10 +36,24 @@ def parse_args():
 def main():
     args = parse_args()
 
+    cache_dir = os.path.join(os.path.dirname(__file__), '.cache')
+    cache = diskcache.Cache(cache_dir)
+    # DiskcacheManager keys jobs by (callback source + arg values), not by time,
+    # and the cache persists across restarts. Since the app's default inputs are
+    # identical on every launch, the first Tune click of a new session can hash
+    # to a stale, already-completed job from a previous run: Dash then returns
+    # that cached result instantly and kills the freshly spawned worker before
+    # it ever streams progress, so the sliders/status jump straight to the
+    # (correct but stale) final values while the plots never get patched.
+    # Clearing the cache at startup avoids these cross-session collisions.
+    cache.clear()
+    background_callback_manager = DiskcacheManager(cache)
+
     app = dash.Dash(
         __name__,
         external_stylesheets=[dbc.themes.BOOTSTRAP],
         title='RoboPID',
+        background_callback_manager=background_callback_manager,
     )
 
     app.layout = make_layout(
