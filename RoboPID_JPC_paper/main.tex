@@ -1,0 +1,793 @@
+\documentclass[final,3p,times,twocolumn]{elsarticle}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\setlist[itemize]{itemsep=1pt, topsep=2pt, parsep=0pt, partopsep=0pt}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{remark}{Remark}
+\newtheorem{definition}{Definition}
+
+\journal{Journal of Process Control}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Model-Free PID Tuning via Encirclements of the Step Response}
+
+\author[inst1]{Daniel Pachner}
+\author[inst1]{Pavel Otta\corref{cor1}}
+\ead{pavel.otta@cvut.cz}
+\author[inst1]{Ji\v{r}\'{\i} Dost\'al}
+
+\cortext[cor1]{Corresponding author}
+
+\affiliation[inst1]{organization={University Centre for Energy Efficient
+Buildings (UCEEB), Czech Technical University in Prague},
+addressline={T\v{r}ineck\'a 1024},
+city={Bu\v{s}t\v{e}hrad},
+postcode={273 43},
+country={Czech Republic}}
+
+\begin{abstract}
+Industrial PID tuning is still, at bottom, a visual craft: step the
+setpoint, look at the response, nudge a gain. This paper makes the looking
+exact. From one closed-loop step response, three phase portraits of the
+control error are formed---error against its running integral, first
+difference, and second difference---and the winding number of each about
+its settling point is counted. The three counts are proven invariant to
+time and amplitude scaling, so fixed dimensionless thresholds serve every
+loop, and they are shown to be band-selective: they detect insufficient
+damping in the low-, mid-, and high-frequency regions of the loop, the
+regions dominated by the integral, proportional, and derivative channels
+respectively. A well-posedness condition is established---without a
+settling-anchored observation window the counts diverge with window
+length---together with a one-parameter guard that restores window
+independence. A single triangular rule then updates the gains, ordered by
+the frequency band each channel dominates: raise every clean band below
+the lowest violation, cut that band---the only violation whose blame is
+unambiguous---and touch nothing above; or raise
+all bands when every portrait is clean. The iteration is deterministic,
+bounded by
+construction, and, under an explicit monotonicity assumption, converges to
+a limit cycle on the boundary of the well-damped tuning set. The method
+rests on two standing assumptions only---a stable, self-regulating
+process of the first-order-plus-time-delay class, and the parallel PID
+structure itself---and uses no process model, no solver, and one step
+test per iteration. It is validated on a battery of process-typical
+plants---lag-dominant, delay-dominant, balanced, and high-order---with
+identical defaults throughout. A reference implementation is public.
+\end{abstract}
+
+\begin{highlights}
+\item A deterministic reading of the step response replaces manual PID
+tuning.
+\item Three phase portraits of the control error give a dimensionless
+damping diagnostic.
+\item The diagnostic is band-selective, assigning oscillation to the I,
+P, or D channel.
+\item A well-posedness guard keeps the encirclement count independent
+of window length.
+\item One triangular rule converges to the boundary of the well-damped
+tuning set.
+\end{highlights}
+
+\begin{keyword}
+PID control \sep controller tuning \sep data-driven control \sep
+phase plane \sep step response
+\end{keyword}
+
+\end{frontmatter}
+
+%=====================================================================
+\section{Introduction}
+%=====================================================================
+
+Eighty years after Ziegler and Nichols \cite{ZN1942}, PID remains the
+dominant industrial controller \cite{AstromHagglund2001}, and most PID
+loops are still tuned by inspection: an engineer steps the setpoint,
+looks at the response, and adjusts a gain by feel. The literature's two
+remedies both discard the inspection. Model-based rules---Ziegler--Nichols
+\cite{ZN1942}, Cohen--Coon \cite{CohenCoon1953}, IMC \cite{RiveraIMC},
+SIMC \cite{Skogestad2003}---replace it with an identified low-order model
+and inherit that model's errors. Data-driven schemes replace it with a
+criterion and the machinery to serve it: a dedicated relay experiment
+that deliberately excites a sustained oscillation
+\cite{AstromHagglund1984}, gradient experiments on a quadratic cost
+\cite{HjalmarssonIFT}, a one-shot identification-like problem
+\cite{CampiVRFT}, or online perturbation of the gains
+\cite{KillingsworthKrstic}. The inspection itself---which gain is to
+blame, given this response---has remained tacit.
+
+This paper formalizes the inspection. The contributions are:
+(i)~a triple of phase portraits of the control error whose encirclement
+counts form a dimensionless, scale-free, band-selective damping diagnostic
+(Section~\ref{sec:feature});
+(ii)~a well-posedness analysis of the counts, including a counterexample
+showing that a na\"ively windowed count diverges, and a settling-anchored
+guard that provably restores window independence
+(Section~\ref{sec:wellposed});
+(iii)~a single triangular tuning rule in band-ordered gain coordinates,
+interpreted as band-wise
+loop shaping, with boundedness unconditional and boundary convergence
+under one explicit monotonicity assumption (Section~\ref{sec:rule});
+(iv)~validation on a battery of process-typical plants with identical
+default parameters throughout (Section~\ref{sec:battery}).
+
+The method claims no optimality: it returns a fast, well-damped
+tuning---the contract an expert tuner offers---in exchange for one
+closed-loop setpoint step per iteration and nothing else. No model, no
+relay experiment, no solver; and full auditability, since an operator
+watching the three plots sees exactly what the algorithm sees.
+Figure~\ref{fig:storyboard} shows the entire method on one plant, before
+any mathematics.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig1_storyboard.pdf}
+\caption{The method at a glance, on plant P2 (Section~\ref{sec:battery}).
+\emph{Top row (before tuning):} the step-response error looks
+unremarkable, yet $\Gamma_2$ loops $2.69$ times---well past its limit of
+$1.0$---revealing a fast mode invisible in $e(t)$ itself. This is row 3
+of Table~\ref{tab:rule}: cut $D$. \emph{Bottom row (after tuning):} all
+three portraits spiral cleanly into the settling point without a loop.}
+\label{fig:storyboard}
+\end{figure*}
+
+%=====================================================================
+\section{The encirclement features}
+\label{sec:feature}
+%=====================================================================
+
+The method rests on exactly two standing assumptions, stated once and
+used throughout.
+
+\begin{assumption}[Process class]\label{ass:plant}
+The process is a stable, self-regulating SISO plant whose open-loop step
+response is essentially monotone with dead time---the class adequately
+captured by first-order-plus-time-delay (FOPTD) models. FOPTD is meant
+here as a modelling class, not a literal transfer-function restriction:
+higher-order overdamped dynamics belong to it.
+\end{assumption}
+
+\begin{assumption}[Controller structure]\label{ass:pid}
+The controller is a parallel PID,
+$u = K_p e + K_i\!\int\! e + K_d \dot e$, in a unity-feedback loop.
+\end{assumption}
+
+Nothing else is assumed. No model is identified, parametrized, or used at
+any point of the procedure; no noise model is posited; no excitation is
+required beyond routine setpoint steps under the existing controller.
+
+A tuning experiment applies a setpoint step and
+records the error $e_k$, $k = 0,\dots,K$, at period $T_s$, over a window
+in which the response settles. Form the running integral $E_k$ and the
+differences $\Delta e_k$, $\Delta^2 e_k$, and pair each signal with its
+own difference:
+\begin{align}
+\Gamma_0&: \bigl(e_k,\, E_k{-}E_{K}\bigr), \notag\\
+\Gamma_1&: \bigl(\Delta e_k,\, e_k\bigr), \notag\\
+\Gamma_2&: \bigl(\Delta^2 e_k,\, \Delta e_k\bigr).
+\label{eq:plots}
+\end{align}
+$\Gamma_1$ is the classical phase plane of the error; $\Gamma_0$ and
+$\Gamma_2$ are its integrated and differentiated siblings; all three
+terminate at the origin when the loop settles. We call
+\eqref{eq:plots} \emph{Pachner plots}, after the first author, who
+devised the construction; the name has been in use in the authors' group
+since the construction was first implemented.
+
+A well-damped loop spirals into the origin without completing a turn; an
+under-damped loop encircles it. The count is made precise as follows.
+
+\begin{definition}[Encirclement count]\label{def:count}
+Given a planar trajectory $(x_k, y_k)$, $k = 0,\dots,J$:
+(i) normalize each coordinate by its peak magnitude, mapping the curve
+into $[-1,1]^2$;
+(ii) truncate at the last entry into the disc of radius
+$\varepsilon \in (0,1)$ about the origin;
+(iii) define $N$ as the winding number of the remaining curve about the
+origin: total swept angle over $2\pi$, evaluated as the endpoint angle
+difference corrected by signed crossings of the negative horizontal
+semi-axis. Partial revolutions count fractionally.
+\end{definition}
+
+Applying Definition~\ref{def:count} to $\Gamma_0, \Gamma_1, \Gamma_2$
+yields the feature vector $\mathbf N(\theta) = (N_0, N_1, N_2)$ at
+controller setting $\theta = (K_p, K_i, K_d)$, from a single step test,
+with no plant knowledge.
+
+\begin{proposition}[Invariance]\label{prop:invariance}
+$\mathbf N$ is invariant under time reparametrization $t \mapsto \alpha t$,
+$\alpha > 0$, of the underlying response, and under independent positive
+scaling of either coordinate of each trajectory---in particular under
+scaling of the setpoint step and, in the fast-sampling limit, of the
+sampling period.
+\end{proposition}
+
+\begin{proof}
+The winding number depends only on the oriented image of the curve, not
+its parametrization; per-axis peak normalization removes amplitude and
+units, and the truncation disc is defined on normalized coordinates.
+\end{proof}
+
+\begin{sloppypar}
+Consequently one threshold set serves all loops: the defaults
+$\bar{\mathbf N} = (0.5, 0.75, 1.0)$ together with $\varepsilon = 0.1$
+are used unchanged in every result of this paper. They function as the
+definition of ``well damped,'' not as tuning knobs.
+\end{sloppypar}
+
+\begin{proposition}[Band selectivity]\label{prop:band}
+Let the error contain a decaying mode $A e^{-\sigma t}\cos\omega t$,
+$\sigma \ll \omega$. Differentiation weights the mode's amplitude by
+$\omega$ and integration by $1/\omega$, so the mode's visibility relative
+to the monotone component of the error is greatest in $\Gamma_2$ for large
+$\omega$, in $\Gamma_0$ for small $\omega$, and in $\Gamma_1$ near the
+closed-loop crossover. In the portrait it dominates, the mode traces a
+logarithmic spiral executing
+$N \approx \tfrac{\omega}{2\pi\sigma}\,\ln\tfrac{1}{\varepsilon'}$
+revolutions before entering the truncation disc, where $\varepsilon'$ is
+the disc radius relative to the mode's initial normalized amplitude:
+the count is a monotone image of the mode's inverse damping ratio, gated
+by frequency band.
+\end{proposition}
+
+Inverting the small-damping estimate of Proposition~\ref{prop:band}
+($\zeta \approx \sigma/\omega$, so $\omega/\sigma \approx 1/\zeta$) gives
+an illustrative reading of the defaults as damping specifications:
+$\zeta \approx \ln(1/\varepsilon)/(2\pi \bar N_k)$, or roughly
+$\zeta \approx 0.73, 0.49, 0.37$ for $\bar N_0, \bar N_1, \bar N_2$ at
+$\varepsilon = 0.1$---decreasing across bands, consistent with the lowest
+band being the least tolerant of oscillation. The figures are indicative
+rather than exact, since the underlying approximation assumes
+$\sigma \ll \omega$ and these values are not small; they are offered as a
+sense of scale for the defaults, not as a design guarantee.
+
+The bands are owned by the controller channels: for the parallel PID,
+$|C(j\omega)| \approx K_i/\omega$ at low frequency, $\approx K_p$ in the
+mid band, $\approx K_d\omega$ at high frequency. Hence $N_0$ indicts
+$K_i$, $N_1$ indicts $K_p$, $N_2$ indicts $K_d$. This correspondence is
+the entire basis of the tuning rule.
+
+\emph{Leakage, and its direction.} Band selectivity must not be
+over-read: it governs where a mode is \emph{most} visible, not where it
+is visible at all. Differencing a damped oscillation yields another
+damped oscillation with the same $\sigma$ and $\omega$---the same
+spiral, hence essentially the same winding count---so a single mode
+contributes its count to \emph{every} portrait it manages to dominate.
+And dominance spreads upward: each differencing step multiplies the mode
+by $\omega$ but the monotone settling trend only by its slower decay
+rate, so an oscillatory mode becomes \emph{more} dominant along the
+derivative chain, while integration suppresses it. A mid-band mode
+therefore leaks its full count into $\Gamma_2$; a high-band mode leaves
+$\Gamma_1$ and $\Gamma_0$ untouched. Synthetically: a settling trend
+plus one under-damped mid mode alone evaluates to
+$\mathbf N = (0.12,\, 3.9,\, 6.5)$---the \emph{high} count exceeds the
+mid one, purely by leakage---while a lone high mode of comparable
+severity gives $\mathbf N = (0.12,\, 0.05,\, 5.7)$, leaking nowhere
+below. Two consequences follow. Downward cleanliness means the
+\emph{lowest} violated band is always genuinely guilty: nothing exists
+below it to leak into it. Upward contamination means violations
+\emph{above} the lowest are unattributable from the counts alone: a
+two-mode error and a single strong mid mode produce indistinguishable
+feature vectors. The tuning rule of Section~\ref{sec:rule} is built
+around exactly this asymmetry.
+
+%=====================================================================
+\section{Well-posedness of the count}
+\label{sec:wellposed}
+%=====================================================================
+
+The counts of Definition~\ref{def:count} conceal a subtlety that, to our
+knowledge, affects every response feature built on differenced signals.
+Per-axis normalization is what buys Proposition~\ref{prop:invariance};
+but it also means each portrait is blind to the \emph{absolute} scale of
+its coordinates. If the error retains a persistent micro-oscillation---at
+a fraction of a percent of the step, from quantization, a marginally
+damped parasitic mode, or numerical residue---that ripple can dominate
+the differenced coordinates $\Delta e$, $\Delta^2 e$ long after $e$ itself
+has settled. Normalized to its own peak, the ripple fills the portrait
+and winds indefinitely: the count then grows without bound as the
+observation window lengthens, and comparisons against fixed thresholds
+become artefacts of the window.
+
+This is not hypothetical. For the plant $P(s) = e^{-4s}/(8s+1)^6$ at
+gains reached mid-iteration by the tuning rule, the response settles to
+$|e| < 0.005$ (peak $1.0$) well inside the default window, yet the counts
+evaluate to $\mathbf N = (0.12,\, 1.84,\, 2.86)$ on that window,
+$(0.62,\, 9.22,\, 17.2)$ on a window six times longer, and
+$(0.62,\, 17.3,\, 37.3)$ on twice that: $N_1, N_2$ grow essentially
+linearly in window length. In closed loop the consequence is erratic:
+threshold comparisons flip under $10\%$ gain changes and the corrective
+moves of the tuning rule fight each other without
+converging. Figure~\ref{fig:wellposed} shows the pattern: unguarded
+counts climb without bound as the window lengthens, while the guarded
+counts defined next sit flat.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\linewidth]{fig3_wellposed.pdf}
+\caption{Window dependence of $N_1, N_2$ on the counterexample plant,
+guarded (Definition~\ref{def:guard}) versus unguarded (Definition~1
+applied to the raw window). Guarded counts are exactly flat.}
+\label{fig:wellposed}
+\end{figure}
+
+The remedy is to anchor the window to the settling of the parent signal.
+
+\begin{definition}[Settling-anchored window]\label{def:guard}
+Fix $\delta \in (0,1)$ (default $\delta = 0.02$). Let
+$k_\delta = 1 + \max\{k : |e_k| > \delta \max_j |e_j|\}$ and truncate all
+three trajectories \eqref{eq:plots} at $k_\delta$ before applying
+Definition~\ref{def:count}.
+\end{definition}
+
+\begin{proposition}[Well-posedness]\label{prop:wellposed}
+Under Definition~\ref{def:guard}, the features $\mathbf N$ are independent
+of the window length for every window containing the $\delta$-settling
+time of $e$, and Proposition~\ref{prop:invariance} continues to hold
+($\delta$ is dimensionless and defined on the normalized error).
+\end{proposition}
+
+\begin{proof}
+All samples beyond $k_\delta$ are discarded, and $k_\delta$ itself depends
+only on $e$ up to its $\delta$-settling time; enlarging the window changes
+neither. Invariance is preserved because $k_\delta$ is defined through the
+ratio $|e_k| / \max_j |e_j|$.
+\end{proof}
+
+On the counterexample above, the guarded counts evaluate to
+$\mathbf N = (0.12,\, 1.14,\, 2.24)$ on all three windows---identical to
+three digits---and, as Section~\ref{sec:battery} shows, the closed-loop
+tuning iteration on the same plant converges cleanly once the guard is in
+place. The guard is henceforth part of the feature definition; the method
+thus carries exactly three dimensionless constants
+$(\bar{\mathbf N}, \varepsilon, \delta)$, none of which was adjusted for
+any plant in this paper.
+
+\begin{remark}
+Proposition~\ref{prop:wellposed} formalizes, and enforces, the practical
+requirement that each tuning experiment be observed until the loop
+settles. The failure mode it excludes---unbounded winding of a
+noise-dominated differenced portrait---is silent and window-dependent,
+which is precisely why it deserves a formal guard rather than an
+operator's discretion.
+\end{remark}
+
+\begin{remark}[Scope of the guard]\label{rem:noise}
+Proposition~\ref{prop:wellposed} is stated for a noise-free $e$. With
+measurement noise of standard deviation $\sigma_n$, $k_\delta$ is well
+defined only if the settling band exceeds the noise floor,
+$\delta \max_j |e_j| \gg \sigma_n$; otherwise $k_\delta$ tracks the last
+noise excursion rather than true settling, and the divergence of
+Section~\ref{sec:wellposed} can reappear despite the guard. The default
+$\delta = 0.02$ is therefore adequate only while noise stays below
+roughly two percent of the step amplitude---a condition to be checked,
+not assumed, in a given deployment. Two further practical points follow
+the same logic: enough samples should be retained per transient (some
+tens to a few hundred) that $\Delta e$ and $\Delta^2 e$ are not dominated
+by quantization, and the derivative in \eqref{eq:plots} and in the
+controller is taken on the error, not the measurement, so that a
+setpoint step does not itself inject a derivative kick into $\Gamma_2$.
+\end{remark}
+
+%=====================================================================
+\section{The tuning rule}
+\label{sec:rule}
+%=====================================================================
+
+The rule is stated in the coordinates in which it was designed. Order the
+gains by the frequency band each channel dominates and write
+\begin{equation}
+K^{(0)} = K_i, \qquad K^{(1)} = K_p, \qquad K^{(2)} = K_d,
+\label{eq:bandorder}
+\end{equation}
+so that the band index aligns with the portraits: $N_k$ is the feature
+that indicts $K^{(k)}$. Parametrize the gains as multipliers
+$F^{(k)} \in [F_{\min}, F_{\max}]$ (defaults $[0.01, 5]$) on any
+conservative stabilizing initialization, fix a step $\beta$ (default
+$0.1$), and let $\gamma = 1/(1-\beta)$. Each iteration performs one step
+test, evaluates $\mathbf N$, and updates the gains.
+
+The rule, in words: \emph{scan the portraits from slow to fast; the
+first one that loops too much names the gain to turn down one notch, and
+every gain below it turns up one notch; if none loops, turn all three
+up.} Table~\ref{tab:rule} is the entire decision logic. The classical
+commissioning craft is recognizable row by row---slow cycling: back off
+the reset; ringing: back off the gain; buzzing: back off the
+rate---with the compensating increases added, and the lower-triangular
+stencil that gives the rule its name is directly visible in the arrow
+pattern.
+
+\begin{table}[h]
+\centering
+\caption{The tuning rule at a glance. The first matching row applies,
+top to bottom, once per step test; ``loops'' means $N_k > \bar N_k$.
+$\uparrow$: multiply by $\gamma$;\ $\downarrow$: divide by $\gamma$;\
+$\cdot$\,: unchanged. Projections onto $[F_{\min},F_{\max}]$ implied.}
+\label{tab:rule}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lcccl}
+\toprule
+First loop & $F_i$ & $F_p$ & $F_d$ & craft reading \\
+\midrule
+$\Gamma_0$ & $\downarrow$ & $\cdot$ & $\cdot$ &
+slow cycling: less reset \\
+$\Gamma_1$ & $\uparrow$ & $\downarrow$ & $\cdot$ &
+ringing: less gain \\
+$\Gamma_2$ & $\uparrow$ & $\uparrow$ & $\downarrow$ &
+buzzing: less rate \\
+none & $\uparrow$ & $\uparrow$ & $\uparrow$ &
+all quiet: tighten \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{center}
+\fbox{\begin{minipage}{0.96\linewidth}
+\textbf{Procedure.}
+\begin{enumerate}[leftmargin=1.4em, itemsep=1pt, topsep=2pt]
+\item Close the loop with any conservative, stabilizing gains.
+\item Step the setpoint; record the error $e$ until it settles.
+\item Truncate the record where $|e|$ last leaves $2\%$ of its peak
+(Definition~\ref{def:guard}).
+\item Form the three portraits (Fig.~\ref{fig:storyboard}) and count
+loops.
+\item Apply the matching row of Table~\ref{tab:rule}.
+\item Repeat; once the gains begin to alternate, keep the last tuning
+that violated no loop limit.
+\end{enumerate}
+\end{minipage}}
+\end{center}
+
+\begin{table}[h]
+\centering
+\caption{Constants and defaults, used unchanged on every plant in this
+paper.}
+\label{tab:defaults}
+\begin{tabular}{lll}
+\toprule
+Symbol & Meaning & Default \\
+\midrule
+$\bar{\mathbf N}$ & loop limits & $(0.5, 0.75, 1.0)$ \\
+$\varepsilon$ & truncation radius & $0.1$ \\
+$\delta$ & settling band & $0.02$ \\
+$\beta$ & step size & $0.1$ \\
+box & multiplier range & $[0.01, 5]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Formally, with the \emph{violated set} and its lowest member
+\begin{equation}
+V = \{k : N_k > \bar N_k\}, \qquad k_{\min} = \min V
+\end{equation}
+($k_{\min} = 3$ by convention if $V = \emptyset$), the update reads
+\begin{equation}
+F^{(k)} \;\leftarrow\;
+\begin{cases}
+\gamma\, F^{(k)}, & k < k_{\min} \ \text{(raise band)},\\[1mm]
+F^{(k)}/\gamma, & k = k_{\min} \ \text{(cut band)},\\[1mm]
+F^{(k)}, & k > k_{\min} \ \text{(untouched)},
+\end{cases}
+\label{eq:triangular}
+\end{equation}
+for $k_{\min} = 3$ degenerating to raising all bands. Only the
+lowest violated band is acted on, even when $|V| > 1$: by the leakage
+asymmetry of Section~\ref{sec:feature}, $k_{\min}$ is the only member of
+$V$ whose guilt is unambiguous, while the counts above it may be
+leakage, genuine, or a mixture, in proportions the features cannot
+resolve. Bands above $k_{\min}$ are therefore left alone---not out of
+caution, but because there is no evidence on which to act.
+
+The rule admits a one-sentence description: the loop-gain profile is
+pushed up from the low-frequency end like a rising level, halting and
+stepping down at the first band that objects. Equivalently, the
+iteration is a \emph{lexicographic bandwidth maximizer}: it raises loop
+gain in all bands subject to the damping constraints
+$N_k \le \bar N_k$ ordered by band, always yielding to the lowest-band
+complaint first. It is thus a fixed-point search for the boundary of the
+well-damped set
+$\mathcal F = \{\theta : \mathbf N(\theta) \le \bar{\mathbf N}\}$.
+
+Three structural facts follow directly from \eqref{eq:triangular}. First,
+the priority order and the direction of gain redistribution are the same
+fact seen twice: because violations are checked from the lowest band up,
+every band into which the rule pours gain ($k < k_{\min}$) was verified
+clean \emph{in the current experiment}---the triangular shape is what
+licenses the compensating increases. Second, in logarithmic gain
+coordinates the three corrective moves ($k_{\min} = 0, 1, 2$)
+form a lower triangular matrix with unit diagonal
+magnitude---unimodular---so their
+compositions generate every gain combination on the multiplicative
+$\gamma$-lattice: the moves are individually crude but jointly complete,
+and a compensation that proves unwanted is cancelled exactly by a
+lower-band correction one iteration later, at the cost of one experiment.
+Third, the iteration is an \emph{implicit attribution test}: after the
+cut at $k_{\min}$, whatever violations clear together with it were
+leakage of the $k_{\min}$ mode, and whatever persists is genuine and
+becomes the new $k_{\min}$. Sequential single-band correction is thus
+not a slower version of correcting all violated bands at once; it is
+the inference procedure that separates leaked from genuine violations,
+one real experiment per question. Cutting all of $V$ simultaneously
+would forgo exactly this inference and penalize channels for violations
+that are largely not their own; Section~\ref{sec:battery} shows this
+occurring on the battery.
+
+\begin{remark}\label{rem:multichannel}
+Nothing in \eqref{eq:triangular} is specific to three channels. Any
+controller whose channels dominate disjoint, ascending frequency
+bands---PI, PID with a second derivative term, a lead-lag chain---admits
+the identical construction: $m$ band-ordered channels, $m$ portraits
+obtained by walking one step further along the derivative chain per
+band, the lowest violated band, and the same triangular stencil.
+\end{remark}
+
+\begin{assumption}[Band monotonicity]\label{ass:mono}
+In the region traversed, each feature is locally non-decreasing in its
+associated band gain ($N_k$ in $K^{(k)}$, $k = 0, 1, 2$), and the
+corrective rule \eqref{eq:triangular}, applied where band $k_{\min}$ is
+violated, does not increase $N_{k_{\min}}$.
+\end{assumption}
+
+\begin{proposition}[Behaviour of the iteration]\label{prop:conv}
+Unconditionally, the iteration is deterministic and its iterates remain in
+the multiplier box. Under Assumption~\ref{ass:mono}, from any
+$\theta^0 \in \mathcal F$ the iteration reaches every neighbourhood of
+$\partial\mathcal F$ in finitely many steps---or saturates at the box, if
+$\mathcal F$ contains it---and thereafter remains within a band of
+$\partial\mathcal F$ of width one multiplicative step per gain, on which
+it executes a limit cycle.
+\end{proposition}
+
+\begin{proof}
+Boundedness is by construction of the projections. On $\mathcal F$,
+the rule ($V = \emptyset$) multiplies all gains by $\gamma > 1$, an expanding map that
+leaves any compact subset of the interior in finitely many steps or
+saturates at $F_{\max}$. Once $V \ne \emptyset$, the corrective form of
+the rule reduces the lowest violated feature by a fixed factor per step
+(Assumption~\ref{ass:mono}); when it clears, either the leaked
+violations above it clear with it or a genuine one becomes the new
+$k_{\min}$ and is reduced in turn, restoring feasibility in finitely
+many steps; alternation of expansion and correction confines the
+trajectory to the stated band.
+\end{proof}
+
+\emph{Stopping rule.} Because the expanding form $V = \emptyset$ is active exactly on $\mathcal F$,
+the terminal iterate of a fixed-length run may be infeasible; the
+algorithm therefore stops on cycle detection or an iteration cap and
+returns \emph{the last iterate with}
+$\mathbf N \le \bar{\mathbf N}$---always well damped, within one step of
+the fastest such tuning found. Assumption~\ref{ass:mono} encodes the
+classical monotonicity of loop damping in channel gain, and within the
+FOPTD class of Assumption~\ref{ass:plant} it holds between a conservative
+initialization and the stability boundary; outside that
+class---strongly non-minimum-phase or resonant dynamics---it can fail,
+in which case the iteration parks at a gain bound: detectable, safe,
+unproductive. We state the
+assumption rather than a slogan, and report below that it held on every
+plant tested. Safety in operation is inherited from the step size: gains
+move $\beta = 10\%$ per iteration, and a step test aborts with rollback if
+$|e|$ exceeds a configured multiple of the step size.
+
+\begin{remark}[Bumpless implementation]\label{rem:velocity}
+Because every iteration changes $K_p, K_i, K_d$ while the loop remains
+closed, the controller should be realized in \emph{velocity} (incremental)
+form,
+\begin{align}
+\Delta u_k &= K_p(e_k - e_{k-1}) + K_i T_s e_k
++ \tfrac{K_d}{T_s}(e_k - 2e_{k-1} + e_{k-2}), \notag\\
+u_k &= u_{k-1} + \Delta u_k,
+\end{align}
+rather than the positional form of Assumption~\ref{ass:pid} evaluated
+directly. The
+velocity form commands only an increment on top of whatever control value
+is currently applied, so a change of gains at an iteration boundary---or
+an initial transfer from manual to automatic control---produces no
+discontinuity in $u$: there is no integrator state to reinitialize and no
+term whose value jumps when $K_i$ or $K_d$ is rescaled. This bumpless
+property is what allows the gains to be updated between step tests
+without perturbing the plant through the actuator itself, and is assumed
+throughout the experiments of Section~\ref{sec:battery}.
+\end{remark}
+
+%=====================================================================
+\section{Validation on a plant battery}
+\label{sec:battery}
+%=====================================================================
+
+The method---guarded features, rule of Table~\ref{tab:rule}, stopping
+rule---was run on four process-typical plants spanning lag-dominant to
+delay-dominant and high-order dynamics:
+\begin{align*}
+\text{P1 (lag-dominant):} &\quad \tfrac{e^{-s}}{(10s+1)(s+1)^3}, \\
+\text{P2 (balanced):} &\quad \tfrac{1.25\,e^{-8s}}{(5s+1)^4}, \\
+\text{P3 (delay-dominant):} &\quad \tfrac{e^{-10s}}{(2s+1)(s+1)^3}, \\
+\text{P4 (high-order slow):} &\quad \tfrac{e^{-4s}}{(8s+1)^6}.
+\end{align*}
+All four satisfy
+Assumption~\ref{ass:plant}: their open-loop step responses are monotone
+with dead time, even where their order exceeds one (Table~\ref{tab:battery}). The runs use the
+identical constants
+$\bar{\mathbf N} = (0.5, 0.75, 1.0)$, $\varepsilon = 0.1$,
+$\delta = 0.02$, $\beta = 0.1$, box $[0.01, 5]$, throughout. In each
+case the simulated plant serves exclusively as a stand-in for the physical
+process: it generates step responses; the tuner sees only the recorded
+error, exactly as on hardware. Initial gains were a nominal design with
+proportional and integral gains halved and derivative gain tripled---a
+deliberately mis-tuned start exercising the rule at every band position.
+
+\begin{table*}[t]
+\centering\small
+\caption{Plant battery: initial and returned features, returned
+multipliers, iteration at which the returned (last feasible) tuning
+occurred, out of $120$. Identical constants throughout; rule
+\eqref{eq:triangular}.}
+\label{tab:battery}
+\begin{tabular}{lllll}
+\toprule
+Plant & $\mathbf N$ initial & $\mathbf N$ returned & $(F_p, F_i, F_d)$ & iter \\
+\midrule
+P1 &
+$(0.12, 0.13, 0.26)$ & $(0.11, 0.17, 0.30)$ & $(5.00, 2.87, 5.00)^{\ast}$ & 118 \\
+P2 &
+$(0.12, -0.09, 2.69)$ & $(0.11, 0.23, 0.00)$ & $(1.69, 2.32, 0.25)$ & 114 \\
+P3 &
+$(0.12, 0.09, 0.00)$ & $(0.46, 0.68, 0.77)$ & $(1.69, 2.87, 0.59)$ & 112 \\
+P4 &
+$(0.12, 0.11, 0.25)$ & $(0.12, 0.23, 0.00)$ & $(1.37, 2.09, 0.39)$ & 119 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+\raggedright\footnotesize
+$^\ast$Multiplier box reached: no encirclement occurs within the box for
+this fast, lag-dominant loop, and the iteration returns the box
+bound---the saturation case of Proposition~\ref{prop:conv}.
+\end{table*}
+
+Three observations. First, on the plants where the mis-tuned derivative
+channel produces a fast parasitic mode (P2 and P4), the diagnosis is
+invisible in the raw step response but explicit in $\Gamma_2$
+($N_2 = 2.7$ initial for P2, with the lower bands clean, so the
+indictment is unambiguous); the rule repeatedly cuts band~2, trading D
+for P and I, until the portrait clears, and P2 first reaches
+feasibility at iteration $34$. Second, on every plant the tail of
+the run exhibits the limit cycle of Proposition~\ref{prop:conv}, with
+feasibility revisited within a few iterations of the end of the run
+(final column)---including for P4, whose iteration
+churned indefinitely \emph{without} the well-posedness guard of
+Section~\ref{sec:wellposed} and converged cleanly with it. Third, P1
+demonstrates the saturation case: within a
+$[0.01, 5]$ box this loop admits no encirclement at all, and the method
+honestly returns the box bound rather than a fictitious boundary.
+
+The battery also exhibits the leakage asymmetry of
+Section~\ref{sec:feature}, and with it the attribution test of
+Section~\ref{sec:rule}, live. At iteration $16$ of the P2 run the
+features read $\mathbf N = (0.11,\, 2.08,\, 2.22)$---bands $1$ and $2$
+violated with nearly equal counts. A single cut of band~$1$ changes
+this to $(0.11,\, 0.19,\, 1.25)$: the mid-band violation is gone, and
+almost half of the high-band count has vanished \emph{with} it---that
+half was leakage of the mid-band mode---while a genuine high-band
+remainder of $1.25$ persists and becomes the next $k_{\min}$. A rule
+that had cut both members of $V$ on the strength of the raw counts
+would have penalized the derivative channel for a violation that was
+largely not its own. We verified this consequence directly: running the
+battery with a variant that cuts every violated band simultaneously
+drives P2's derivative multiplier to $0.04$---the channel is nearly
+extinguished by leaked evidence---and degrades the returned tuning
+(IAE $10.7$ against $6.8$ for rule \eqref{eq:triangular}), with a
+similar degradation on P3. Simultaneous multi-band correction is thus
+not adopted: it is faster to feasibility from severely mis-tuned starts,
+but it acts on counts the features cannot attribute.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\linewidth]{fig2_limitcycle.pdf}
+\caption{P2, single-band rule: multiplier trajectories (top) and
+feasibility per iteration (bottom). After an initial corrective phase,
+the run settles into the boundary limit cycle of
+Proposition~\ref{prop:conv}, alternating between violating and feasible
+iterates.}
+\label{fig:limitcycle}
+\end{figure}
+
+%=====================================================================
+\section{Limits}
+%=====================================================================
+
+The method presumes band-wise oscillation is curable by cutting the gain
+that owns the band (Assumption~\ref{ass:mono}); strong non-minimum-phase
+or resonant dynamics can break this, visibly and safely, by parking the
+iteration at a gain bound. The rule as stated reacts only to
+$N_k > \bar N_k$; the sign of $N_k$ is otherwise unused, though a
+negative count (clockwise winding, observed for P2 in
+Table~\ref{tab:battery}) is itself a signature of inverse step response
+and so, in principle, evidence bearing on Assumption~\ref{ass:plant}---an
+observation left for future work rather than built into the present
+rule. Measurement noise enters the differenced
+coordinates directly; the guard of Definition~\ref{def:guard} excludes
+settled noise under the condition of Remark~\ref{rem:noise}, not
+broadband noise within the transient, and deployment
+on noisy measurements requires filtering deliberately outside this
+paper's scope. Each iteration requires one settled, undisturbed
+step-response window; a disturbance corrupts one test, not the procedure.
+The rule acts on one band per iteration, and this is the price of
+attribution rather than mere caution: violations above the lowest cannot
+be told apart from leakage until the lowest is cleared
+(Section~\ref{sec:feature}), so a severely mis-tuned start that violates
+all bands converges through a sequence of single corrections---starting
+P4 at $(2K_p, 3K_i, 4K_d)$, with all three counts near $2.9$, the rule
+needs $74$ iterations to first reach feasibility. When every band
+screams at once the counts typically reflect one dominant mode leaking
+everywhere, and a uniform reduction of all gains---an attribution-free
+emergency backoff---is a sound faster response; we keep the rule minimal
+and leave this to the operator or to future work. Leakage can also
+mis-direct a single correction when the true offender sits just below
+its own threshold while its leaked count trips a higher band; the
+stencil self-corrects, since the accompanying raises push the true
+offender over its own threshold within a few iterations, but at the cost
+of those iterations. The destination is a fast well-damped tuning, not an optimum;
+where a criterion matters, this output is a sound starting point for
+criterion-based refinement, not a substitute for it.
+
+%=====================================================================
+\section{Conclusion}
+%=====================================================================
+
+Manual PID tuning survives because it asks little and shows its work; we
+kept both properties and removed the subjectivity. Three portraits of the
+error make under-damping visible band by band; a winding count makes the
+visibility a number; a well-posedness guard makes the number
+window-independent; one triangular rule, cutting only the band whose
+blame is unambiguous, makes it a decision. The features carry no
+units and no clock, so three fixed dimensionless constants serve every
+plant tested. The iteration is deterministic and bounded unconditionally,
+and converges to the boundary of the well-damped set under one explicit,
+classical assumption. Future work: principled filtering of the
+differenced portraits under measurement noise, band-selective
+acceleration from sub-threshold winding, attribution-aware multi-band
+correction (separating leaked from genuine violations above the lowest
+band, e.g., by comparing dominant periods across portraits), and the
+multi-channel construction of Remark~\ref{rem:multichannel}
+applied to 2-DOF and cascade structures, where the band ordering across
+layers is less immediate.
+
+\section*{Data availability}
+Reference implementation, simulation code, and scripts reproducing every
+result: \url{https://github.com/ottapav/roboPID-simulator}.
+
+\bibliographystyle{elsarticle-num}
+\begin{thebibliography}{00}
+\bibitem{ZN1942} J.G.~Ziegler, N.B.~Nichols, Optimum settings for
+automatic controllers, Trans. ASME 64 (1942) 759--768.
+\bibitem{AstromHagglund2001} K.J.~\r{A}str\"om, T.~H\"agglund, The future
+of PID control, Control Eng. Pract. 9 (11) (2001) 1163--1175.
+\bibitem{CohenCoon1953} G.H.~Cohen, G.A.~Coon, Theoretical consideration
+of retarded control, Trans. ASME 75 (1953) 827--834.
+\bibitem{RiveraIMC} D.E.~Rivera, M.~Morari, S.~Skogestad, Internal model
+control: PID controller design, Ind. Eng. Chem. Process Des. Dev. 25 (1)
+(1986) 252--265.
+\bibitem{AstromHagglund1984} K.J.~\r{A}str\"om, T.~H\"agglund, Automatic
+tuning of simple regulators with specifications on phase and amplitude
+margins, Automatica 20 (5) (1984) 645--651.
+\bibitem{Skogestad2003} S.~Skogestad, Simple analytic rules for model
+reduction and PID controller tuning, J. Process Control 13 (4) (2003)
+291--309.
+\bibitem{HjalmarssonIFT} H.~Hjalmarsson, M.~Gevers, S.~Gunnarsson,
+O.~Lequin, Iterative feedback tuning: theory and applications, IEEE
+Control Syst. Mag. 18 (4) (1998) 26--41.
+\bibitem{CampiVRFT} M.C.~Campi, A.~Lecchini, S.M.~Savaresi, Virtual
+reference feedback tuning, Automatica 38 (8) (2002) 1337--1346.
+\bibitem{KillingsworthKrstic} N.J.~Killingsworth, M.~Krstic, PID tuning
+using extremum seeking, IEEE Control Syst. Mag. 26 (1) (2006) 70--79.
+\end{thebibliography}
+
+\end{document}
