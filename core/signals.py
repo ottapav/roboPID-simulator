@@ -8,11 +8,20 @@ Mirrors MATLAB pidtool static methods:
 from __future__ import annotations
 import numpy as np
 
-from .plant import plant_step_response
 from .pid import pid_response_linear, pid_response_awup, action_components
 
 K1_PADDING = 5
 K2_PADDING = 5
+
+
+def min_sim_time(tau, Td: float) -> float:
+    """
+    Minimum simulation time (in the same units as tau/Td) guaranteeing enough
+    samples for the K1_PADDING/K2_PADDING analysis window, regardless of how
+    small tau/Td are.
+    """
+    tau = np.atleast_1d(np.asarray(tau, dtype=float))
+    return max(10.0 * (float(np.sum(tau)) + Td), 50.0)
 
 
 def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
@@ -23,13 +32,11 @@ def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
     """
     Compute and return a dict of all loop signals.
 
-    Keys: 'y', 'u', 'e', 'v', 'uP', 'uI', 'uD', 'vP', 'vI', 'vD', 't', 'y_plant'
+    Keys: 'y', 'u', 'e', 'v', 'uP', 'uI', 'uD', 'vP', 'vI', 'vD', 't'
     """
     tau = np.atleast_1d(np.asarray(tau, dtype=float))
     if T is None:
-        T = float(np.ceil(5.0 * (np.sum(tau) + Td)))
-
-    y_plant, _ = plant_step_response(tau, K, Td, T, Ts)
+        T = min_sim_time(tau, Td)
 
     if simtype == 0:
         y, u, t, _, _, _ = pid_response_linear(
@@ -45,7 +52,6 @@ def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
     uP, uI, uD = action_components(y, Kp, Ki, Kd, Ts, T)
     N = len(t)
     uP, uI, uD = uP[:N], uI[:N], uD[:N]
-    y_plant = y_plant[:N]
 
     vP = uP
     vI = uI - uI[k2]
@@ -55,7 +61,7 @@ def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
         'y': y, 'u': u, 'e': e, 'v': v,
         'uP': uP, 'uI': uI, 'uD': uD,
         'vP': vP, 'vI': vI, 'vD': vD,
-        't': t, 'y_plant': y_plant,
+        't': t,
         'k1': k1, 'k2': k2,
     }
 
@@ -137,3 +143,47 @@ def pathratio(names: list[str], signals: dict, k1: int, k2: int) -> dict:
         first_half = np.sum(np.abs(np.diff(s[k1:mid + 1])))
         result[name] = float(second_half / first_half) if first_half > 1e-12 else 0.0
     return result
+
+
+def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
+    """
+    Maximum-likelihood change-point search over M[m:n+1].
+
+    Splits the window at each candidate index k into an early segment M[m:k]
+    and a late segment M[k+1:n], each modeled as zero-mean Gaussian, and picks
+    the k maximizing their combined log-likelihood (biased toward later splits
+    via a linear prior). Returns (ind, unstable): unstable is True when, at the
+    best split, the late segment's variance exceeds the early segment's — the
+    signal is getting noisier/more active over time rather than settling.
+
+    Mirrors MATLAB pidtool.findindex exactly.
+    """
+    M = np.asarray(M, dtype=float)
+    minvar = -float(np.finfo(np.float32).max)
+    Llog = -float(np.finfo(np.float32).max)
+    ind = 2
+    unstable = False
+
+    for k in range(m + 1, n - 1):
+        if M[k] > minvar:
+            minvar = M[k]
+    minvar = minvar / 1e3
+
+    for k in range(m + 1, n - 1):
+        sum1M2 = float(np.sum(M[m:k + 1] ** 2))
+        var1 = max(minvar, sum1M2 / (k - m + 1))
+        P1log = -(k - m + 1) * np.log(2 * np.pi * var1) - sum1M2 / var1
+
+        sum2M2 = float(np.sum(M[k + 1:n + 1] ** 2))
+        var2 = max(minvar, sum2M2 / (n - k))
+        P2log = -(n - k) * np.log(2 * np.pi * var2) - sum2M2 / var2
+
+        Plog_prior = 1 * (m - k) / (n - m)
+        Plog = P1log + P2log - Plog_prior
+
+        if Llog < Plog:
+            Llog = Plog
+            ind = k
+            unstable = var2 > var1
+
+    return ind, unstable

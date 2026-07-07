@@ -1,8 +1,7 @@
 # roboPID-simulator
 
 **RoboPID** is an interactive Dash web app that simulates PID controller
-algorithms — design, optimization, and auto-tuning — against a
-first-order-plus-dead-time (FOPTD) process model.
+auto-tuning against a first-order-plus-dead-time (FOPTD) process model.
 
 ## Overview
 
@@ -14,14 +13,10 @@ P(s) = K * exp(-Td*s) / prod(s*tau_i + 1)
 ```
 
 You set the plant parameters (`tau`, `K`, `Td`) and pick a controller type
-(I, PI, or PID), then either:
-
-- **Optimize** — finds gains that minimize a 6-term weighted cost over the
-  closed-loop step response (tracking error, overshoot, control effort,
-  smoothness), via SciPy SLSQP.
-- **Tune** — iteratively nudges the optimized gains up or down based on
-  closed-loop robustness "features" (phase-plane/encirclement metrics) and
-  path-ratio sluggishness checks, streaming progress live as it runs.
+(I, PI, or PID), then click **Tune**, which iteratively nudges the gains up
+or down based on closed-loop robustness "features" (phase-plane/encirclement
+metrics) and path-ratio sluggishness checks, streaming progress live as it
+runs and plotting the resulting gain trajectory once it finishes.
 
 RoboPID is built as an educational algorithm simulator for exploring PID
 tuning behavior interactively, making the effect of each gain and each
@@ -30,10 +25,11 @@ tuning pass visible in real time.
 ## Features
 
 - FOPTD plant modeling with an arbitrary number of cascaded time constants
-- PID / PI / I gain optimization (SciPy SLSQP)
 - Iterative, feature-driven auto-tuning with live progress streaming
 - Interactive Dash GUI: plant/controller inputs, Kp/Ki/Kd multiplier
-  sliders, live step-response plot, and three feature/phase-plane plots
+  sliders (only the gains relevant to the selected controller type are
+  shown), live step-response plot, three feature/phase-plane plots, and a
+  gain-history plot of the last Tune run
 - Runtime-configurable simulation settings via `robopid.config`
 
 ## Requirements
@@ -85,9 +81,9 @@ per line):
 | `minu` / `maxu` | `-1.0` / `1.0` | Actuator output limits (used when `simtype=1`) |
 | `dist_tau` | `120.0` | Disturbance model time constant |
 | `dist_std` | `0.05` | Disturbance standard deviation |
-| `n_iter` | `100` | Number of iterations for the "Tune" search |
+| `n_iter` | `200` | Number of iterations for the "Tune" search |
 | `lipsch_const` | `0.0` | Lipschitz constant used by the tuning search |
-| `tune_step` | `0.05` | Step size for each tuning iteration |
+| `tune_step` | `0.1` | Step size for each tuning iteration |
 
 ## Project Structure
 
@@ -95,13 +91,12 @@ per line):
 roboPID-simulator/
 ├── app.py              # Dash entry point + CLI argument parsing
 ├── layout.py            # Page layout (plant/controller cards, plots)
-├── callbacks.py          # Dash callbacks: Optimize, background "Tune", plot updates
+├── callbacks.py          # Dash callbacks: background "Tune", plot updates
 ├── robopid.config        # Runtime simulation settings (see Configuration)
 ├── requirements.txt
 └── core/                  # Pure simulation/control logic, no UI dependencies
     ├── plant.py             # FOPTD plant transfer function + step response
     ├── pid.py                # Closed-loop PID simulation (linear + anti-windup)
-    ├── optimizer.py          # SLSQP-based gain optimizer
     ├── tuning.py             # Iterative feature-driven auto-tuning
     ├── features.py           # Phase-plane / encirclement robustness features
     ├── signals.py            # Loop signal assembly, scaling, derivative features

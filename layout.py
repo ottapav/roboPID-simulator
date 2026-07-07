@@ -1,22 +1,36 @@
 """Dash layout — RoboPID educational web app."""
 
+from __future__ import annotations
+
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 SLIDER_MARKS = {0.01: '0.01', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5'}
 GRAPH_STYLE = {'height': '300px'}
+GRAPH_CONFIG = {
+    'displayModeBar': True,
+    'displaylogo': False,
+    'responsive': True,
+    'modeBarButtonsToRemove': [
+        'zoom2d', 'pan2d', 'select2d', 'lasso2d',
+        'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d',
+    ],
+}
 BTN = 'btn btn-sm'
 
 
-def _slider(sid: str, label: str) -> dbc.Col:
+def _slider(sid: str, label: str, col_id: str | None = None) -> dbc.Col:
     return dbc.Col([
         html.Label(label, style={'fontWeight': 'bold', 'fontSize': '13px', 'marginBottom': '2px'}),
         dcc.Slider(
             id=sid, min=0.01, max=5.0, step=0.01, value=1.0,
             marks=SLIDER_MARKS, updatemode='mouseup',
-            tooltip={'placement': 'bottom', 'always_visible': True},
+            tooltip={
+                'placement': 'bottom', 'always_visible': True,
+                'transform': 'round3dp',
+            },
         ),
-    ], width=12)
+    ], width=12, id=col_id)
 
 
 def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
@@ -43,7 +57,8 @@ def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
             )),
             _row('K (static gain)', dcc.Input(
                 id='input-K', type='number', value=float(default_K),
-                debounce=True, step=0.01, min=0.001, style={'width': '100%'},
+                debounce=True, step=0.01, min=0.01,
+                style={'width': '100%'},
             )),
             _row('Td (dead time)', dcc.Input(
                 id='input-Td', type='number', value=float(default_Td),
@@ -76,32 +91,17 @@ def _controller_card(default_ctype, default_limits) -> dbc.Card:
         dbc.CardBody([
             # Sliders
             dbc.Row([
-                _slider('slider-kp', 'Kp ×'),
-                _slider('slider-ki', 'Ki ×'),
-                _slider('slider-kd', 'Kd ×'),
+                _slider('slider-kp', 'Kp ×', col_id='col-kp'),
+                _slider('slider-ki', 'Ki ×', col_id='col-ki'),
+                _slider('slider-kd', 'Kd ×', col_id='col-kd'),
             ], className='mb-3'),
 
-            # Buttons + results
+            # Tune button + feature limits + status
             dbc.Row([
-                dbc.Col(html.Button(
-                    'Optimize', id='btn-optimize', n_clicks=0,
-                    className=f'{BTN} btn-primary', style={'marginRight': '6px'},
-                ), width='auto'),
                 dbc.Col(html.Button(
                     'Tune', id='btn-tune', n_clicks=0,
                     className=f'{BTN} btn-success',
                 ), width='auto'),
-                dbc.Col(html.Div(id='gains-display',
-                                 style={'fontFamily': 'monospace', 'fontSize': '13px',
-                                        'color': '#333'}),
-                        width='auto', className='align-self-center'),
-                dbc.Col(html.Div(id='tune-status',
-                                 style={'fontSize': '12px', 'color': '#555'}),
-                        width='auto', className='align-self-center'),
-            ], align='center', className='mb-2'),
-
-            # Feature limits
-            dbc.Row([
                 dbc.Col(html.Small('Limits:', style={'color': '#777'}), width='auto'),
                 dbc.Col([html.Small('F1: ', style={'color': '#777'}), _limit_input('limit-1', lim1)],
                         width='auto', className='d-flex align-items-center gap-1'),
@@ -109,6 +109,9 @@ def _controller_card(default_ctype, default_limits) -> dbc.Card:
                         width='auto', className='d-flex align-items-center gap-1'),
                 dbc.Col([html.Small('F3: ', style={'color': '#777'}), _limit_input('limit-3', lim3)],
                         width='auto', className='d-flex align-items-center gap-1'),
+                dbc.Col(html.Div(id='tune-status',
+                                 style={'fontSize': '12px', 'color': '#555'}),
+                        width='auto', className='align-self-center'),
             ], align='center'),
         ]),
     ], className='h-100')
@@ -119,7 +122,7 @@ def _step_response_card() -> dbc.Card:
         dbc.CardHeader(html.Strong('Step Response')),
         dbc.CardBody([
             dcc.Graph(id='graph-time', style=GRAPH_STYLE,
-                      config={'displayModeBar': False}),
+                      config=GRAPH_CONFIG),
         ]),
     ])
 
@@ -130,12 +133,22 @@ def _features_card() -> dbc.Card:
         dbc.CardBody([
             dbc.Row([
                 dbc.Col(dcc.Graph(id='graph-f1', style=GRAPH_STYLE,
-                                  config={'displayModeBar': False}), width=6, md=4),
+                                  config=GRAPH_CONFIG), width=12, sm=6, md=4),
                 dbc.Col(dcc.Graph(id='graph-f2', style=GRAPH_STYLE,
-                                  config={'displayModeBar': False}), width=6, md=4),
+                                  config=GRAPH_CONFIG), width=12, sm=6, md=4),
                 dbc.Col(dcc.Graph(id='graph-f3', style=GRAPH_STYLE,
-                                  config={'displayModeBar': False}), width=6, md=4),
+                                  config=GRAPH_CONFIG), width=12, sm=6, md=4),
             ]),
+        ]),
+    ])
+
+
+def _gains_history_card() -> dbc.Card:
+    return dbc.Card([
+        dbc.CardHeader(html.Strong('Tuning History')),
+        dbc.CardBody([
+            dcc.Graph(id='graph-gains-history', style=GRAPH_STYLE,
+                      config=GRAPH_CONFIG),
         ]),
     ])
 
@@ -146,7 +159,7 @@ def make_layout(default_tau: str = '[5,5,5,5]',
                 default_ctype: str = 'PID',
                 default_limits: tuple = (0.5, 0.75, 1.0)):
     """Build and return the full app layout."""
-    return dbc.Container(fluid=False, style={'width': '800px', 'maxWidth': '800px'}, children=[
+    return dbc.Container(fluid=False, style={'width': '100%', 'maxWidth': '800px'}, children=[
 
         # ── Title ──────────────────────────────────────────────────────────
         dbc.Row(dbc.Col(html.H4('RoboPID', className='mt-2 mb-2'))),
@@ -159,13 +172,21 @@ def make_layout(default_tau: str = '[5,5,5,5]',
                     width=12, md=8, className='mb-2'),
         ], className='mb-1'),
 
+        # ── Input validation warning ─────────────────────────────────────────
+        dbc.Row(dbc.Col(html.Div(
+            id='input-warning',
+            style={'fontSize': '12px', 'color': '#b45309', 'minHeight': '16px'},
+        ), width=12), className='mb-1'),
+
         # ── Step Response ──────────────────────────────────────────────────
         dbc.Row(dbc.Col(_step_response_card(), width=12), className='mb-1'),
 
         # ── Features ──────────────────────────────────────────────────────
         dbc.Row(dbc.Col(_features_card(), width=12), className='mb-1'),
 
+        # ── Tuning History ──────────────────────────────────────────────────
+        dbc.Row(dbc.Col(_gains_history_card(), width=12), className='mb-1'),
+
         # ── Hidden state ────────────────────────────────────────────────────
-        dcc.Store(id='base-gains', data={'Kp': 1.0, 'Ki': 1.0, 'Kd': 0.0,
-                                         'optimized': False}),
+        dcc.Store(id='base-gains', data={'Kp': 1.0, 'Ki': 1.0, 'Kd': 1.0}),
     ])

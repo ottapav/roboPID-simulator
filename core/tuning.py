@@ -12,10 +12,11 @@ from typing import Callable
 import numpy as np
 
 from .features import loop_response_features, FeatureDescription
+from .signals import find_index
 
 
 PR_NAMES = ['uI', 'uP', 'uD']
-PR_LIMIT = float('inf')   # path ratio limits (inf → disabled, as in MATLAB)
+PR_LIMIT = float(1.5)   # path ratio limits (inf → disabled, as in MATLAB)
 
 
 def pid_tuning(
@@ -24,12 +25,12 @@ def pid_tuning(
     Kp: float, Ki: float, Kd: float,
     dtype: str = 'y',
     T: float | None = None,
-    N: int = 100,
+    N: int = 200,
     Fp_limits: tuple[float, float] = (0.01, 5.0),
     Fi_limits: tuple[float, float] = (0.01, 5.0),
     Fd_limits: tuple[float, float] = (0.01, 5.0),
     feature_limits: tuple[float, ...] | None = None,
-    step: float = 0.05,
+    step: float = 0.1,
     simtype: int = 0,
     minu: float = -1.0, maxu: float = 1.0,
     dist_a: float = 0.0, dist_b: float = 0.0,
@@ -67,7 +68,7 @@ def pid_tuning(
         if on_iteration is not None:
             on_iteration(i, N, float(Fp_cur), float(Fi_cur), float(Fd_cur))
 
-        feats, _, _, _, pr = loop_response_features(
+        feats, k1, k2, sigs, pr = loop_response_features(
             description, PR_NAMES,
             tau, K, Td, Ts,
             Fp_cur * Kp, Fi_cur * Ki, Fd_cur * Kd,
@@ -79,12 +80,20 @@ def pid_tuning(
         pr_uI = pr.get('uI', 0.0)
         pr_uP = pr.get('uP', 0.0)
         pr_uD = pr.get('uD', 0.0)
+        _, unstable = find_index(k1, k2, sigs['e'])
 
         Fp_new = Fp_cur
         Fi_new = Fi_cur
         Fd_new = Fd_cur
 
-        if pr_uI > PR_LIMIT or pr_uP > PR_LIMIT or pr_uD > PR_LIMIT:
+        if unstable:
+            # Error variance is growing late in the window rather than settling:
+            # back off all three gains together instead of nudging just one.
+            Fp_new = max(Fp_cur * 0.5, Fp_min)
+            Fi_new = max(Fi_cur * 0.5, Fi_min)
+            Fd_new = max(Fd_cur * 0.5, Fd_min)
+
+        elif pr_uI > PR_LIMIT or pr_uP > PR_LIMIT or pr_uD > PR_LIMIT:
             # Path ratio exceeded: halve the offending gain
             if pr_uI > PR_LIMIT:
                 Fi_new = max(Fi_cur * 0.5, Fi_min)
