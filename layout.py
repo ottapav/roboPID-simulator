@@ -159,7 +159,9 @@ def make_layout(default_tau: str = '[5,5,5,5]',
                 default_ctype: str = 'PID',
                 default_limits: tuple = (0.5, 0.75, 1.0)):
     """Build and return the full app layout."""
-    return dbc.Container(fluid=False, style={'width': '100%', 'maxWidth': '800px'}, children=[
+    return dbc.Container(fluid=False, style={
+        'width': '100%', 'maxWidth': '800px', 'overflowX': 'hidden',
+    }, children=[
 
         # ── Title ──────────────────────────────────────────────────────────
         dbc.Row(dbc.Col(html.H4('RoboPID', className='mt-2 mb-2'))),

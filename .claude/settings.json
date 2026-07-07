@@ -2,47 +2,40 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
 
   "defaultMode": "acceptEdits",
-  "disableBypassPermissionsMode": "disable",
 
   "permissions": {
     "allow": [
       "Read(*)",
       "Edit(*)",
 
+      "Bash(py *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+
+      "Bash(pip *)",
+      "Bash(pytest *)",
+
       "Bash(ls *)",
       "Bash(dir *)",
-      "Bash(pwd)",
       "Bash(cd *)",
+      "Bash(pwd)",
+
+      "Bash(cat *)",
+      "Bash(type *)",
 
       "Bash(find *)",
       "Bash(fd *)",
-      "Bash(grep *)",
       "Bash(rg *)",
-      "Bash(cat *)",
-      "Bash(head *)",
-      "Bash(tail *)",
-      "Bash(sed *)",
-      "Bash(awk *)",
+      "Bash(grep *)",
 
       "Bash(git status)",
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git show *)",
-      "Bash(git branch)",
-      "Bash(git fetch)",
+      "Bash(git branch *)",
 
-      "Bash(python *)",
-      "Bash(py *)",
-      "Bash(python3 *)",
-
-      "Bash(npm install)",
-      "Bash(npm ci)",
-      "Bash(npm run *)",
-      "Bash(npm test *)",
-
-      "Bash(cmake *)",
-      "Bash(make *)",
-      "Bash(ctest *)",
+      "Bash(curl http://localhost:*)",
+      "Bash(curl http://127.0.0.1:*)",
 
       "Bash(docker ps)",
       "Bash(docker images)",
@@ -51,47 +44,36 @@
 
     "ask": [
       "Bash(git commit *)",
+      "Bash(git checkout *)",
       "Bash(git merge *)",
       "Bash(git rebase *)",
-      "Bash(git checkout *)",
 
-      "Bash(docker build *)",
       "Bash(docker compose up *)",
+      "Bash(docker build *)",
       "Bash(docker run *)",
 
-      "Bash(cargo publish *)",
-      "Bash(npm publish *)",
-
-      "Bash(curl *)",
-      "Bash(wget *)"
+      "Bash(curl https://*)",
+      "Bash(curl http://*)"
     ],
 
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./secrets/**)",
-      "Read(./**/*.pem)",
-      "Read(./**/*.key)",
-      "Read(./**/id_rsa*)",
-      "Read(./**/.ssh/**)",
-
       "Bash(rm *)",
-      "Bash(rmdir *)",
       "Bash(del *)",
-      "Bash(format *)",
-      "Bash(mkfs *)",
+      "Bash(rmdir *)",
 
       "Bash(git push *)",
       "Bash(git reset --hard *)",
       "Bash(git clean *)",
 
       "Bash(sudo *)",
-      "Bash(chmod 777 *)",
+      "Bash(chmod *)",
       "Bash(chown *)",
 
-      "Bash(shutdown *)",
-      "Bash(reboot *)",
-      "Bash(poweroff *)"
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/.ssh/**)"
     ]
   }
 }
