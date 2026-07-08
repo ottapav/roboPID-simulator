@@ -16,7 +16,11 @@ You set the plant parameters (`tau`, `K`, `Td`) and pick a controller type
 (I, PI, or PID), then click **Tune**, which iteratively nudges the gains up
 or down based on closed-loop robustness "features" (phase-plane/encirclement
 metrics) and path-ratio sluggishness checks, streaming progress live as it
-runs and plotting the resulting gain trajectory once it finishes.
+runs and plotting the resulting gain trajectory once it finishes. The
+**Iter** field defaults to a controller-structure-appropriate iteration
+budget — fewer terms to search means fewer iterations are needed: I uses
+50, PI uses 100, and PID uses 200 — and resets to that default whenever
+you switch controller type, but you can type a custom count at any time.
 
 RoboPID is built as an educational algorithm simulator for exploring PID
 tuning behavior interactively, making the effect of each gain and each
@@ -26,10 +30,10 @@ tuning pass visible in real time.
 
 - FOPTD plant modeling with an arbitrary number of cascaded time constants
 - Iterative, feature-driven auto-tuning with live progress streaming
-- Interactive Dash GUI: plant/controller inputs, Kp/Ki/Kd multiplier
-  sliders (only the gains relevant to the selected controller type are
-  shown), live step-response plot, three feature/phase-plane plots, and a
-  gain-history plot of the last Tune run
+- Interactive Dash GUI: plant/controller inputs, Kp/Ki/Kd log-scale gain
+  sliders (0.01-10, only the gains relevant to the selected controller
+  type are shown), live step-response plot, three feature/phase-plane
+  plots, and a gain-history plot of the last Tune run
 - Runtime-configurable simulation settings via `robopid.config`
 
 ## Requirements
@@ -81,7 +85,6 @@ per line):
 | `minu` / `maxu` | `-1.0` / `1.0` | Actuator output limits (used when `simtype=1`) |
 | `dist_tau` | `120.0` | Disturbance model time constant |
 | `dist_std` | `0.05` | Disturbance standard deviation |
-| `n_iter` | `200` | Number of iterations for the "Tune" search |
 | `lipsch_const` | `0.0` | Lipschitz constant used by the tuning search |
 | `tune_step` | `0.1` | Step size for each tuning iteration |
 

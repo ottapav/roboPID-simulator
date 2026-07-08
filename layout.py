@@ -5,7 +5,7 @@ from __future__ import annotations
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 
-SLIDER_MARKS = {0.01: '0.01', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5'}
+SLIDER_MARKS = {-2: '0.01', -1: '0.1', 0: '1', 1: '10'}
 GRAPH_STYLE = {'height': '300px'}
 GRAPH_CONFIG = {
     'displayModeBar': True,
@@ -23,11 +23,11 @@ def _slider(sid: str, label: str, col_id: str | None = None) -> dbc.Col:
     return dbc.Col([
         html.Label(label, style={'fontWeight': 'bold', 'fontSize': '13px', 'marginBottom': '2px'}),
         dcc.Slider(
-            id=sid, min=0.01, max=5.0, step=0.01, value=1.0,
-            marks=SLIDER_MARKS, updatemode='mouseup',
+            id=sid, min=-2, max=1, step=0.01, value=0.0,
+            marks=SLIDER_MARKS, updatemode='drag',
             tooltip={
                 'placement': 'bottom', 'always_visible': True,
-                'transform': 'round3dp',
+                'transform': 'logGain',
             },
         ),
     ], width=12, id=col_id)
@@ -68,7 +68,7 @@ def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
     ], className='h-100')
 
 
-def _controller_card(default_ctype, default_limits) -> dbc.Card:
+def _controller_card(default_ctype, default_limits, default_niter) -> dbc.Card:
     lim1, lim2, lim3 = default_limits
 
     def _limit_input(sid, val):
@@ -91,9 +91,9 @@ def _controller_card(default_ctype, default_limits) -> dbc.Card:
         dbc.CardBody([
             # Sliders
             dbc.Row([
-                _slider('slider-kp', 'Kp ×', col_id='col-kp'),
-                _slider('slider-ki', 'Ki ×', col_id='col-ki'),
-                _slider('slider-kd', 'Kd ×', col_id='col-kd'),
+                _slider('slider-kp', 'Kp', col_id='col-kp'),
+                _slider('slider-ki', 'Ki', col_id='col-ki'),
+                _slider('slider-kd', 'Kd', col_id='col-kd'),
             ], className='mb-3'),
 
             # Tune button + feature limits + status
@@ -108,6 +108,11 @@ def _controller_card(default_ctype, default_limits) -> dbc.Card:
                 dbc.Col([html.Small('F2: ', style={'color': '#777'}), _limit_input('limit-2', lim2)],
                         width='auto', className='d-flex align-items-center gap-1'),
                 dbc.Col([html.Small('F3: ', style={'color': '#777'}), _limit_input('limit-3', lim3)],
+                        width='auto', className='d-flex align-items-center gap-1'),
+                dbc.Col([html.Small('Iter: ', style={'color': '#777'}),
+                         dcc.Input(id='input-niter', type='number', value=default_niter,
+                                   debounce=True, step=10, min=10, max=2000,
+                                   style={'width': '70px'})],
                         width='auto', className='d-flex align-items-center gap-1'),
                 dbc.Col(html.Div(id='tune-status',
                                  style={'fontSize': '12px', 'color': '#555'}),
@@ -157,7 +162,8 @@ def make_layout(default_tau: str = '[5,5,5,5]',
                 default_K: str = '1.25',
                 default_Td: str = '8.0',
                 default_ctype: str = 'PID',
-                default_limits: tuple = (0.5, 0.75, 1.0)):
+                default_limits: tuple = (0.5, 0.75, 1.0),
+                default_niter: int = 200):
     """Build and return the full app layout."""
     return dbc.Container(fluid=False, style={
         'width': '100%', 'maxWidth': '800px', 'overflowX': 'hidden',
@@ -170,7 +176,7 @@ def make_layout(default_tau: str = '[5,5,5,5]',
         dbc.Row([
             dbc.Col(_plant_card(default_tau, default_K, default_Td),
                     width=12, md=4, className='mb-2'),
-            dbc.Col(_controller_card(default_ctype, default_limits),
+            dbc.Col(_controller_card(default_ctype, default_limits, default_niter),
                     width=12, md=8, className='mb-2'),
         ], className='mb-1'),
 
@@ -188,7 +194,4 @@ def make_layout(default_tau: str = '[5,5,5,5]',
 
         # ── Tuning History ──────────────────────────────────────────────────
         dbc.Row(dbc.Col(_gains_history_card(), width=12), className='mb-1'),
-
-        # ── Hidden state ────────────────────────────────────────────────────
-        dcc.Store(id='base-gains', data={'Kp': 1.0, 'Ki': 1.0, 'Kd': 1.0}),
     ])

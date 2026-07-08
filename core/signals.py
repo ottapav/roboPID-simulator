@@ -169,12 +169,14 @@ def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
             minvar = M[k]
     minvar = minvar / 1e3
 
+    prefix = np.concatenate(([0.0], np.cumsum(M ** 2)))  # prefix[i] = sum(M[:i] ** 2)
+
     for k in range(m + 1, n - 1):
-        sum1M2 = float(np.sum(M[m:k + 1] ** 2))
+        sum1M2 = float(prefix[k + 1] - prefix[m])
         var1 = max(minvar, sum1M2 / (k - m + 1))
         P1log = -(k - m + 1) * np.log(2 * np.pi * var1) - sum1M2 / var1
 
-        sum2M2 = float(np.sum(M[k + 1:n + 1] ** 2))
+        sum2M2 = float(prefix[n + 1] - prefix[k + 1])
         var2 = max(minvar, sum2M2 / (n - k))
         P2log = -(n - k) * np.log(2 * np.pi * var2) - sum2M2 / var2
 

@@ -82,7 +82,7 @@ def main():
     print(f'  Plant: tau={args.tau}, K={args.K}, Td={args.Td}, Ts={args.Ts}')
     print(f'  Controller: {args.ctype}\n')
 
-    app.run(debug=args.debug, host='0.0.0.0', port=port)
+    app.run(debug=args.debug, host='0.0.0.0', port=port, threaded=True)
 
 
 if __name__ == '__main__':

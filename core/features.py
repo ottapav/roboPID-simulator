@@ -80,23 +80,21 @@ def find_disc_entrypoint(x: np.ndarray, y: np.ndarray, eps: float) -> int:
     trajectory never enters the disc, so we use the full length).
     """
     n = len(x)
-    result = n  # default: no entry found
-    for k in range(n - 1, 0, -1):
-        a = np.array([x[k - 1], y[k - 1]])
-        b = np.array([x[k], y[k]])
-        ab = b - a
-        ab2 = float(ab @ ab)
-        if ab2 == 0.0:
-            t = 1.0
-        else:
-            t = float(-a @ ab / ab2)
-            t = min(max(t, 0.0), 1.0)
-        c = a + ab * t
-        if np.linalg.norm(c) <= eps:
-            result = k - 1   # 0-based: MATLAB k-1 → Python k-1
-        if result < n:
-            break
-    return result
+    if n < 2:
+        return n
+
+    a = np.stack([x[:-1], y[:-1]], axis=1)
+    b = np.stack([x[1:], y[1:]], axis=1)
+    ab = b - a
+    ab2 = np.sum(ab ** 2, axis=1)
+    safe_ab2 = np.where(ab2 == 0.0, 1.0, ab2)
+    t = np.where(ab2 == 0.0, 1.0,
+                np.clip(-np.sum(a * ab, axis=1) / safe_ab2, 0.0, 1.0))
+    c = a + ab * t[:, None]
+    dist = np.linalg.norm(c, axis=1)
+
+    hits = np.nonzero(dist <= eps)[0]
+    return int(hits.max()) if hits.size else n
 
 
 def encirc(x: np.ndarray, y: np.ndarray, eps: float = EPSILON) -> float:
