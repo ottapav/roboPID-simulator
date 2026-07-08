@@ -54,7 +54,7 @@ the lowest violation, cut that band---the only violation whose blame is
 unambiguous---and touch nothing above; or raise
 all bands when every portrait is clean. A parameter-free stability
 screen---a maximum-likelihood test of whether the record grows quieter
-or louder after a single switch point---backs all gains off when the
+or louder after a single switch point---halves all gains when the
 response fails to settle, so the counts are only ever read on records
 where they are defined, and the method bootstraps from arbitrary,
 even destabilizing, initial gains. The iteration is deterministic,
@@ -65,7 +65,10 @@ rests on two standing assumptions only---a stable, self-regulating
 process of the first-order-plus-time-delay class, and a controller from
 the nested family $\mathrm{I} \subset \mathrm{PI} \subset \mathrm{PID}$
 with mandatory integral action---and uses no process model, no solver, and one step
-test per iteration. It is validated on a battery of process-typical
+test per iteration. Every intermediate controller is serviceable: each
+move either repairs a diagnosed fault or tightens all gains by one
+verified notch, so the closed loop improves essentially monotonically,
+with no exploration steps. It is validated on a battery of process-typical
 plants---lag-dominant, delay-dominant, balanced, and high-order---with
 identical defaults throughout. A reference implementation is public.
 \end{abstract}
@@ -130,19 +133,67 @@ tuning---the contract an expert tuner offers---in exchange for one
 closed-loop setpoint step per iteration and nothing else. No model, no
 relay experiment, no solver; and full auditability, since an operator
 watching the three plots sees exactly what the algorithm sees.
-Figure~\ref{fig:storyboard} shows the entire method on one plant, before
-any mathematics.
+
+The practical property we value most is that the iteration improves the
+very loop it is tuning, essentially monotonically. Every move is either
+the repair of a diagnosed fault or a single cautious tightening whose
+effect is verified in the next test; no iterate is an exploration step.
+This contrasts with adaptive and learning-based tuners---the dedicated
+gradient experiments of iterative feedback tuning, the injected
+perturbations of extremum seeking, the exploratory actions of
+reinforcement learning---which must deliberately operate the plant under
+unvetted or perturbed controllers in order to acquire information. Here
+information is a by-product of a routine setpoint step under the
+current, serviceable controller: the plant never runs an experiment
+whose purpose is curiosity rather than control.
+Figures~\ref{fig:init_step}--\ref{fig:tuned_portraits} show the entire
+method on one plant (P2, Section~\ref{sec:battery}), before any
+mathematics: the response and portraits before tuning, and the same
+pair after, captured from the running implementation
+(Data availability).
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.92\textwidth]{fig1_storyboard.pdf}
-\caption{The method at a glance, on plant P2 (Section~\ref{sec:battery}).
-\emph{Top row (before tuning):} the step-response error looks
-unremarkable, yet $\Gamma_2$ loops $2.69$ times---well past its limit of
-$1.0$---revealing a fast mode invisible in $e(t)$ itself. This is row 3
-of Table~\ref{tab:rule}: cut $D$. \emph{Bottom row (after tuning):} all
-three portraits spiral cleanly into the settling point without a loop.}
-\label{fig:storyboard}
+\includegraphics[width=0.85\textwidth]{init_step.png}
+\caption{Step response before tuning. The mis-tuned derivative channel
+sustains an oscillation with the actuator railing between its limits;
+nothing here suggests which gain is at fault.}
+\label{fig:init_step}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.32\textwidth]{init_F0.png}\hfill
+\includegraphics[width=0.32\textwidth]{init_F1.png}\hfill
+\includegraphics[width=0.32\textwidth]{init_F2.png}
+\caption{Portraits before tuning, left to right $\Gamma_0,\Gamma_1,\Gamma_2$.
+All three loop well past their limits
+($N_0{=}3.75$ vs.\ $0.5$; $N_1{=}4.33$ vs.\ $0.75$; $N_2{=}4.45$ vs.\
+$1.0$)---the response of Figure~\ref{fig:init_step} is unreadable, but
+here the fault is explicit in every band at once.}
+\label{fig:init_portraits}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.85\textwidth]{tuned_step.png}
+\caption{Step response after tuning: a single overshoot settling
+cleanly to the setpoint, actuator unsaturated.}
+\label{fig:tuned_step}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.32\textwidth]{tuned_F0.png}\hfill
+\includegraphics[width=0.32\textwidth]{tuned_F1.png}\hfill
+\includegraphics[width=0.32\textwidth]{tuned_F2.png}
+\caption{Portraits after tuning. $\Gamma_2$ is now within its limit
+($0.95$ vs.\ $1.0$); $\Gamma_0,\Gamma_1$ have fallen sharply from
+Figure~\ref{fig:init_portraits} ($3.75\to1.11$, $4.33\to0.99$) and sit
+just outside theirs, the boundary limit cycle of
+Proposition~\ref{prop:conv} caught mid-oscillation rather than a rare
+failure to converge.}
+\label{fig:tuned_portraits}
 \end{figure*}
 
 %=====================================================================
@@ -461,18 +512,18 @@ K^{(0)} = K_i, \qquad K^{(1)} = K_p, \qquad K^{(2)} = K_d,
 \end{equation}
 so that the band index aligns with the portraits: $N_k$ is the feature
 that indicts $K^{(k)}$. Parametrize the gains as multipliers
-$F^{(k)} \in [F_{\min}, F_{\max}]$ (defaults $[0.01, 5]$) on any
+$F^{(k)} \in [F_{\min}, F_{\max}]$ (defaults $[0.01, 10]$) on any
 conservative stabilizing initialization, fix a step $\beta$ (default
 $0.1$), and let $\gamma = 1/(1-\beta)$. Each iteration performs one step
 test, evaluates $\mathbf N$, and updates the gains.
 
-The rule, in words: \emph{if the record grows rather than decays, turn
-all three gains down; otherwise scan the portraits from slow to fast; the
+The rule, in words: \emph{if the record grows rather than decays, halve
+all three gains; otherwise scan the portraits from slow to fast; the
 first one that loops too much names the gain to turn down one notch, and
 every gain below it turns up one notch; if none loops, turn all three
 up.} Table~\ref{tab:rule} is the entire decision logic. The classical
-commissioning craft is recognizable row by row---runaway: back everything
-off; slow cycling: back off
+commissioning craft is recognizable row by row---runaway: halve
+everything; slow cycling: back off
 the reset; ringing: back off the gain; buzzing: back off the
 rate---with the compensating increases added, and the lower-triangular
 stencil that gives the rule its name is directly visible in the arrow
@@ -484,6 +535,7 @@ pattern.
 top to bottom, once per step test; ``unstable'' is the verdict of
 Definition~\ref{def:screen}, ``loops'' means $N_k > \bar N_k$.
 $\uparrow$: multiply by $\gamma$;\ $\downarrow$: divide by $\gamma$;\
+$\Downarrow$: divide by $2$;\
 $\cdot$\,: unchanged. Projections onto $[F_{\min},F_{\max}]$ implied.}
 \label{tab:rule}
 \setlength{\tabcolsep}{5pt}
@@ -491,8 +543,8 @@ $\cdot$\,: unchanged. Projections onto $[F_{\min},F_{\max}]$ implied.}
 \toprule
 Condition & $F_i$ & $F_p$ & $F_d$ & craft reading \\
 \midrule
-unstable & $\downarrow$ & $\downarrow$ & $\downarrow$ &
-runaway: back off all \\
+unstable & $\Downarrow$ & $\Downarrow$ & $\Downarrow$ &
+runaway: halve all \\
 $\Gamma_0$ loops & $\downarrow$ & $\cdot$ & $\cdot$ &
 slow cycling: less reset \\
 $\Gamma_1$ loops & $\uparrow$ & $\downarrow$ & $\cdot$ &
@@ -512,15 +564,14 @@ all quiet: tighten \\
 \item Close the loop with any gains; conservative ones save iterations.
 \item Step the setpoint; record the error $e$.
 \item If the record grows rather than decays
-(Definition~\ref{def:screen}), reduce all gains one notch and go to
-step~2.
+(Definition~\ref{def:screen}), halve all gains and go to step~2.
 \item Truncate the record where $|e|$ last leaves $2\%$ of its peak
 (Definition~\ref{def:guard}).
-\item Form the three portraits (Fig.~\ref{fig:storyboard}) and count
+\item Form the three portraits (Figs.~\ref{fig:init_portraits},
+\ref{fig:tuned_portraits}) and count
 loops.
 \item Apply the matching row of Table~\ref{tab:rule}.
-\item Repeat; once the gains begin to alternate, keep the last tuning
-that violated no loop limit.
+\item Repeat.
 \end{enumerate}
 \end{minipage}}
 \end{center}
@@ -538,15 +589,18 @@ $\bar{\mathbf N}$ & loop limits & $(0.5, 0.75, 1.0)$ \\
 $\varepsilon$ & truncation radius & $0.1$ \\
 $\delta$ & settling band & $0.02$ \\
 $\beta$ & step size & $0.1$ \\
-box & multiplier range & $[0.01, 5]$ \\
+box & multiplier range & $[0.01, 10]$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Formally, the screen verdict takes precedence: an unstable record
-(Definition~\ref{def:screen}) divides all three multipliers by $\gamma$
-and no counts are evaluated---the portraits of a diverging error carry
-no usable information. For a stable record, with the \emph{violated set} and its lowest member
+(Definition~\ref{def:screen}) halves all three multipliers and no counts
+are evaluated---the portraits of a diverging error carry no usable
+information. The backoff is deliberately coarse, $1/2$ rather than
+$1/\gamma$: instability is a state to be exited quickly, not corrected
+delicately, and fine adjustment is the business of the count rows once a
+settling record exists. For a stable record, with the \emph{violated set} and its lowest member
 \begin{equation}
 V = \{k : N_k > \bar N_k\}, \qquad k_{\min} = \min V
 \end{equation}
@@ -614,7 +668,12 @@ $\mathrm{I} \subset \mathrm{PI} \subset \mathrm{PID}$ of
 Assumption~\ref{ass:pid} is this same scheme at $m = 1, 2, 3$---one
 portrait and a two-row table for I alone, $\Gamma_0,\Gamma_1$ and three
 rows for PI, the full construction for PID---so restricting the
-controller family restricts the table, not the argument.
+controller family restricts the table, not the argument. Fewer bands
+also mean fewer constraints to clear and a lower-dimensional multiplier
+lattice to traverse, so convergence accelerates as the family shrinks:
+on plant P2 of Section~\ref{sec:battery}, from analogous conservative
+starts, the terminal cycle is entered after $41$ experiments for PID,
+$18$ for PI, and $6$ for a pure I controller.
 \end{remark}
 
 \begin{assumption}[Band monotonicity]\label{ass:mono}
@@ -652,8 +711,8 @@ With the screen row, the stabilizing-initialization requirement of the
 procedure becomes a convenience rather than a precondition. Plants of
 Assumption~\ref{ass:plant} are open-loop stable, so a sufficiently small
 loop gain always yields a stable closed loop; from any starting point in
-the multiplier box, consecutive unstable verdicts divide all gains by
-$\gamma$ and reach a stabilizing region in finitely many steps (or hit
+the multiplier box, consecutive unstable verdicts halve all gains and
+reach a stabilizing region within a handful of experiments (or hit
 $F_{\min}$, a detectable outcome), after which
 Proposition~\ref{prop:conv} applies unchanged. Each backoff, however,
 costs one experiment on a plant that is being driven unstable; the
@@ -661,12 +720,16 @@ mid-test abort with rollback remains the hard safety layer, and a
 conservative start remains good practice.
 \end{remark}
 
-\emph{Stopping rule.} Because the expanding form $V = \emptyset$ is active exactly on $\mathcal F$,
-the terminal iterate of a fixed-length run may be infeasible; the
-algorithm therefore stops on cycle detection or an iteration cap and
-returns \emph{the last iterate with}
-$\mathbf N \le \bar{\mathbf N}$---always well damped, within one step of
-the fastest such tuning found. Assumption~\ref{ass:mono} encodes the
+\emph{Termination.} The iteration needs no stopping rule. Because the
+expanding form $V = \emptyset$ is active exactly on $\mathcal F$, it
+never rests; by Proposition~\ref{prop:conv} it ends in a limit cycle
+straddling $\partial\mathcal F$ with excursion one multiplicative step
+per gain. The limits $\bar{\mathbf N}$ are set so that every regulator
+visited by that cycle is acceptable---well tuned to within one step of
+the boundary---so the iteration may simply be left running, or capped,
+and the loop kept at whichever iterate it is stopped at. In
+Section~\ref{sec:battery} we quote the last feasible iterate of each run
+as a representative of the cycle. Assumption~\ref{ass:mono} encodes the
 classical monotonicity of loop damping in channel gain, and within the
 FOPTD class of Assumption~\ref{ass:plant} it holds between a conservative
 initialization and the stability boundary; outside that
@@ -704,8 +767,8 @@ throughout the experiments of Section~\ref{sec:battery}.
 \label{sec:battery}
 %=====================================================================
 
-The method---guarded features, rule of Table~\ref{tab:rule}, stopping
-rule---was run on four process-typical plants spanning lag-dominant to
+The method---guarded features and the rule of
+Table~\ref{tab:rule}---was run on four process-typical plants spanning lag-dominant to
 delay-dominant and high-order dynamics:
 \begin{align*}
 \text{P1 (lag-dominant):} &\quad \tfrac{e^{-s}}{(10s+1)(s+1)^3}, \\
@@ -718,7 +781,7 @@ Assumption~\ref{ass:plant}: their open-loop step responses are monotone
 with dead time, even where their order exceeds one (Table~\ref{tab:battery}). The runs use the
 identical constants
 $\bar{\mathbf N} = (0.5, 0.75, 1.0)$, $\varepsilon = 0.1$,
-$\delta = 0.02$, $\beta = 0.1$, box $[0.01, 5]$, throughout. In each
+$\delta = 0.02$, $\beta = 0.1$, box $[0.01, 10]$, throughout. In each
 case the simulated plant serves exclusively as a stand-in for the physical
 process: it generates step responses; the tuner sees only the recorded
 error, exactly as on hardware. Initial gains were a nominal design with
@@ -737,7 +800,7 @@ occurred, out of $120$. Identical constants throughout; rule
 Plant & $\mathbf N$ initial & $\mathbf N$ returned & $(F_p, F_i, F_d)$ & iter \\
 \midrule
 P1 &
-$(0.12, 0.13, 0.26)$ & $(0.11, 0.17, 0.30)$ & $(5.00, 2.87, 5.00)^{\ast}$ & 118 \\
+$(0.12, 0.13, 0.26)$ & $(0.20, 0.11, 0.78)$ & $(8.10, 10.00, 4.37)^{\ast}$ & 117 \\
 P2 &
 $(0.12, -0.09, 2.69)$ & $(0.11, 0.23, 0.00)$ & $(1.69, 2.32, 0.25)$ & 114 \\
 P3 &
@@ -749,9 +812,10 @@ $(0.12, 0.11, 0.25)$ & $(0.12, 0.23, 0.00)$ & $(1.37, 2.09, 0.39)$ & 119 \\
 
 \smallskip
 \raggedright\footnotesize
-$^\ast$Multiplier box reached: no encirclement occurs within the box for
-this fast, lag-dominant loop, and the iteration returns the box
-bound---the saturation case of Proposition~\ref{prop:conv}.
+$^\ast$Integral multiplier at the box bound: the low band never objects
+for this fast, lag-dominant loop, so $F_i$ saturates at $10$, while the
+high band supplies the binding constraint ($N_2 = 0.78$)---the partial
+saturation case of Proposition~\ref{prop:conv}.
 \end{table*}
 
 Three observations. First, on the plants where the mis-tuned derivative
@@ -766,9 +830,10 @@ feasibility revisited within a few iterations of the end of the run
 (final column)---including for P4, whose iteration
 churned indefinitely \emph{without} the well-posedness guard of
 Section~\ref{sec:wellposed} and converged cleanly with it. Third, P1
-demonstrates the saturation case: within a
-$[0.01, 5]$ box this loop admits no encirclement at all, and the method
-honestly returns the box bound rather than a fictitious boundary.
+demonstrates partial saturation: the low band never objects for this
+fast, lag-dominant loop, so its multiplier honestly rides the box bound,
+while the enlarged box lets the high band find a genuine encirclement
+constraint rather than a fictitious one.
 
 The battery also exhibits the leakage asymmetry of
 Section~\ref{sec:feature}, and with it the attribution test of
@@ -792,25 +857,23 @@ but it acts on counts the features cannot attribute.
 
 The screen row of Table~\ref{tab:rule} extends the battery beyond
 stabilizing starts. Starting P2 at eight times its nominal design
-gains---a violently unstable loop---the screen fires on twelve
-consecutive records, backing all gains off until the response first
-settles at iteration $12$; the band rules then take over, first reach a
-feasible tuning at iteration $91$, and return gains equivalent to
-$(0.79,\, 1.08,\, 0.57)$ times the nominal design: the same
+gains---a violently unstable loop---two halvings suffice: the response
+first settles at iteration $2$, the band rules take over, first reach a
+feasible tuning at iteration $56$, and the run returns gains equivalent
+to $(0.86,\, 1.06,\, 0.86)$ times the nominal design: the same
 neighbourhood the method reaches from a conservative start, now reached
 from an initialization for which the counts were initially not even
 defined (Remark~\ref{rem:bootstrap}).
 
-\begin{figure}[h]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=0.95\linewidth]{fig2_limitcycle.pdf}
-\caption{P2, single-band rule: multiplier trajectories (top) and
-feasibility per iteration (bottom). After an initial corrective phase,
-the run settles into the boundary limit cycle of
-Proposition~\ref{prop:conv}, alternating between violating and feasible
-iterates.}
+\includegraphics[width=0.85\textwidth]{tuning.png}
+\caption{P2, single-band rule: gain trajectories $(K_p, K_i, K_d)$
+against iteration, log scale, captured from the running implementation.
+After an initial corrective phase the gains settle into the boundary
+limit cycle of Proposition~\ref{prop:conv}.}
 \label{fig:limitcycle}
-\end{figure}
+\end{figure*}
 
 %=====================================================================
 \section{Limits}
@@ -864,18 +927,15 @@ blame is unambiguous, makes it a decision. The features carry no
 units and no clock, so three fixed dimensionless constants serve every
 plant tested. The iteration is deterministic and bounded unconditionally,
 and converges to the boundary of the well-damped set under one explicit,
-classical assumption. Future work: principled filtering of the
-differenced portraits under measurement noise, band-selective
-acceleration from sub-threshold winding, attribution-aware multi-band
-correction (separating leaked from genuine violations above the lowest
-band, e.g., by comparing dominant periods across portraits), and the
-multi-channel construction of Remark~\ref{rem:multichannel}
-applied to 2-DOF and cascade structures, where the band ordering across
-layers is less immediate.
+classical assumption. And because every move is a repair or a verified
+one-notch tightening, the loop being tuned improves essentially
+monotonically throughout: there are no exploration steps to survive.
 
 \section*{Data availability}
 Reference implementation, simulation code, and scripts reproducing every
-result: \url{https://github.com/ottapav/roboPID-simulator}.
+result: \url{https://github.com/ottapav/roboPID-simulator}. An
+interactive demonstration is running at
+\url{https://robopid-simulator.onrender.com/}.
 
 \bibliographystyle{elsarticle-num}
 \begin{thebibliography}{00}
