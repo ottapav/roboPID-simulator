@@ -186,6 +186,37 @@ def _patch_figures(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3,
 
 # ── Full-figure builders ──────────────────────────────────────────────────────
 
+_AXIS_STYLE = {
+    'showgrid': True, 'gridcolor': 'black', 'gridwidth': 0.5,
+    'zeroline': True, 'zerolinecolor': 'black', 'zerolinewidth': 0.5,
+    'showline': True, 'linecolor': 'black', 'linewidth': 2,
+}
+
+
+def _style_axes(fig: go.Figure, zeroline: bool = True) -> go.Figure:
+    """Slim black gridlines with bolder black axis lines, capped with an
+    arrowhead so each axis reads as a directional arrow rather than a bare
+    border. zeroline=False when the figure already draws its own line
+    through the origin, to avoid stacking two lines on top of each other."""
+    fig.update_xaxes(**{**_AXIS_STYLE, 'zeroline': zeroline})
+    fig.update_yaxes(**{**_AXIS_STYLE, 'zeroline': zeroline})
+    fig.update_layout(annotations=list(fig.layout.annotations or ()) + [
+        {  # x-axis arrowhead
+            'x': 1, 'y': 0, 'xref': 'paper', 'yref': 'paper',
+            'ax': -12, 'ay': 0, 'axref': 'pixel', 'ayref': 'pixel',
+            'showarrow': True, 'arrowcolor': 'black', 'arrowwidth': 2,
+            'arrowsize': 1, 'arrowhead': 2, 'text': '',
+        },
+        {  # y-axis arrowhead
+            'x': 0, 'y': 1, 'xref': 'paper', 'yref': 'paper',
+            'ax': 0, 'ay': 12, 'axref': 'pixel', 'ayref': 'pixel',
+            'showarrow': True, 'arrowcolor': 'black', 'arrowwidth': 2,
+            'arrowsize': 1, 'arrowhead': 2, 'text': '',
+        },
+    ])
+    return fig
+
+
 def _build_feature_fig(feat: dict, idx: int) -> go.Figure:
     title = f'Γ{idx}: N={feat["phase"]:.2f} (limit {feat["limit"]})'
     fig = go.Figure(data=[
@@ -202,9 +233,9 @@ def _build_feature_fig(feat: dict, idx: int) -> go.Figure:
         title={'text': title, 'font': {'size': 11}},
         xaxis_title=feat['xname'], yaxis_title=feat['yname'],
         margin={'l': 40, 'r': 8, 't': 38, 'b': 35},
-        showlegend=False, plot_bgcolor='#f4f4f4',
+        showlegend=False, plot_bgcolor='white',
     )
-    return fig
+    return _style_axes(fig, zeroline=False)
 
 
 def _build_time_fig(sigs: dict) -> go.Figure:
@@ -222,9 +253,9 @@ def _build_time_fig(sigs: dict) -> go.Figure:
         xaxis_title='time', yaxis_title='value',
         margin={'l': 40, 'r': 8, 't': 38, 'b': 50},
         legend={'font': {'size': 10}, 'orientation': 'h', 'y': -0.3, 'x': 0},
-        plot_bgcolor='#f4f4f4',
+        plot_bgcolor='white',
     )
-    return fig
+    return _style_axes(fig)
 
 
 def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
@@ -244,9 +275,9 @@ def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
         xaxis_title='iteration', yaxis_title='gain value', yaxis_type='log',
         margin={'l': 40, 'r': 8, 't': 38, 'b': 50},
         legend={'font': {'size': 10}, 'orientation': 'h', 'y': -0.3, 'x': 0},
-        plot_bgcolor='#f4f4f4',
+        plot_bgcolor='white',
     )
-    return fig
+    return _style_axes(fig)
 
 
 # ── Callbacks registration ────────────────────────────────────────────────────
@@ -358,6 +389,32 @@ def register_callbacks(app, default_Ts: float = 1.0):
     )
     def reset_niter_default(ctype):
         return N_ITER_BY_CTYPE.get(ctype, 200)
+
+    # ── 2c. Snap K/Td display to two decimals ──────────────────────────────
+    # Runs once at load (formatting the CLI-supplied default) and again after
+    # every debounced edit (typed value + blur/Enter). Self-limiting: once the
+    # value is already the 2-decimal string, the formatted output matches the
+    # input and Dash stops the chain.
+    def _make_round2(default: float, minimum: float | None = None):
+        def _round2(val):
+            v = _f(val, default)
+            if minimum is not None:
+                v = max(v, minimum)
+            formatted = f'{v:.2f}'
+            return no_update if formatted == str(val) else formatted
+        return _round2
+
+    app.callback(
+        Output('input-K', 'value'),
+        Input('input-K', 'value'),
+        prevent_initial_call=False,
+    )(_make_round2(1.0, minimum=0.01))
+
+    app.callback(
+        Output('input-Td', 'value'),
+        Input('input-Td', 'value'),
+        prevent_initial_call=False,
+    )(_make_round2(0.0))
 
     # ── 3. Tune button ────────────────────────────────────────────────────
     # Background callback: runs pid_tuning() in a worker process (DiskcacheManager)

@@ -18,7 +18,7 @@ GRAPH_CONFIG = {
 }
 BTN = 'btn btn-sm'
 CARD_HEADER_STYLE = {
-    'minHeight': '40px', 'display': 'flex', 'alignItems': 'center',
+    'minHeight': '48px', 'display': 'flex', 'alignItems': 'center',
     'paddingTop': '0.35rem', 'paddingBottom': '0.35rem',
 }
 CARD_TITLE_STYLE = {'fontSize': '14px'}
@@ -62,13 +62,12 @@ def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
                 placeholder='e.g. [5,5,5,5] or 10',
             )),
             _row('K (static gain)', dcc.Input(
-                id='input-K', type='number', value=f'{float(default_K):.2f}',
-                debounce=True, step=0.01, min=0.01,
-                style={'width': '100%'},
+                id='input-K', type='text', value=f'{float(default_K):.2f}',
+                debounce=True, style={'width': '100%'},
             )),
             _row('Td (dead time)', dcc.Input(
-                id='input-Td', type='number', value=f'{float(default_Td):.2f}',
-                debounce=True, step=0.01, min=0.0, style={'width': '100%'},
+                id='input-Td', type='text', value=f'{float(default_Td):.2f}',
+                debounce=True, style={'width': '100%'},
             )),
         ]),
     ], className='h-100')
@@ -112,9 +111,9 @@ def _controller_card(default_ctype, default_limits, default_niter,
                 dbc.Col(html.Strong('Controller', style=CARD_TITLE_STYLE),
                         width='auto', className='align-self-center'),
                 dbc.Col(html.Button(
-                    'Tune', id='btn-tune', n_clicks=0,
+                    'TUNE', id='btn-tune', n_clicks=0,
                     className=f'{BTN} btn-success py-0',
-                    style={'fontSize': '12px'},
+                    style={'fontSize': '12px', 'fontWeight': 'bold'},
                 ), width='auto'),
                 dbc.Col(html.Div(id='tune-status',
                                  style={
@@ -129,7 +128,7 @@ def _controller_card(default_ctype, default_limits, default_niter,
                     value=default_ctype, clearable=False,
                     style={'minWidth': '68px', 'fontSize': '12px'},
                 ), width='auto', className='ms-auto'),
-            ], align='center', justify='between', className='g-2 flex-nowrap'),
+            ], align='center', justify='between', className='g-2 flex-nowrap w-100'),
             style=CARD_HEADER_STYLE,
         ),
         dbc.CardBody([
