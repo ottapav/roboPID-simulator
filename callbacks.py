@@ -30,7 +30,7 @@ import plotly.graph_objects as go
 from core.config import read_config, build_disturbance_model
 from core.features import standard_pid_features, loop_response_features
 from core.signals import min_sim_time
-from core.tuning import pid_tuning
+from core.tuning import pid_tuning, CRAFT_READING
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'robopid.config')
 
@@ -110,7 +110,7 @@ def _build_warning(tau_str, K_val, Td_val, lim1, lim2, lim3) -> str:
         msgs.append("Td: couldn't parse — using 0.0")
     elif float(Td_val) < 0:
         msgs.append('Td: negative dead time clamped to 0')
-    for label, val in (('F1 limit', lim1), ('F2 limit', lim2), ('F3 limit', lim3)):
+    for label, val in (('Γ0 limit', lim1), ('Γ1 limit', lim2), ('Γ2 limit', lim3)):
         if not _parses(val):
             msgs.append(f"{label}: couldn't parse")
     return f'⚠ {" · ".join(msgs)}' if msgs else ''
@@ -138,30 +138,33 @@ def _load_cfg(Ts: float):
     return _cfg_cache['value']
 
 
-def _simulate(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3, cfg, dist_a, dist_b):
+def _simulate(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3,
+             delta, eps, cfg, dist_a, dist_b):
     """Run simulation and return (feats, sigs)."""
     Kd_eff = 0.0 if ctype in ('I', 'PI') else Kd
     Ki_eff = Ki  # I is active in I, PI, and PID
     Kp_eff = 0.0 if ctype == 'I' else Kp
 
     desc = standard_pid_features(limits=(lim1, lim2, lim3))
-    feats, _, _, sigs, _ = loop_response_features(
-        desc, ['uI', 'uP', 'uD'],
+    feats, _, _, sigs = loop_response_features(
+        desc,
         tau, K, Td, Ts, Kp_eff, Ki_eff, Kd_eff, dtype='y',
         simtype=int(cfg.get('simtype', 0)),
         minu=float(cfg.get('minu', -1.0)),
         maxu=float(cfg.get('maxu', 1.0)),
         dist_a=dist_a, dist_b=dist_b,
+        delta=delta, eps=eps,
     )
 
     return feats, sigs
 
 
-def _patch_figures(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3, cfg, dist_a, dist_b):
+def _patch_figures(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3,
+                   delta, eps, cfg, dist_a, dist_b):
     """Simulate once and return (patch_f1, patch_f2, patch_f3, patch_time)."""
     feats, sigs = _simulate(
         tau, K, Td, Ts, Kp, Ki, Kd, ctype,
-        lim1, lim2, lim3, cfg, dist_a, dist_b)
+        lim1, lim2, lim3, delta, eps, cfg, dist_a, dist_b)
 
     patches_f = []
     for i, feat in enumerate(feats):
@@ -169,7 +172,7 @@ def _patch_figures(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3, cfg, dis
         p['data'][0]['x'] = feat['xdata'].tolist()
         p['data'][0]['y'] = feat['ydata'].tolist()
         p['layout']['title']['text'] = (
-            f'F{i+1}: {feat["phase"]:.2f} circles (limit {feat["limit"]})')
+            f'Γ{i}: N={feat["phase"]:.2f} (limit {feat["limit"]})')
         patches_f.append(p)
 
     pt = Patch()
@@ -184,7 +187,7 @@ def _patch_figures(tau, K, Td, Ts, Kp, Ki, Kd, ctype, lim1, lim2, lim3, cfg, dis
 # ── Full-figure builders ──────────────────────────────────────────────────────
 
 def _build_feature_fig(feat: dict, idx: int) -> go.Figure:
-    title = f'F{idx+1}: {feat["phase"]:.2f} circles (limit {feat["limit"]})'
+    title = f'Γ{idx}: N={feat["phase"]:.2f} (limit {feat["limit"]})'
     fig = go.Figure(data=[
         go.Scatter(x=feat['xdata'].tolist(), y=feat['ydata'].tolist(),
                    mode='lines', line={'color': 'steelblue', 'width': 1.5},
@@ -264,6 +267,8 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Input('limit-1', 'value'),
         Input('limit-2', 'value'),
         Input('limit-3', 'value'),
+        Input('input-eps', 'value'),
+        Input('input-delta', 'value'),
         State('slider-kp', 'value'),
         State('slider-ki', 'value'),
         State('slider-kd', 'value'),
@@ -272,18 +277,19 @@ def register_callbacks(app, default_Ts: float = 1.0):
         State('input-Td', 'value'),
         prevent_initial_call=False,
     )
-    def update_figures_full(ctype, lim1_raw, lim2_raw, lim3_raw,
+    def update_figures_full(ctype, lim1_raw, lim2_raw, lim3_raw, eps_raw, delta_raw,
                             Fp, Fi, Fd, tau_str, K_val, Td_val):
         tau = _parse_tau(tau_str)
         K   = _f(K_val, 1.0)
         Td  = _td(Td_val)
         lim1, lim2, lim3 = _f(lim1_raw, 0.5), _f(lim2_raw, 0.75), _f(lim3_raw, 1.0)
+        eps, delta = _f(eps_raw, 0.1), _f(delta_raw, 0.02)
         Kp, Ki, Kd = _gain(Fp), _gain(Fi), _gain(Fd)
 
         cfg, dist_a, dist_b = _load_cfg(default_Ts)
         feats, sigs = _simulate(
             tau, K, Td, default_Ts, Kp, Ki, Kd, ctype,
-            lim1, lim2, lim3, cfg, dist_a, dist_b)
+            lim1, lim2, lim3, delta, eps, cfg, dist_a, dist_b)
 
         figs_f = [_build_feature_fig(feats[i], i) for i in range(3)]
         fig_t = _build_time_fig(sigs)
@@ -308,20 +314,23 @@ def register_callbacks(app, default_Ts: float = 1.0):
         State('limit-1', 'value'),
         State('limit-2', 'value'),
         State('limit-3', 'value'),
+        State('input-eps', 'value'),
+        State('input-delta', 'value'),
         prevent_initial_call=True,
     )
     def update_figures_patch(Fp, Fi, Fd, tau_str, K_val, Td_val,
-                             ctype, lim1_raw, lim2_raw, lim3_raw):
+                             ctype, lim1_raw, lim2_raw, lim3_raw, eps_raw, delta_raw):
         tau = _parse_tau(tau_str)
         K   = _f(K_val, 1.0)
         Td  = _td(Td_val)
         lim1, lim2, lim3 = _f(lim1_raw, 0.5), _f(lim2_raw, 0.75), _f(lim3_raw, 1.0)
+        eps, delta = _f(eps_raw, 0.1), _f(delta_raw, 0.02)
         Kp, Ki, Kd = _gain(Fp), _gain(Fi), _gain(Fd)
 
         cfg, dist_a, dist_b = _load_cfg(default_Ts)
         p_f1, p_f2, p_f3, p_time = _patch_figures(
             tau, K, Td, default_Ts, Kp, Ki, Kd, ctype,
-            lim1, lim2, lim3, cfg, dist_a, dist_b)
+            lim1, lim2, lim3, delta, eps, cfg, dist_a, dist_b)
 
         warning = _build_warning(tau_str, K_val, Td_val, lim1_raw, lim2_raw, lim3_raw)
         return p_f1, p_f2, p_f3, p_time, warning
@@ -372,6 +381,9 @@ def register_callbacks(app, default_Ts: float = 1.0):
         State('limit-2', 'value'),
         State('limit-3', 'value'),
         State('input-niter', 'value'),
+        State('input-eps', 'value'),
+        State('input-delta', 'value'),
+        State('input-step', 'value'),
         background=True,
         progress=[
             Output('slider-kp', 'value', allow_duplicate=True),
@@ -392,7 +404,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
     )
     def run_tune(set_progress, n_clicks, Fp, Fi, Fd,
                  tau_str, K_val, Td_val, ctype,
-                 lim1, lim2, lim3, niter_val):
+                 lim1, lim2, lim3, niter_val, eps_val, delta_val, step_val):
         if not n_clicks:
             return no_update, no_update, no_update, no_update, no_update
 
@@ -412,7 +424,9 @@ def register_callbacks(app, default_Ts: float = 1.0):
         cfg, dist_a, dist_b = _load_cfg(default_Ts)
         n_iter     = int(_f(niter_val, N_ITER_BY_CTYPE.get(ctype, 200)))
         n_iter     = max(10, min(n_iter, 2000))
-        tune_step  = float(cfg.get('tune_step', 0.1))
+        eps_tune   = _f(eps_val, 0.1)
+        delta_tune = _f(delta_val, 0.02)
+        tune_step  = _f(step_val, 0.1)
 
         desc = standard_pid_features(limits=(lim1, lim2, lim3))
         smin, smax = 0.01, 10.0
@@ -421,7 +435,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
         MIN_PUSH_INTERVAL = 0.08  # seconds; well under interval=150ms poll above
         hist_iter, hist_kp, hist_ki, hist_kd = [], [], [], []
 
-        def on_iteration(i, N, Fp_cur, Fi_cur, Fd_cur):
+        def on_iteration(i, N, Fp_cur, Fi_cur, Fd_cur, row):
             now = time.monotonic()
             if i < N and (now - last_push[0]) < MIN_PUSH_INTERVAL:
                 return
@@ -435,7 +449,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
 
             p_f1, p_f2, p_f3, p_time = _patch_figures(
                 tau, K, Td, default_Ts, p_Kp, p_Ki, p_Kd, ctype,
-                lim1, lim2, lim3, cfg, dist_a, dist_b)
+                lim1, lim2, lim3, delta_tune, eps_tune, cfg, dist_a, dist_b)
 
             hist_iter.append(i)
             hist_kp.append(p_Kp)
@@ -444,7 +458,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
             p_gains_hist = _build_gains_history_fig(hist_kp, hist_ki, hist_kd, it=hist_iter)
 
             set_progress((_log_gain(p_Kp), _log_gain(p_Ki), _log_gain(p_Kd),
-                          f'Tuning… iter {i}/{N}',
+                          f'Tuning… iter {i}/{N} — {CRAFT_READING[row]}',
                           p_time, p_f1, p_f2, p_f3, p_gains_hist))
 
         Fp_hist, Fi_hist, Fd_hist = pid_tuning(
@@ -460,6 +474,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
             minu=float(cfg.get('minu', -1.0)),
             maxu=float(cfg.get('maxu', 1.0)),
             dist_a=dist_a, dist_b=dist_b,
+            delta=delta_tune, eps=eps_tune,
             on_iteration=on_iteration,
         )
 

@@ -1,19 +1,19 @@
 """
-Performance feature computation using encirclement-based phase metrics.
-
-Three features track how many times normalized signal trajectories wrap
-around the origin in different phase planes — a Nyquist-like robustness metric.
-
-Mirrors MATLAB pidtool: encirc, extended_features, standard_pid_features.
+Encirclement-based phase-plane features: the three "Pachner plots" of
+RoboPID_JPC_paper/main.tex (Gamma0, Gamma1, Gamma2 in eq. "plots"). Each
+trajectory's winding number about the origin (Definition 1) is a
+dimensionless, scale-free, band-selective damping diagnostic — N0 indicts
+Ki, N1 indicts Kp, N2 indicts Kd (Section "The encirclement features").
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 import numpy as np
 
-from .signals import loop_signals, add_derivatives, pathratio
+from .signals import loop_signals, add_derivatives
 
-EPSILON = 0.1   # disc radius for encirclement detection
+EPSILON = 0.1   # truncation disc radius (Definition 1); paper default
+DELTA = 0.02    # settling-band guard (Definition 4); paper default
 
 
 @dataclass
@@ -34,24 +34,24 @@ class FeatureDescription:
 
 
 def standard_pid_features(limits=(0.5, 0.75, 1.00)) -> list[FeatureDescription]:
-    """Return the three standard PID feature descriptors."""
+    """Return the three Pachner-plot descriptors Gamma0, Gamma1, Gamma2 (eq. "plots")."""
     return [
         FeatureDescription(
-            name='e E', xdata='e', ydata='e',
+            name='Gamma0', xdata='e', ydata='e',
             xname='e', yname='E',
             signum=1, x_deg=0, y_deg=-1,
             limit=limits[0],
             x_rel_to_end=False, y_rel_to_end=True,
         ),
         FeatureDescription(
-            name="e' e", xdata='e', ydata='e',
+            name='Gamma1', xdata='e', ydata='e',
             xname='Δe', yname='e',
             signum=1, x_deg=1, y_deg=0,
             limit=limits[1],
             x_rel_to_end=False, y_rel_to_end=False,
         ),
         FeatureDescription(
-            name="e'' e'", xdata='e', ydata='e',
+            name='Gamma2', xdata='e', ydata='e',
             xname='Δ²e', yname='Δe',
             signum=1, x_deg=2, y_deg=1,
             limit=limits[2],
@@ -101,8 +101,11 @@ def encirc(x: np.ndarray, y: np.ndarray, eps: float = EPSILON) -> float:
     """
     Compute the signed encirclement count of the trajectory around the origin.
 
-    Equivalent to MATLAB pidtool.encirc. Returns a float (can be fractional
-    for partial encirclements).
+    Implements Definition 1 (Encirclement count) of RoboPID_JPC_paper/main.tex:
+    per-axis peak normalization, truncation at the last entry into the
+    epsilon-disc, then winding number as the endpoint angle difference
+    corrected by signed crossings of the negative horizontal semi-axis.
+    Returns a float (partial revolutions count fractionally).
     """
     x = np.asarray(x, dtype=float).ravel()
     y = np.asarray(y, dtype=float).ravel()
@@ -138,7 +141,8 @@ def encirc(x: np.ndarray, y: np.ndarray, eps: float = EPSILON) -> float:
 
 def compute_features(description: list[FeatureDescription],
                      ext_signals: dict,
-                     k1: int, k2: int) -> list[dict]:
+                     k1: int, k2: int,
+                     eps: float = EPSILON) -> list[dict]:
     """
     Compute phase encirclement for each feature descriptor.
 
@@ -189,7 +193,7 @@ def compute_features(description: list[FeatureDescription],
             phase = -np.inf
             for x0, y0 in zip(desc.x0, desc.y0):
                 phase = max(phase, desc.signum * encirc(
-                    xw_norm - x0, yw_norm - y0, EPSILON))
+                    xw_norm - x0, yw_norm - y0, eps))
 
         results.append({
             'name': desc.name,
@@ -204,22 +208,25 @@ def compute_features(description: list[FeatureDescription],
     return results
 
 
-def loop_response_features(description, pr_names, tau, K, Td, Ts,
+def loop_response_features(description, tau, K, Td, Ts,
                            Kp, Ki, Kd, dtype='y', T=None,
                            simtype=0, minu=-1.0, maxu=1.0,
-                           dist_a=0.0, dist_b=0.0):
+                           dist_a=0.0, dist_b=0.0, delta=DELTA,
+                           eps=EPSILON):
     """
-    Full pipeline: simulate → signals → derivatives → features + path ratios.
+    Full pipeline: simulate → signals → derivatives → encirclement features.
 
-    Returns (features, k1, k2, signals, pr) where pr is the path-ratio dict.
+    The encirclement windows are truncated at the settling-anchored k2_guard
+    (Definition 4), not the raw k2, so the winding counts stay window-length
+    independent (Proposition "well-posedness"). Returns (features, k1, k2, signals).
     """
     sigs = loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype, T,
-                        simtype, minu, maxu, dist_a, dist_b)
+                        simtype, minu, maxu, dist_a, dist_b, delta)
     k1 = sigs['k1']
     k2 = sigs['k2']
+    k2_guard = sigs['k2_guard']
 
     ext = add_derivatives(sigs, nd=2)
-    features = compute_features(description, ext, k1, k2)
-    pr = pathratio(pr_names, sigs, k1, k2)
+    features = compute_features(description, ext, k1, k2_guard, eps)
 
-    return features, k1, k2, sigs, pr
+    return features, k1, k2, sigs

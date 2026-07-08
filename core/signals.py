@@ -1,8 +1,10 @@
 """
 Signal utilities: assembling loop signals dict, scaling, and derivative augmentation.
 
-Mirrors MATLAB pidtool static methods:
-  loop_signals_struct, scaled_variables, add_derivatives, pathratio, getsignal
+`settling_index` implements the settling-anchored window guard of
+RoboPID_JPC_paper/main.tex (Definition 4, the delta guard restoring window
+independence of the encirclement counts). `find_index` implements the
+maximum-likelihood stability screen from the same paper.
 """
 
 from __future__ import annotations
@@ -28,7 +30,8 @@ def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
                  T: float | None = None,
                  simtype: int = 0,
                  minu: float = -1.0, maxu: float = 1.0,
-                 dist_a: float = 0.0, dist_b: float = 0.0) -> dict:
+                 dist_a: float = 0.0, dist_b: float = 0.0,
+                 delta: float = 0.02) -> dict:
     """
     Compute and return a dict of all loop signals.
 
@@ -48,6 +51,7 @@ def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
 
     r = np.ones_like(y)
     e, v, k1, k2 = scaled_variables(y, u, r)
+    k2_guard = settling_index(e, k1, k2, delta)
 
     uP, uI, uD = action_components(y, Kp, Ki, Kd, Ts, T)
     N = len(t)
@@ -62,7 +66,7 @@ def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
         'uP': uP, 'uI': uI, 'uD': uD,
         'vP': vP, 'vI': vI, 'vD': vD,
         't': t,
-        'k1': k1, 'k2': k2,
+        'k1': k1, 'k2': k2, 'k2_guard': k2_guard,
     }
 
 
@@ -85,6 +89,27 @@ def scaled_variables(y: np.ndarray, u: np.ndarray, r: np.ndarray
         k1 = k2
     k1 = min(k1, k2)
     return e, v, k1, k2
+
+
+def settling_index(e: np.ndarray, k1: int, k2: int, delta: float = 0.02) -> int:
+    """
+    Settling-anchored window guard (paper Definition 4).
+
+    k_delta = 1 + last index where |e_k| exceeds delta * peak|e|, clipped to
+    [k1, k2]. Truncating the encirclement windows here keeps the winding
+    counts independent of how long the simulation happens to run, since a
+    quiet micro-oscillation past this point would otherwise dominate the
+    per-axis-normalized differenced coordinates and wind indefinitely.
+    """
+    e = np.asarray(e, dtype=float).ravel()
+    peak = np.max(np.abs(e[:k2 + 1])) if k2 + 1 <= len(e) else np.max(np.abs(e))
+    if peak < 1e-12:
+        return k1
+
+    band = delta * peak
+    idxs = np.nonzero(np.abs(e[:k2 + 1]) > band)[0]
+    k_delta = (int(idxs.max()) + 1) if idxs.size else 0
+    return int(np.clip(k_delta, k1, k2))
 
 
 def add_derivatives(signals: dict, nd: int = 2) -> dict:
@@ -121,30 +146,6 @@ def add_derivatives(signals: dict, nd: int = 2) -> dict:
     return result
 
 
-def pathratio(names: list[str], signals: dict, k1: int, k2: int) -> dict:
-    """
-    Compute path ratio for each named signal: activity in second half vs first half.
-
-    ratio = sum|Δ signal[mid:k2]| / sum|Δ signal[k1:mid]|
-
-    A ratio > 1 means the signal is still active late — indicates sluggish tuning.
-    """
-    mid = (k1 + k2) // 2
-    result = {}
-    for name in names:
-        s = signals.get(name)
-        if s is None:
-            result[name] = 0.0
-            continue
-        if isinstance(s, np.ndarray) and s.ndim == 2:
-            s = s[:, 0]
-        s = np.asarray(s, dtype=float).ravel()
-        second_half = np.sum(np.abs(np.diff(s[mid:k2 + 1])))
-        first_half = np.sum(np.abs(np.diff(s[k1:mid + 1])))
-        result[name] = float(second_half / first_half) if first_half > 1e-12 else 0.0
-    return result
-
-
 def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
     """
     Maximum-likelihood change-point search over M[m:n+1].
@@ -156,7 +157,10 @@ def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
     best split, the late segment's variance exceeds the early segment's — the
     signal is getting noisier/more active over time rather than settling.
 
-    Mirrors MATLAB pidtool.findindex exactly.
+    Implements the stability screen of RoboPID_JPC_paper/main.tex (Section
+    "A stability screen"): a settling response front-loads its energy, a
+    diverging one back-loads it, and the verdict is scale- and time-invariant
+    since both mean squares scale identically.
     """
     M = np.asarray(M, dtype=float)
     minvar = -float(np.finfo(np.float32).max)

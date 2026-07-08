@@ -17,6 +17,12 @@ GRAPH_CONFIG = {
     ],
 }
 BTN = 'btn btn-sm'
+CARD_HEADER_STYLE = {
+    'minHeight': '40px', 'display': 'flex', 'alignItems': 'center',
+    'paddingTop': '0.35rem', 'paddingBottom': '0.35rem',
+}
+CARD_TITLE_STYLE = {'fontSize': '14px'}
+PARAM_GROUP_LABEL_WIDTH = '78px'
 
 
 def _slider(sid: str, label: str, col_id: str | None = None) -> dbc.Col:
@@ -47,7 +53,7 @@ def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
         ], className='mb-2 align-items-center')
 
     return dbc.Card([
-        dbc.CardHeader(html.Strong('Plant')),
+        dbc.CardHeader(html.Strong('Plant', style=CARD_TITLE_STYLE), style=CARD_HEADER_STYLE),
         dbc.CardBody([
             formula,
             _row('τ (time constants)', dcc.Input(
@@ -56,37 +62,75 @@ def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
                 placeholder='e.g. [5,5,5,5] or 10',
             )),
             _row('K (static gain)', dcc.Input(
-                id='input-K', type='number', value=float(default_K),
+                id='input-K', type='number', value=f'{float(default_K):.2f}',
                 debounce=True, step=0.01, min=0.01,
                 style={'width': '100%'},
             )),
             _row('Td (dead time)', dcc.Input(
-                id='input-Td', type='number', value=float(default_Td),
-                debounce=True, step=0.1, min=0.0, style={'width': '100%'},
+                id='input-Td', type='number', value=f'{float(default_Td):.2f}',
+                debounce=True, step=0.01, min=0.0, style={'width': '100%'},
             )),
         ]),
     ], className='h-100')
 
 
-def _controller_card(default_ctype, default_limits, default_niter) -> dbc.Card:
+def _controller_card(default_ctype, default_limits, default_niter,
+                     default_tuner_params) -> dbc.Card:
     lim1, lim2, lim3 = default_limits
+    default_eps, default_delta, default_step = default_tuner_params
 
     def _limit_input(sid, val):
         return dcc.Input(id=sid, type='number', value=val,
                          debounce=True, step=0.05, min=0.0, max=5.0,
                          style={'width': '60px'})
 
+    def _tuner_param_input(sid, val, step):
+        return dcc.Input(id=sid, type='number', value=val,
+                         debounce=True, step=step, min=0.0, max=5.0,
+                         style={'width': '60px'})
+
+    def _param_row(label, *pairs):
+        """One labeled group; pairs is a sequence of (short_label, input)
+        joined with ', ' delimiters. The label column has a fixed width so
+        the first parameter of every group lines up across rows."""
+        children = []
+        for i, (plabel, inp) in enumerate(pairs):
+            if i > 0:
+                children.append(html.Span(', ', style={'color': '#777'}))
+            children.append(html.Small(f'{plabel} ', style={'color': '#777'}))
+            children.append(inp)
+        return dbc.Row([
+            dbc.Col(html.Small(f'{label}:', style={'color': '#777'}),
+                    width='auto', style={'width': PARAM_GROUP_LABEL_WIDTH}),
+            dbc.Col(children, width='auto',
+                    className='d-flex align-items-center flex-wrap gap-1'),
+        ], align='center', className='mb-2 g-2')
+
     return dbc.Card([
         dbc.CardHeader(
             dbc.Row([
-                dbc.Col(html.Strong('Controller'), width='auto', className='align-self-center'),
+                dbc.Col(html.Strong('Controller', style=CARD_TITLE_STYLE),
+                        width='auto', className='align-self-center'),
+                dbc.Col(html.Button(
+                    'Tune', id='btn-tune', n_clicks=0,
+                    className=f'{BTN} btn-success py-0',
+                    style={'fontSize': '12px'},
+                ), width='auto'),
+                dbc.Col(html.Div(id='tune-status',
+                                 style={
+                                     'fontSize': '11px', 'color': '#555',
+                                     'whiteSpace': 'nowrap', 'overflow': 'hidden',
+                                     'textOverflow': 'ellipsis',
+                                 }),
+                        className='flex-grow-1', style={'minWidth': 0}),
                 dbc.Col(dcc.Dropdown(
                     id='dropdown-ctype',
                     options=[{'label': t, 'value': t} for t in ('I', 'PI', 'PID')],
                     value=default_ctype, clearable=False,
-                    style={'minWidth': '80px'},
+                    style={'minWidth': '68px', 'fontSize': '12px'},
                 ), width='auto', className='ms-auto'),
-            ], align='center', justify='between', className='g-2'),
+            ], align='center', justify='between', className='g-2 flex-nowrap'),
+            style=CARD_HEADER_STYLE,
         ),
         dbc.CardBody([
             # Sliders
@@ -96,35 +140,30 @@ def _controller_card(default_ctype, default_limits, default_niter) -> dbc.Card:
                 _slider('slider-kd', 'Kd', col_id='col-kd'),
             ], className='mb-3'),
 
-            # Tune button + feature limits + status
-            dbc.Row([
-                dbc.Col(html.Button(
-                    'Tune', id='btn-tune', n_clicks=0,
-                    className=f'{BTN} btn-success',
-                ), width='auto'),
-                dbc.Col(html.Small('Limits:', style={'color': '#777'}), width='auto'),
-                dbc.Col([html.Small('F1: ', style={'color': '#777'}), _limit_input('limit-1', lim1)],
-                        width='auto', className='d-flex align-items-center gap-1'),
-                dbc.Col([html.Small('F2: ', style={'color': '#777'}), _limit_input('limit-2', lim2)],
-                        width='auto', className='d-flex align-items-center gap-1'),
-                dbc.Col([html.Small('F3: ', style={'color': '#777'}), _limit_input('limit-3', lim3)],
-                        width='auto', className='d-flex align-items-center gap-1'),
-                dbc.Col([html.Small('Iter: ', style={'color': '#777'}),
-                         dcc.Input(id='input-niter', type='number', value=default_niter,
-                                   debounce=True, step=10, min=10, max=2000,
-                                   style={'width': '70px'})],
-                        width='auto', className='d-flex align-items-center gap-1'),
-                dbc.Col(html.Div(id='tune-status',
-                                 style={'fontSize': '12px', 'color': '#555'}),
-                        width='auto', className='align-self-center'),
-            ], align='center'),
+            # Feature limits
+            _param_row('Limits',
+                      ('Γ0', _limit_input('limit-1', lim1)),
+                      ('Γ1', _limit_input('limit-2', lim2)),
+                      ('Γ2', _limit_input('limit-3', lim3))),
+
+            # Tuner settings
+            _param_row('Settings',
+                      ('Trunc ε', _tuner_param_input('input-eps', default_eps, 0.01)),
+                      ('Settle δ', _tuner_param_input('input-delta', default_delta, 0.01)),
+                      ('Step', _tuner_param_input('input-step', default_step, 0.05))),
+
+            # Simulation
+            _param_row('Simulation',
+                      ('Iter', dcc.Input(id='input-niter', type='number', value=default_niter,
+                                         debounce=True, step=10, min=10, max=2000,
+                                         style={'width': '70px'}))),
         ]),
     ], className='h-100')
 
 
 def _step_response_card() -> dbc.Card:
     return dbc.Card([
-        dbc.CardHeader(html.Strong('Step Response')),
+        dbc.CardHeader(html.Strong('Step Response', style=CARD_TITLE_STYLE), style=CARD_HEADER_STYLE),
         dbc.CardBody([
             dcc.Graph(id='graph-time', style=GRAPH_STYLE,
                       config=GRAPH_CONFIG),
@@ -134,7 +173,7 @@ def _step_response_card() -> dbc.Card:
 
 def _features_card() -> dbc.Card:
     return dbc.Card([
-        dbc.CardHeader(html.Strong('Features')),
+        dbc.CardHeader(html.Strong('Pachner plots (Γ0, Γ1, Γ2)', style=CARD_TITLE_STYLE), style=CARD_HEADER_STYLE),
         dbc.CardBody([
             dbc.Row([
                 dbc.Col(dcc.Graph(id='graph-f1', style=GRAPH_STYLE,
@@ -150,7 +189,7 @@ def _features_card() -> dbc.Card:
 
 def _gains_history_card() -> dbc.Card:
     return dbc.Card([
-        dbc.CardHeader(html.Strong('Tuning History')),
+        dbc.CardHeader(html.Strong('Tuning History', style=CARD_TITLE_STYLE), style=CARD_HEADER_STYLE),
         dbc.CardBody([
             dcc.Graph(id='graph-gains-history', style=GRAPH_STYLE,
                       config=GRAPH_CONFIG),
@@ -163,7 +202,8 @@ def make_layout(default_tau: str = '[5,5,5,5]',
                 default_Td: str = '8.0',
                 default_ctype: str = 'PID',
                 default_limits: tuple = (0.5, 0.75, 1.0),
-                default_niter: int = 200):
+                default_niter: int = 200,
+                default_tuner_params: tuple = (0.1, 0.02, 0.1)):
     """Build and return the full app layout."""
     return dbc.Container(fluid=False, style={
         'width': '100%', 'maxWidth': '800px', 'overflowX': 'hidden',
@@ -176,7 +216,8 @@ def make_layout(default_tau: str = '[5,5,5,5]',
         dbc.Row([
             dbc.Col(_plant_card(default_tau, default_K, default_Td),
                     width=12, md=4, className='mb-2'),
-            dbc.Col(_controller_card(default_ctype, default_limits, default_niter),
+            dbc.Col(_controller_card(default_ctype, default_limits, default_niter,
+                                     default_tuner_params),
                     width=12, md=8, className='mb-2'),
         ], className='mb-1'),
 

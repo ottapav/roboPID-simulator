@@ -11,7 +11,6 @@ DEFAULTS = {
     'dist_tau': 120.0,
     'dist_std': 0.05,
     'lipsch_const': 0.0,
-    'tune_step': 0.1,
 }
 
 

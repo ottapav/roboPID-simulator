@@ -1,7 +1,9 @@
 # roboPID-simulator
 
-**RoboPID** is an interactive Dash web app that simulates PID controller
-auto-tuning against a first-order-plus-dead-time (FOPTD) process model.
+**RoboPID** is an interactive Dash web app implementing model-free PID
+tuning via encirclements of the step response, the method described in
+[*Model-Free PID Tuning via Encirclements of the Step Response*](RoboPID_JPC_paper/main.tex)
+(Pachner, Otta, Dostál).
 
 ## Overview
 
@@ -13,14 +15,20 @@ P(s) = K * exp(-Td*s) / prod(s*tau_i + 1)
 ```
 
 You set the plant parameters (`tau`, `K`, `Td`) and pick a controller type
-(I, PI, or PID), then click **Tune**, which iteratively nudges the gains up
-or down based on closed-loop robustness "features" (phase-plane/encirclement
-metrics) and path-ratio sluggishness checks, streaming progress live as it
-runs and plotting the resulting gain trajectory once it finishes. The
-**Iter** field defaults to a controller-structure-appropriate iteration
-budget — fewer terms to search means fewer iterations are needed: I uses
-50, PI uses 100, and PID uses 200 — and resets to that default whenever
-you switch controller type, but you can type a custom count at any time.
+(I, PI, or PID), then click **Tune**. Each iteration steps the setpoint,
+forms three phase portraits of the control error — Γ0, Γ1, Γ2, the paper's
+"Pachner plots" — and counts how many times each winds around its settling
+point (a settling-anchored window guard keeps the count independent of how
+long the simulation runs). A maximum-likelihood stability screen first backs
+off every gain when the record is growing rather than decaying; otherwise
+the lowest band that loops too much (Γ0 → Ki, Γ1 → Kp, Γ2 → Kd) is cut one
+notch and every clean band below it is raised — the paper's single
+triangular rule. Progress streams live as it runs, and the resulting gain
+trajectory is plotted once it finishes. The **Iter** field defaults to a
+controller-structure-appropriate iteration budget — fewer terms to search
+means fewer iterations are needed: I uses 50, PI uses 100, and PID uses
+200 — and resets to that default whenever you switch controller type, but
+you can type a custom count at any time.
 
 RoboPID is built as an educational algorithm simulator for exploring PID
 tuning behavior interactively, making the effect of each gain and each
@@ -29,11 +37,11 @@ tuning pass visible in real time.
 ## Features
 
 - FOPTD plant modeling with an arbitrary number of cascaded time constants
-- Iterative, feature-driven auto-tuning with live progress streaming
+- Iterative, encirclement-driven auto-tuning with live progress streaming
 - Interactive Dash GUI: plant/controller inputs, Kp/Ki/Kd log-scale gain
   sliders (0.01-10, only the gains relevant to the selected controller
-  type are shown), live step-response plot, three feature/phase-plane
-  plots, and a gain-history plot of the last Tune run
+  type are shown), live step-response plot, the three Pachner-plot
+  (Γ0/Γ1/Γ2) phase planes, and a gain-history plot of the last Tune run
 - Runtime-configurable simulation settings via `robopid.config`
 
 ## Requirements
@@ -86,7 +94,11 @@ per line):
 | `dist_tau` | `120.0` | Disturbance model time constant |
 | `dist_std` | `0.05` | Disturbance standard deviation |
 | `lipsch_const` | `0.0` | Lipschitz constant used by the tuning search |
-| `tune_step` | `0.1` | Step size for each tuning iteration |
+
+The paper's dimensionless constants — the Γ0/Γ1/Γ2 loop limits, the
+truncation radius ε, the settling-band guard δ, and the step size β — are
+adjustable live from the Controller card instead, next to the Tune button,
+rather than through `robopid.config`.
 
 ## Project Structure
 
@@ -100,9 +112,9 @@ roboPID-simulator/
 └── core/                  # Pure simulation/control logic, no UI dependencies
     ├── plant.py             # FOPTD plant transfer function + step response
     ├── pid.py                # Closed-loop PID simulation (linear + anti-windup)
-    ├── tuning.py             # Iterative feature-driven auto-tuning
-    ├── features.py           # Phase-plane / encirclement robustness features
-    ├── signals.py            # Loop signal assembly, scaling, derivative features
+    ├── tuning.py             # Triangular tuning rule (paper Table 1)
+    ├── features.py           # Pachner plots Γ0/Γ1/Γ2 + encirclement counts
+    ├── signals.py            # Loop signals, settling guard, stability screen
     └── config.py             # Config file reader + disturbance model builder
 ```
 
