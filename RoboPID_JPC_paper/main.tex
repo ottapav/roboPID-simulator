@@ -52,13 +52,19 @@ independence. A single triangular rule then updates the gains, ordered by
 the frequency band each channel dominates: raise every clean band below
 the lowest violation, cut that band---the only violation whose blame is
 unambiguous---and touch nothing above; or raise
-all bands when every portrait is clean. The iteration is deterministic,
+all bands when every portrait is clean. A parameter-free stability
+screen---a maximum-likelihood test of whether the record grows quieter
+or louder after a single switch point---backs all gains off when the
+response fails to settle, so the counts are only ever read on records
+where they are defined, and the method bootstraps from arbitrary,
+even destabilizing, initial gains. The iteration is deterministic,
 bounded by
 construction, and, under an explicit monotonicity assumption, converges to
 a limit cycle on the boundary of the well-damped tuning set. The method
 rests on two standing assumptions only---a stable, self-regulating
-process of the first-order-plus-time-delay class, and the parallel PID
-structure itself---and uses no process model, no solver, and one step
+process of the first-order-plus-time-delay class, and a controller from
+the nested family $\mathrm{I} \subset \mathrm{PI} \subset \mathrm{PID}$
+with mandatory integral action---and uses no process model, no solver, and one step
 test per iteration. It is validated on a battery of process-typical
 plants---lag-dominant, delay-dominant, balanced, and high-order---with
 identical defaults throughout. A reference implementation is public.
@@ -156,13 +162,24 @@ higher-order overdamped dynamics belong to it.
 \end{assumption}
 
 \begin{assumption}[Controller structure]\label{ass:pid}
-The controller is a parallel PID,
-$u = K_p e + K_i\!\int\! e + K_d \dot e$, in a unity-feedback loop.
+The controller is drawn from the nested family
+$\mathrm{I} \subset \mathrm{PI} \subset \mathrm{PID}$: a parallel
+structure $u = K_p e + K_i\!\int\! e + K_d \dot e$ in a unity-feedback
+loop, with the integral channel mandatory ($K_i > 0$) and the
+proportional and derivative channels optional ($K_p, K_d \ge 0$).
 \end{assumption}
 
 Nothing else is assumed. No model is identified, parametrized, or used at
 any point of the procedure; no noise model is posited; no excitation is
 required beyond routine setpoint steps under the existing controller.
+The mandatory integral channel is not a stylistic choice: on the plants
+of Assumption~\ref{ass:plant}, $K_i > 0$ is what drives $e \to 0$ at
+steady state, which is what lets the portraits below terminate at the
+origin at all. A controller without integral action---P or PD
+alone---settles at a nonzero offset on a self-regulating plant, its
+trajectories never enter the truncation disc, and the counts of
+Section~\ref{sec:feature} cease to measure damping; we return to this
+after defining the disc.
 
 A tuning experiment applies a setpoint step and
 records the error $e_k$, $k = 0,\dots,K$, at period $T_s$, over a window
@@ -196,6 +213,18 @@ origin: total swept angle over $2\pi$, evaluated as the endpoint angle
 difference corrected by signed crossings of the negative horizontal
 semi-axis. Partial revolutions count fractionally.
 \end{definition}
+
+Definition~\ref{def:count} presupposes that the trajectory has somewhere
+to terminate: a well-tuned loop of Assumption~\ref{ass:pid} drives
+$e \to 0$, so all three portraits converge to the origin and eventually
+enter the disc, whatever $\varepsilon$ is chosen. Drop the integral
+channel and this fails structurally, not marginally: a P-only loop on a
+self-regulating plant settles at a nonzero offset, $\Gamma_0$ and
+$\Gamma_1$ terminate at a point set by that offset rather than at the
+origin, truncation never triggers, and the winding number is measuring
+distance from the wrong point---not a noisy version of the intended
+quantity, but a different quantity. This is the concrete content of
+requiring $K_i > 0$ in Assumption~\ref{ass:pid}.
 
 Applying Definition~\ref{def:count} to $\Gamma_0, \Gamma_1, \Gamma_2$
 yields the feature vector $\mathbf N(\theta) = (N_0, N_1, N_2)$ at
@@ -377,6 +406,48 @@ controller is taken on the error, not the measurement, so that a
 setpoint step does not itself inject a derivative kick into $\Gamma_2$.
 \end{remark}
 
+\emph{A stability screen.} The guard, and the counts themselves, presuppose
+that the record settles at all: the portraits of a diverging error never
+enter the truncation disc, and their winding is an artefact of wherever
+the recording happened to stop. Whether the record settles is itself
+decidable from the record, with no model and no thresholds.
+
+\begin{definition}[Stability screen]\label{def:screen}
+Model the recorded error as emitted by two zero-mean Gaussian generators
+switched once at an unknown sample $\tau$. The maximum-likelihood switch
+point is
+\begin{equation}
+\tau^\ast = \arg\max_{\tau}\;
+\bigl[-\tau \ln s_1^2(\tau) - (K-\tau)\ln s_2^2(\tau)\bigr],
+\end{equation}
+where $s_1^2(\tau)$ and $s_2^2(\tau)$ are the mean squares of
+$e_0,\dots,e_{\tau-1}$ and $e_\tau,\dots,e_K$ respectively (with $\tau$
+ranging over splits that leave at least $10\%$ of the record on each
+side). The record is declared \emph{unstable} when
+$s_2^2(\tau^\ast) \ge s_1^2(\tau^\ast)$---the generator engaged second is
+the louder---and \emph{stable} otherwise.
+\end{definition}
+
+The screen asks one question: did the record get quieter or louder after
+the switch? A settling response front-loads its energy; a diverging one
+back-loads it. The verdict is invariant to amplitude and time scaling
+(both mean squares scale identically), so the screen adds \emph{no}
+constants to the method. Zero-mean second moments, rather than variances
+about segment means, matter for dead time: during transport delay the
+error sits constant at the step value---quiet about its own mean, loud
+about zero---so the zero-mean form correctly reads the plateau as part
+of the transient rather than as a silent first generator. The zero
+reference itself is licensed by Assumption~\ref{ass:pid}: with $K_i > 0$
+guaranteed, a genuinely stable record must end quiet about zero
+specifically, not merely quiet, so loudness about zero after the switch
+is unambiguous evidence against stability rather than evidence of an
+uneliminated offset. A bounded
+sustained oscillation deliberately \emph{passes} the screen (the step
+transient keeps the early segment louder): a limit cycle has a frequency,
+so it is attributable and belongs to the counts and the band rules,
+while the screen is reserved for divergence, which no count can
+meaningfully describe.
+
 %=====================================================================
 \section{The tuning rule}
 \label{sec:rule}
@@ -395,11 +466,13 @@ conservative stabilizing initialization, fix a step $\beta$ (default
 $0.1$), and let $\gamma = 1/(1-\beta)$. Each iteration performs one step
 test, evaluates $\mathbf N$, and updates the gains.
 
-The rule, in words: \emph{scan the portraits from slow to fast; the
+The rule, in words: \emph{if the record grows rather than decays, turn
+all three gains down; otherwise scan the portraits from slow to fast; the
 first one that loops too much names the gain to turn down one notch, and
 every gain below it turns up one notch; if none loops, turn all three
 up.} Table~\ref{tab:rule} is the entire decision logic. The classical
-commissioning craft is recognizable row by row---slow cycling: back off
+commissioning craft is recognizable row by row---runaway: back everything
+off; slow cycling: back off
 the reset; ringing: back off the gain; buzzing: back off the
 rate---with the compensating increases added, and the lower-triangular
 stencil that gives the rule its name is directly visible in the arrow
@@ -408,20 +481,23 @@ pattern.
 \begin{table}[h]
 \centering
 \caption{The tuning rule at a glance. The first matching row applies,
-top to bottom, once per step test; ``loops'' means $N_k > \bar N_k$.
+top to bottom, once per step test; ``unstable'' is the verdict of
+Definition~\ref{def:screen}, ``loops'' means $N_k > \bar N_k$.
 $\uparrow$: multiply by $\gamma$;\ $\downarrow$: divide by $\gamma$;\
 $\cdot$\,: unchanged. Projections onto $[F_{\min},F_{\max}]$ implied.}
 \label{tab:rule}
 \setlength{\tabcolsep}{5pt}
 \begin{tabular}{lcccl}
 \toprule
-First loop & $F_i$ & $F_p$ & $F_d$ & craft reading \\
+Condition & $F_i$ & $F_p$ & $F_d$ & craft reading \\
 \midrule
-$\Gamma_0$ & $\downarrow$ & $\cdot$ & $\cdot$ &
+unstable & $\downarrow$ & $\downarrow$ & $\downarrow$ &
+runaway: back off all \\
+$\Gamma_0$ loops & $\downarrow$ & $\cdot$ & $\cdot$ &
 slow cycling: less reset \\
-$\Gamma_1$ & $\uparrow$ & $\downarrow$ & $\cdot$ &
+$\Gamma_1$ loops & $\uparrow$ & $\downarrow$ & $\cdot$ &
 ringing: less gain \\
-$\Gamma_2$ & $\uparrow$ & $\uparrow$ & $\downarrow$ &
+$\Gamma_2$ loops & $\uparrow$ & $\uparrow$ & $\downarrow$ &
 buzzing: less rate \\
 none & $\uparrow$ & $\uparrow$ & $\uparrow$ &
 all quiet: tighten \\
@@ -433,8 +509,11 @@ all quiet: tighten \\
 \fbox{\begin{minipage}{0.96\linewidth}
 \textbf{Procedure.}
 \begin{enumerate}[leftmargin=1.4em, itemsep=1pt, topsep=2pt]
-\item Close the loop with any conservative, stabilizing gains.
-\item Step the setpoint; record the error $e$ until it settles.
+\item Close the loop with any gains; conservative ones save iterations.
+\item Step the setpoint; record the error $e$.
+\item If the record grows rather than decays
+(Definition~\ref{def:screen}), reduce all gains one notch and go to
+step~2.
 \item Truncate the record where $|e|$ last leaves $2\%$ of its peak
 (Definition~\ref{def:guard}).
 \item Form the three portraits (Fig.~\ref{fig:storyboard}) and count
@@ -464,7 +543,10 @@ box & multiplier range & $[0.01, 5]$ \\
 \end{tabular}
 \end{table}
 
-Formally, with the \emph{violated set} and its lowest member
+Formally, the screen verdict takes precedence: an unstable record
+(Definition~\ref{def:screen}) divides all three multipliers by $\gamma$
+and no counts are evaluated---the portraits of a diverging error carry
+no usable information. For a stable record, with the \emph{violated set} and its lowest member
 \begin{equation}
 V = \{k : N_k > \bar N_k\}, \qquad k_{\min} = \min V
 \end{equation}
@@ -526,7 +608,13 @@ controller whose channels dominate disjoint, ascending frequency
 bands---PI, PID with a second derivative term, a lead-lag chain---admits
 the identical construction: $m$ band-ordered channels, $m$ portraits
 obtained by walking one step further along the derivative chain per
-band, the lowest violated band, and the same triangular stencil.
+band, the lowest violated band, and the same triangular stencil. The
+construction runs downward as readily as up: the nested family
+$\mathrm{I} \subset \mathrm{PI} \subset \mathrm{PID}$ of
+Assumption~\ref{ass:pid} is this same scheme at $m = 1, 2, 3$---one
+portrait and a two-row table for I alone, $\Gamma_0,\Gamma_1$ and three
+rows for PI, the full construction for PID---so restricting the
+controller family restricts the table, not the argument.
 \end{remark}
 
 \begin{assumption}[Band monotonicity]\label{ass:mono}
@@ -558,6 +646,20 @@ $k_{\min}$ and is reduced in turn, restoring feasibility in finitely
 many steps; alternation of expansion and correction confines the
 trajectory to the stated band.
 \end{proof}
+
+\begin{remark}[Bootstrap from arbitrary gains]\label{rem:bootstrap}
+With the screen row, the stabilizing-initialization requirement of the
+procedure becomes a convenience rather than a precondition. Plants of
+Assumption~\ref{ass:plant} are open-loop stable, so a sufficiently small
+loop gain always yields a stable closed loop; from any starting point in
+the multiplier box, consecutive unstable verdicts divide all gains by
+$\gamma$ and reach a stabilizing region in finitely many steps (or hit
+$F_{\min}$, a detectable outcome), after which
+Proposition~\ref{prop:conv} applies unchanged. Each backoff, however,
+costs one experiment on a plant that is being driven unstable; the
+mid-test abort with rollback remains the hard safety layer, and a
+conservative start remains good practice.
+\end{remark}
 
 \emph{Stopping rule.} Because the expanding form $V = \emptyset$ is active exactly on $\mathcal F$,
 the terminal iterate of a fixed-length run may be infeasible; the
@@ -688,6 +790,17 @@ similar degradation on P3. Simultaneous multi-band correction is thus
 not adopted: it is faster to feasibility from severely mis-tuned starts,
 but it acts on counts the features cannot attribute.
 
+The screen row of Table~\ref{tab:rule} extends the battery beyond
+stabilizing starts. Starting P2 at eight times its nominal design
+gains---a violently unstable loop---the screen fires on twelve
+consecutive records, backing all gains off until the response first
+settles at iteration $12$; the band rules then take over, first reach a
+feasible tuning at iteration $91$, and return gains equivalent to
+$(0.79,\, 1.08,\, 0.57)$ times the nominal design: the same
+neighbourhood the method reaches from a conservative start, now reached
+from an initialization for which the counts were initially not even
+defined (Remark~\ref{rem:bootstrap}).
+
 \begin{figure}[h]
 \centering
 \includegraphics[width=0.95\linewidth]{fig2_limitcycle.pdf}
@@ -722,14 +835,14 @@ step-response window; a disturbance corrupts one test, not the procedure.
 The rule acts on one band per iteration, and this is the price of
 attribution rather than mere caution: violations above the lowest cannot
 be told apart from leakage until the lowest is cleared
-(Section~\ref{sec:feature}), so a severely mis-tuned start that violates
+(Section~\ref{sec:feature}), so a severely mis-tuned but still stable
+start that violates
 all bands converges through a sequence of single corrections---starting
 P4 at $(2K_p, 3K_i, 4K_d)$, with all three counts near $2.9$, the rule
-needs $74$ iterations to first reach feasibility. When every band
-screams at once the counts typically reflect one dominant mode leaking
-everywhere, and a uniform reduction of all gains---an attribution-free
-emergency backoff---is a sound faster response; we keep the rule minimal
-and leave this to the operator or to future work. Leakage can also
+needs $74$ iterations to first reach feasibility. The attribution-free
+uniform backoff is reserved, via the screen row, for records that carry
+no attributable information at all---divergence; a stable record, however
+loud, is corrected one convictable band at a time. Leakage can also
 mis-direct a single correction when the true offender sits just below
 its own threshold while its leaked count trips a higher band; the
 stencil self-corrects, since the accompanying raises push the true
