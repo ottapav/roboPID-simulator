@@ -5,7 +5,8 @@ RoboPID_JPC_paper/main.tex (Table "the tuning rule at a glance", eq.
 - Fp, Fi, Fd are multipliers applied on top of the base gains
 - Each iteration evaluates the stability screen and the three Gamma
   encirclement counts and nudges gains by one gamma = 1/(1-beta) notch
-- An unstable record backs off every gain; otherwise the lowest violated
+- An unstable record halves every gain (a coarser cut than the gamma
+  notch used by the count-based rows); otherwise the lowest violated
   band is cut and every band below it is raised; if none is violated, all
   bands are raised
 """
@@ -20,7 +21,7 @@ from .signals import find_index
 
 # Table 1's rightmost column, keyed by which row fired this iteration.
 CRAFT_READING = {
-    'unstable': 'runaway: back off all',
+    'unstable': 'runaway: halve all',
     'N0': 'slow cycling: less reset',
     'N1': 'ringing: less gain',
     'N2': 'buzzing: less rate',
@@ -35,9 +36,9 @@ def pid_tuning(
     dtype: str = 'y',
     T: float | None = None,
     N: int = 200,
-    Fp_limits: tuple[float, float] = (0.01, 5.0),
-    Fi_limits: tuple[float, float] = (0.01, 5.0),
-    Fd_limits: tuple[float, float] = (0.01, 5.0),
+    Fp_limits: tuple[float, float] = (0.01, 10.0),
+    Fi_limits: tuple[float, float] = (0.01, 10.0),
+    Fd_limits: tuple[float, float] = (0.01, 10.0),
     feature_limits: tuple[float, ...] | None = None,
     step: float = 0.1,
     simtype: int = 0,
@@ -99,23 +100,26 @@ def pid_tuning(
         Fd_new = Fd_cur
 
         if unstable:
-            # Record grows rather than decays: back off all three gains by
-            # the same gamma notch used everywhere else (Table 1, "unstable").
+            # Record grows rather than decays: coarse halving (Table 1,
+            # unstable row: "Downarrow" = divide by 2), deliberately
+            # cruder than the gamma notch used by the count-based rows
+            # below -- "instability is a state to be exited quickly, not
+            # corrected delicately."
             row = 'unstable'
-            Fp_new = max(Fp_cur * (1.0 - step), Fp_min)
-            Fi_new = max(Fi_cur * (1.0 - step), Fi_min)
-            Fd_new = max(Fd_cur * (1.0 - step), Fd_min)
+            Fp_new = max(Fp_cur * 0.5, Fp_min)
+            Fi_new = max(Fi_cur * 0.5, Fi_min)
+            Fd_new = max(Fd_cur * 0.5, Fd_min)
 
-        elif feats[0]['phase'] > feature_limits[0] and Fi_cur > Fi_min:
+        elif feats[0]['phase'] > feature_limits[0]:
             row = 'N0'
             Fi_new = max(Fi_cur * (1.0 - step), Fi_min)
 
-        elif feats[1]['phase'] > feature_limits[1] and Fp_cur > Fp_min:
+        elif feats[1]['phase'] > feature_limits[1]:
             row = 'N1'
             Fp_new = max(Fp_cur * (1.0 - step), Fp_min)
             Fi_new = min(Fi_cur / (1.0 - step), Fi_max)
 
-        elif feats[2]['phase'] > feature_limits[2] and Fd_cur > Fd_min:
+        elif feats[2]['phase'] > feature_limits[2]:
             row = 'N2'
             Fd_new = max(Fd_cur * (1.0 - step), Fd_min)
             Fp_new = min(Fp_cur / (1.0 - step), Fp_max)

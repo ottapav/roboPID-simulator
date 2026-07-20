@@ -148,14 +148,15 @@ def add_derivatives(signals: dict, nd: int = 2) -> dict:
 
 def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
     """
-    Maximum-likelihood change-point search over M[m:n+1].
+    Maximum-likelihood change-point search over M[m:n+1] (Definition 3).
 
     Splits the window at each candidate index k into an early segment M[m:k]
     and a late segment M[k+1:n], each modeled as zero-mean Gaussian, and picks
-    the k maximizing their combined log-likelihood (biased toward later splits
-    via a linear prior). Returns (ind, unstable): unstable is True when, at the
-    best split, the late segment's variance exceeds the early segment's — the
-    signal is getting noisier/more active over time rather than settling.
+    the k maximizing their combined log-likelihood, restricted to splits that
+    leave at least 10% of the record on each side. Returns (ind, unstable):
+    unstable is True when, at the best split, the late segment's variance
+    exceeds the early segment's — the signal is getting noisier/more active
+    over time rather than settling.
 
     Implements the stability screen of RoboPID_JPC_paper/main.tex (Section
     "A stability screen"): a settling response front-loads its energy, a
@@ -175,7 +176,14 @@ def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
 
     prefix = np.concatenate(([0.0], np.cumsum(M ** 2)))  # prefix[i] = sum(M[:i] ** 2)
 
-    for k in range(m + 1, n - 1):
+    # Definition 3: n ranges over splits leaving >=10% of the record on
+    # each side.
+    L = n - m + 1
+    margin = max(1, round(0.1 * L))
+    k_lo = m - 1 + margin
+    k_hi = n - margin
+
+    for k in range(k_lo, k_hi + 1):
         sum1M2 = float(prefix[k + 1] - prefix[m])
         var1 = max(minvar, sum1M2 / (k - m + 1))
         P1log = -(k - m + 1) * np.log(2 * np.pi * var1) - sum1M2 / var1
@@ -184,8 +192,7 @@ def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
         var2 = max(minvar, sum2M2 / (n - k))
         P2log = -(n - k) * np.log(2 * np.pi * var2) - sum2M2 / var2
 
-        Plog_prior = 1 * (m - k) / (n - m)
-        Plog = P1log + P2log - Plog_prior
+        Plog = P1log + P2log
 
         if Llog < Plog:
             Llog = Plog
