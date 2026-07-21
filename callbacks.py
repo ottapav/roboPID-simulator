@@ -24,7 +24,7 @@ import os
 import time
 
 import numpy as np
-from dash import Input, Output, State, Patch, no_update
+from dash import Input, Output, State, Patch, no_update, ctx
 import plotly.graph_objects as go
 
 from core.config import read_config, build_disturbance_model
@@ -47,6 +47,15 @@ _C = {
 # Used as a fallback when the GUI's iterations input is empty/invalid; the
 # user can otherwise override the count directly from the GUI.
 N_ITER_BY_CTYPE = {'I': 50, 'PI': 100, 'PID': 200}
+
+# Battery plants from RoboPID_JPC_paper/main.tex, Section "Validation on a
+# plant battery": (tau string for input-tau, K, Td). Keyed by button id.
+BATTERY_PRESETS = {
+    'btn-p1': ('[10, 1, 1, 1]', 1.0, 1.0),        # lag-dominant
+    'btn-p2': ('[5, 5, 5, 5]', 1.25, 8.0),        # balanced
+    'btn-p3': ('[2, 1, 1, 1]', 1.0, 10.0),        # delay-dominant
+    'btn-p4': ('[8, 8, 8, 8, 8, 8]', 1.0, 4.0),   # high-order slow
+}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -283,6 +292,45 @@ def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
 # ── Callbacks registration ────────────────────────────────────────────────────
 
 def register_callbacks(app, default_Ts: float = 1.0):
+
+    # ── 0a. Battery preset buttons ───────────────────────────────────────
+    # Fills tau/K/Td from RoboPID_JPC_paper/main.tex's P1-P4 battery; the
+    # existing tau/K/Td Inputs on update_figures_patch pick up the change and
+    # redraw automatically. Controller gains/type/limits are left alone.
+    @app.callback(
+        Output('input-tau', 'value', allow_duplicate=True),
+        Output('input-K', 'value', allow_duplicate=True),
+        Output('input-Td', 'value', allow_duplicate=True),
+        Input('btn-p1', 'n_clicks'),
+        Input('btn-p2', 'n_clicks'),
+        Input('btn-p3', 'n_clicks'),
+        Input('btn-p4', 'n_clicks'),
+        prevent_initial_call=True,
+    )
+    def apply_battery_preset(n1, n2, n3, n4):
+        preset = BATTERY_PRESETS.get(ctx.triggered_id)
+        if preset is None:
+            return no_update, no_update, no_update
+        tau_str, K, Td = preset
+        return tau_str, f'{K:.2f}', f'{Td:.2f}'
+
+    # ── 0b. Guard mode toggle ────────────────────────────────────────────
+    # Checked (Guarded): delta stays whatever the field holds (Definition 4).
+    # Unchecked (Unguarded): delta pinned at 0 and the field disabled -- the
+    # paper's guarded-vs-unguarded comparison (Section "Well-posedness of
+    # the count", Fig. fig3_wellposed). delta=0 degenerates settling_index's
+    # guard into a no-op, so the count runs on the raw window, exactly what
+    # "unguarded" means there.
+    @app.callback(
+        Output('input-delta', 'value'),
+        Output('input-delta', 'disabled'),
+        Input('guard-mode', 'value'),
+        prevent_initial_call=True,
+    )
+    def toggle_guard_mode(guarded):
+        if not guarded:
+            return 0.0, True
+        return 0.02, False
 
     # ── 1a. Full figure rebuild ────────────────────────────────────────────
     # Triggered by: ctype change, feature limit changes.

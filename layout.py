@@ -52,10 +52,27 @@ def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
             dbc.Col(input_elem, width=7),
         ], className='mb-2 align-items-center')
 
+    def _preset_button(pid: str, tooltip: str) -> dbc.Col:
+        return dbc.Col(html.Button(
+            pid, id=f'btn-{pid.lower()}', n_clicks=0, title=tooltip,
+            className=f'{BTN} btn-outline-secondary py-0',
+            style={'fontSize': '11px'},
+        ), width='auto')
+
+    presets_row = dbc.Row([
+        dbc.Col(html.Small('Battery presets:', style={'color': '#777'}),
+                width='auto', className='align-self-center'),
+        _preset_button('P1', 'Lag-dominant: e^-s / ((10s+1)(s+1)^3)'),
+        _preset_button('P2', 'Balanced: 1.25 e^-8s / (5s+1)^4'),
+        _preset_button('P3', 'Delay-dominant: e^-10s / ((2s+1)(s+1)^3)'),
+        _preset_button('P4', 'High-order slow: e^-4s / (8s+1)^6'),
+    ], className='mb-2 g-1 align-items-center')
+
     return dbc.Card([
         dbc.CardHeader(html.Strong('Plant', style=CARD_TITLE_STYLE), style=CARD_HEADER_STYLE),
         dbc.CardBody([
             formula,
+            presets_row,
             _row('τ (time constants)', dcc.Input(
                 id='input-tau', type='text', value=default_tau,
                 debounce=True, style={'width': '100%'},
@@ -148,8 +165,25 @@ def _controller_card(default_ctype, default_limits, default_niter,
             # Tuner settings
             _param_row('Settings',
                       ('Trunc ε', _tuner_param_input('input-eps', default_eps, 0.01)),
-                      ('Settle δ', _tuner_param_input('input-delta', default_delta, 0.01)),
                       ('Step', _tuner_param_input('input-step', default_step, 0.05))),
+
+            # Guard mode: checked = Guarded (delta settable, Definition 4's
+            # settling-anchored window); unchecked = Unguarded (delta pinned
+            # at 0, the raw-window count of Definition 1) -- paper Section
+            # "Well-posedness of the count". Settle δ lives on this row
+            # since unchecking pins/disables it directly.
+            dbc.Row([
+                dbc.Col(html.Div([
+                    dbc.Checkbox(
+                        id='guard-mode', value=True,
+                        className='mb-0', style={'marginRight': '0'},
+                    ),
+                    html.Small('Guard:', style={'color': '#777'}),
+                ], className='d-flex align-items-center', style={'gap': '4px'}),
+                        width='auto'),
+                dbc.Col(html.Small('Settle δ', style={'color': '#777'}), width='auto'),
+                dbc.Col(_tuner_param_input('input-delta', default_delta, 0.01), width='auto'),
+            ], align='center', className='mb-2 g-2 flex-wrap'),
 
             # Simulation
             _param_row('Simulation',
@@ -214,10 +248,10 @@ def make_layout(default_tau: str = '[5,5,5,5]',
         # ── Plant | Controller cards ────────────────────────────────────────
         dbc.Row([
             dbc.Col(_plant_card(default_tau, default_K, default_Td),
-                    width=12, md=4, className='mb-2'),
+                    width=12, md=5, className='mb-2'),
             dbc.Col(_controller_card(default_ctype, default_limits, default_niter,
                                      default_tuner_params),
-                    width=12, md=8, className='mb-2'),
+                    width=12, md=7, className='mb-2'),
         ], className='mb-1'),
 
         # ── Input validation warning ─────────────────────────────────────────
