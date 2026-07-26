@@ -2,7 +2,7 @@
 RoboPID — Dash web app entry point.
 
 Local usage:
-    python app.py [--tau "5,5,5,5"] [--K 1.25] [--Td 8] [--Ts 1] [--ctype PID]
+    python app.py [--tau "5,5,5,5"] [--K 1.25] [--L 8] [--Ts 1] [--ctype PID]
 
 Then open http://localhost:8050 in your browser.
 
@@ -28,7 +28,7 @@ def parse_args():
     p.add_argument('--tau', default='[5,5,5,5]',
                    help='Time constants, e.g. "[5,5,5,5]" or "10"')
     p.add_argument('--K', type=float, default=1.25, help='Plant gain')
-    p.add_argument('--Td', type=float, default=8.0, help='Dead time')
+    p.add_argument('--L', type=float, default=8.0, help='Dead time')
     p.add_argument('--Ts', type=float, default=1.0, help='Sampling period')
     p.add_argument('--ctype', default='PID', choices=['I', 'PI', 'PID'],
                    help='Controller type')
@@ -66,7 +66,7 @@ server = app.server
 app.layout = make_layout(
     default_tau=args.tau,
     default_K=str(args.K),
-    default_Td=str(args.Td),
+    default_L=str(args.L),
     default_ctype=args.ctype,
 )
 
@@ -79,7 +79,7 @@ def main():
     port = int(os.environ.get('PORT', args.port))
 
     print(f'\n  RoboPID running at http://localhost:{port}')
-    print(f'  Plant: tau={args.tau}, K={args.K}, Td={args.Td}, Ts={args.Ts}')
+    print(f'  Plant: tau={args.tau}, K={args.K}, L={args.L}, Ts={args.Ts}')
     print(f'  Controller: {args.ctype}\n')
 
     app.run(debug=args.debug, host='0.0.0.0', port=port, threaded=True)

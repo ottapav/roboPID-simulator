@@ -39,10 +39,10 @@ def _slider(sid: str, label: str, col_id: str | None = None) -> dbc.Col:
     ], width=12, id=col_id)
 
 
-def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
+def _plant_card(default_tau, default_K, default_L) -> dbc.Card:
     formula = html.P([
         'P(s) = K · e',
-        html.Sup('−Td·s'),
+        html.Sup('−L·s'),
         ' / ∏ (τᵢ·s + 1)',
     ], style={'fontStyle': 'italic', 'fontSize': '13px', 'color': '#555', 'marginBottom': '10px'})
 
@@ -82,8 +82,8 @@ def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
                 id='input-K', type='text', value=f'{float(default_K):.2f}',
                 debounce=True, style={'width': '100%'},
             )),
-            _row('Td (dead time)', dcc.Input(
-                id='input-Td', type='text', value=f'{float(default_Td):.2f}',
+            _row('L (dead time)', dcc.Input(
+                id='input-L', type='text', value=f'{float(default_L):.2f}',
                 debounce=True, style={'width': '100%'},
             )),
         ]),
@@ -91,9 +91,10 @@ def _plant_card(default_tau, default_K, default_Td) -> dbc.Card:
 
 
 def _controller_card(default_ctype, default_limits, default_niter,
-                     default_tuner_params) -> dbc.Card:
-    lim1, lim2, lim3 = default_limits
-    default_eps, default_delta, default_step = default_tuner_params
+                     default_tuner_params, default_box=(0.01, 10.0)) -> dbc.Card:
+    Nbar0, Nbar1, Nbar2 = default_limits
+    default_eps, default_delta, default_beta = default_tuner_params
+    default_kmin, default_kmax = default_box
 
     def _limit_input(sid, val):
         return dcc.Input(id=sid, type='number', value=val,
@@ -104,6 +105,11 @@ def _controller_card(default_ctype, default_limits, default_niter,
         return dcc.Input(id=sid, type='number', value=val,
                          debounce=True, step=step, min=0.0, max=5.0,
                          style={'width': '60px'})
+
+    def _box_input(sid, val):
+        return dcc.Input(id=sid, type='number', value=val,
+                         debounce=True, step=0.5, min=0.0001, max=1000.0,
+                         style={'width': '70px'})
 
     def _param_row(label, *pairs):
         """One labeled group; pairs is a sequence of (short_label, input)
@@ -156,40 +162,51 @@ def _controller_card(default_ctype, default_limits, default_niter,
                 _slider('slider-kd', 'Kd', col_id='col-kd'),
             ], className='mb-3'),
 
-            # Feature limits
+            # Feature limits (N̄0, N̄1, N̄2)
             _param_row('Limits',
-                      ('Γ0', _limit_input('limit-1', lim1)),
-                      ('Γ1', _limit_input('limit-2', lim2)),
-                      ('Γ2', _limit_input('limit-3', lim3))),
+                      ('Γ0', _limit_input('input-nbar0', Nbar0)),
+                      ('Γ1', _limit_input('input-nbar1', Nbar1)),
+                      ('Γ2', _limit_input('input-nbar2', Nbar2))),
+
+            # Gain boundary [Kmin, Kmax]: bounds the tuning search box and
+            # the live gain clamp during a run (paper Section 6: "widening
+            # the box is the first remedy" when a multiplier stalls at its
+            # bound).
+            _param_row('Gain box',
+                      ('Kmin', _box_input('input-kmin', default_kmin)),
+                      ('Kmax', _box_input('input-kmax', default_kmax))),
 
             # Tuner settings
             _param_row('Settings',
                       ('Trunc ε', _tuner_param_input('input-eps', default_eps, 0.01)),
-                      ('Step', _tuner_param_input('input-step', default_step, 0.05))),
+                      ('Step γ', _tuner_param_input('input-beta', default_beta, 0.05))),
 
-            # Guard mode: checked = Guarded (delta settable, Definition 4's
-            # settling-anchored window); unchecked = Unguarded (delta pinned
-            # at 0, the raw-window count of Definition 1) -- paper Section
-            # "Well-posedness of the count". Settle δ lives on this row
-            # since unchecking pins/disables it directly.
+            # Simulation (left) | Guard mode (right): checked = Guarded (delta
+            # settable, Definition 4's settling-anchored window); unchecked =
+            # Unguarded (delta pinned at 0, the raw-window count of
+            # Definition 1) -- paper Section "Well-posedness of the count".
+            # Settle δ lives next to the checkbox since unchecking
+            # pins/disables it directly.
             dbc.Row([
+                dbc.Col(html.Div([
+                    html.Small('Simulation:', style={'color': '#777'}),
+                    html.Small('Iter', style={'color': '#777'}),
+                    dcc.Input(id='input-niter', type='number', value=default_niter,
+                             debounce=True, step=10, min=10, max=2000,
+                             style={'width': '70px'}),
+                ], className='d-flex align-items-center', style={'gap': '4px'}),
+                        width='auto'),
                 dbc.Col(html.Div([
                     dbc.Checkbox(
                         id='guard-mode', value=True,
                         className='mb-0', style={'marginRight': '0'},
                     ),
                     html.Small('Guard:', style={'color': '#777'}),
+                    html.Small('Settle δ', style={'color': '#777'}),
+                    _tuner_param_input('input-delta', default_delta, 0.01),
                 ], className='d-flex align-items-center', style={'gap': '4px'}),
                         width='auto'),
-                dbc.Col(html.Small('Settle δ', style={'color': '#777'}), width='auto'),
-                dbc.Col(_tuner_param_input('input-delta', default_delta, 0.01), width='auto'),
-            ], align='center', className='mb-2 g-2 flex-wrap'),
-
-            # Simulation
-            _param_row('Simulation',
-                      ('Iter', dcc.Input(id='input-niter', type='number', value=default_niter,
-                                         debounce=True, step=10, min=10, max=2000,
-                                         style={'width': '70px'}))),
+            ], align='center', justify='between', className='mb-2 g-2 flex-wrap'),
         ]),
     ], className='h-100')
 
@@ -232,11 +249,12 @@ def _gains_history_card() -> dbc.Card:
 
 def make_layout(default_tau: str = '[5,5,5,5]',
                 default_K: str = '1.25',
-                default_Td: str = '8.0',
+                default_L: str = '8.0',
                 default_ctype: str = 'PID',
                 default_limits: tuple = (0.5, 0.75, 1.0),
                 default_niter: int = 200,
-                default_tuner_params: tuple = (0.1, 0.02, 0.1)):
+                default_tuner_params: tuple = (0.1, 0.02, 0.1),
+                default_box: tuple = (0.01, 10.0)):
     """Build and return the full app layout."""
     return dbc.Container(fluid=False, style={
         'width': '100%', 'maxWidth': '800px', 'overflowX': 'hidden',
@@ -247,10 +265,10 @@ def make_layout(default_tau: str = '[5,5,5,5]',
 
         # ── Plant | Controller cards ────────────────────────────────────────
         dbc.Row([
-            dbc.Col(_plant_card(default_tau, default_K, default_Td),
+            dbc.Col(_plant_card(default_tau, default_K, default_L),
                     width=12, md=5, className='mb-2'),
             dbc.Col(_controller_card(default_ctype, default_limits, default_niter,
-                                     default_tuner_params),
+                                     default_tuner_params, default_box),
                     width=12, md=7, className='mb-2'),
         ], className='mb-1'),
 

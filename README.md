@@ -11,10 +11,10 @@ The app models a process as a cascade of first-order lags with a static gain
 and dead time:
 
 ```
-P(s) = K * exp(-Td*s) / prod(s*tau_i + 1)
+P(s) = K * exp(-L*s) / prod(s*tau_i + 1)
 ```
 
-You set the plant parameters (`tau`, `K`, `Td`) and pick a controller type
+You set the plant parameters (`tau`, `K`, `L`) and pick a controller type
 (I, PI, or PID), then click **Tune**. Each iteration steps the setpoint,
 forms three phase portraits of the control error — Γ0, Γ1, Γ2, the paper's
 "Pachner plots" — and counts how many times each winds around its settling
@@ -63,7 +63,7 @@ pip install -r requirements.txt
 ## Usage
 
 ```
-python app.py [--tau "5,5,5,5"] [--K 1.25] [--Td 8] [--Ts 1] [--ctype PID] [--port 8050] [--debug]
+python app.py [--tau "5,5,5,5"] [--K 1.25] [--L 8] [--Ts 1] [--ctype PID] [--port 8050] [--debug]
 ```
 
 Then open `http://localhost:8050` in your browser.
@@ -72,7 +72,7 @@ Then open `http://localhost:8050` in your browser.
 |------|---------|-------------|
 | `--tau` | `[5,5,5,5]` | Plant time constants, e.g. `"[5,5,5,5]"` or `"10"` |
 | `--K` | `1.25` | Plant static gain |
-| `--Td` | `8.0` | Plant dead time |
+| `--L` | `8.0` | Plant dead time |
 | `--Ts` | `1.0` | Sampling period |
 | `--ctype` | `PID` | Controller type: `I`, `PI`, or `PID` |
 | `--port` | `8050` | Server port |
@@ -98,7 +98,9 @@ per line):
 The paper's dimensionless constants — the Γ0/Γ1/Γ2 loop limits, the
 truncation radius ε, the settling-band guard δ, and the step size β — are
 adjustable live from the Controller card instead, next to the Tune button,
-rather than through `robopid.config`.
+rather than through `robopid.config`. The same card also exposes the gain
+boundary [Kmin, Kmax] that bounds the tuning search box, so it can be
+widened if a run stalls at its bound (Section 6 of the paper).
 
 ## Project Structure
 

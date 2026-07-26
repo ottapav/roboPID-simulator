@@ -16,18 +16,18 @@ K1_PADDING = 5
 K2_PADDING = 5
 
 
-def min_sim_time(tau, Td: float) -> float:
+def min_sim_time(tau, L: float) -> float:
     """
-    Minimum simulation time (in the same units as tau/Td) guaranteeing enough
+    Minimum simulation time (in the same units as tau/L) guaranteeing enough
     samples for the K1_PADDING/K2_PADDING analysis window, regardless of how
-    small tau/Td are.
+    small tau/L are.
     """
     tau = np.atleast_1d(np.asarray(tau, dtype=float))
-    return max(10.0 * (float(np.sum(tau)) + Td), 50.0)
+    return max(10.0 * (float(np.sum(tau)) + L), 50.0)
 
 
-def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
-                 T: float | None = None,
+def loop_signals(tau, K, L, Ts, Kp, Ki, Kd, dtype: str = 'y',
+                 T_sim: float | None = None,
                  simtype: int = 0,
                  minu: float = -1.0, maxu: float = 1.0,
                  dist_a: float = 0.0, dist_b: float = 0.0,
@@ -38,22 +38,22 @@ def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
     Keys: 'y', 'u', 'e', 'v', 'uP', 'uI', 'uD', 'vP', 'vI', 'vD', 't'
     """
     tau = np.atleast_1d(np.asarray(tau, dtype=float))
-    if T is None:
-        T = min_sim_time(tau, Td)
+    if T_sim is None:
+        T_sim = min_sim_time(tau, L)
 
     if simtype == 0:
         y, u, t, _, _, _ = pid_response_linear(
-            tau, K, Td, Kp, Ki, Kd, T, Ts, corr_type=False, dtype=dtype)
+            tau, K, L, Kp, Ki, Kd, T_sim, Ts, corr_type=False, dtype=dtype)
     else:
         y, u, t, _, _, _ = pid_response_awup(
-            tau, K, Td, Kp, Ki, Kd, T, Ts, corr_type=False, dtype=dtype,
+            tau, K, L, Kp, Ki, Kd, T_sim, Ts, corr_type=False, dtype=dtype,
             minu=minu, maxu=maxu, dist_a=dist_a, dist_b=dist_b)
 
     r = np.ones_like(y)
     e, v, k1, k2 = scaled_variables(y, u, r)
-    k2_guard = settling_index(e, k1, k2, delta)
+    k_delta = settling_index(e, k1, k2, delta)
 
-    uP, uI, uD = action_components(y, Kp, Ki, Kd, Ts, T)
+    uP, uI, uD = action_components(y, Kp, Ki, Kd, Ts, T_sim)
     N = len(t)
     uP, uI, uD = uP[:N], uI[:N], uD[:N]
 
@@ -66,7 +66,7 @@ def loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype: str = 'y',
         'uP': uP, 'uI': uI, 'uD': uD,
         'vP': vP, 'vI': vI, 'vD': vD,
         't': t,
-        'k1': k1, 'k2': k2, 'k2_guard': k2_guard,
+        'k1': k1, 'k2': k2, 'k_delta': k_delta,
     }
 
 

@@ -26,35 +26,35 @@ class FeatureDescription:
     signum: int      # sign of encirclement count
     x_deg: int       # 0=value, 1=diff, 2=2nd-diff, -1=cumsum, -2=2nd-cumsum
     y_deg: int
-    limit: float
+    Nbar: float
     x_rel_to_end: bool
     y_rel_to_end: bool
     x0: list[float] = field(default_factory=lambda: [0.0])
     y0: list[float] = field(default_factory=lambda: [0.0])
 
 
-def standard_pid_features(limits=(0.5, 0.75, 1.00)) -> list[FeatureDescription]:
+def standard_pid_features(Nbar=(0.5, 0.75, 1.00)) -> list[FeatureDescription]:
     """Return the three Pachner-plot descriptors Gamma0, Gamma1, Gamma2 (eq. "plots")."""
     return [
         FeatureDescription(
             name='Gamma0', xdata='e', ydata='e',
             xname='e', yname='E',
             signum=1, x_deg=0, y_deg=-1,
-            limit=limits[0],
+            Nbar=Nbar[0],
             x_rel_to_end=False, y_rel_to_end=True,
         ),
         FeatureDescription(
             name='Gamma1', xdata='e', ydata='e',
             xname='Δe', yname='e',
             signum=1, x_deg=1, y_deg=0,
-            limit=limits[1],
+            Nbar=Nbar[1],
             x_rel_to_end=False, y_rel_to_end=False,
         ),
         FeatureDescription(
             name='Gamma2', xdata='e', ydata='e',
             xname='Δ²e', yname='Δe',
             signum=1, x_deg=2, y_deg=1,
-            limit=limits[2],
+            Nbar=Nbar[2],
             x_rel_to_end=False, y_rel_to_end=False,
         ),
     ]
@@ -144,9 +144,9 @@ def compute_features(description: list[FeatureDescription],
                      k1: int, k2: int,
                      eps: float = EPSILON) -> list[dict]:
     """
-    Compute phase encirclement for each feature descriptor.
+    Compute the encirclement count N for each feature descriptor.
 
-    Returns a list of dicts with keys: name, phase, xdata, ydata, xname, yname, limit.
+    Returns a list of dicts with keys: name, N, xdata, ydata, xname, yname, Nbar.
     """
     nd = 2  # fixed derivative order used in add_derivatives
     results = []
@@ -156,10 +156,10 @@ def compute_features(description: list[FeatureDescription],
         ys_mat = ext_signals.get(desc.ydata)
 
         if xs_mat is None or ys_mat is None or not isinstance(xs_mat, np.ndarray):
-            results.append({'name': desc.name, 'phase': 0.0,
+            results.append({'name': desc.name, 'N': 0.0,
                             'xdata': np.array([0.0]), 'ydata': np.array([0.0]),
                             'xname': desc.xname, 'yname': desc.yname,
-                            'limit': desc.limit})
+                            'Nbar': desc.Nbar})
             continue
 
         if xs_mat.ndim == 1:
@@ -184,49 +184,49 @@ def compute_features(description: list[FeatureDescription],
         mx = np.max(np.abs(xw))
         my = np.max(np.abs(yw))
         if mx < 1e-12 or my < 1e-12:
-            phase = 0.0
+            N = 0.0
             xw_norm = xw
             yw_norm = yw
         else:
             xw_norm = xw / mx
             yw_norm = yw / my
-            phase = -np.inf
+            N = -np.inf
             for x0, y0 in zip(desc.x0, desc.y0):
-                phase = max(phase, desc.signum * encirc(
+                N = max(N, desc.signum * encirc(
                     xw_norm - x0, yw_norm - y0, eps))
 
         results.append({
             'name': desc.name,
-            'phase': float(phase),
+            'N': float(N),
             'xdata': xw_norm,
             'ydata': yw_norm,
             'xname': desc.xname,
             'yname': desc.yname,
-            'limit': desc.limit,
+            'Nbar': desc.Nbar,
         })
 
     return results
 
 
-def loop_response_features(description, tau, K, Td, Ts,
-                           Kp, Ki, Kd, dtype='y', T=None,
+def loop_response_features(description, tau, K, L, Ts,
+                           Kp, Ki, Kd, dtype='y', T_sim=None,
                            simtype=0, minu=-1.0, maxu=1.0,
                            dist_a=0.0, dist_b=0.0, delta=DELTA,
                            eps=EPSILON):
     """
     Full pipeline: simulate → signals → derivatives → encirclement features.
 
-    The encirclement windows are truncated at the settling-anchored k2_guard
+    The encirclement windows are truncated at the settling-anchored k_delta
     (Definition 4), not the raw k2, so the winding counts stay window-length
     independent (Proposition "well-posedness"). Returns (features, k1, k2, signals).
     """
-    sigs = loop_signals(tau, K, Td, Ts, Kp, Ki, Kd, dtype, T,
+    sigs = loop_signals(tau, K, L, Ts, Kp, Ki, Kd, dtype, T_sim,
                         simtype, minu, maxu, dist_a, dist_b, delta)
     k1 = sigs['k1']
     k2 = sigs['k2']
-    k2_guard = sigs['k2_guard']
+    k_delta = sigs['k_delta']
 
     ext = add_derivatives(sigs, nd=2)
-    features = compute_features(description, ext, k1, k2_guard, eps)
+    features = compute_features(description, ext, k1, k_delta, eps)
 
     return features, k1, k2, sigs

@@ -6,9 +6,9 @@ Two modes mirror MATLAB pidtool:
   - Anti-windup discrete (simtype=1): sample-by-sample loop with saturation
 
 Gain scaling (corr_type=True) mirrors MATLAB's normalized parameterization:
-    Ki = (1/K) / (sum(tau)+Td) * Ci
-    Kp = (1/K) * Cp
-    Kd = (1/K) * (sum(tau)+Td) / 8 * Cd
+    Ki = (1/K) / (sum(tau)+L) * gi
+    Kp = (1/K) * gp
+    Kd = (1/K) * (sum(tau)+L) / 8 * gd
 """
 
 from __future__ import annotations
@@ -23,16 +23,16 @@ K1_PADDING = 5
 K2_PADDING = 5
 
 
-def _scale_gains(tau, K, Td, Cp, Ci, Cd, corr_type: bool):
+def _scale_gains(tau, K, L, gp, gi, gd, corr_type: bool):
     """Apply normalized → physical gain conversion."""
     if corr_type:
         Kr = 1.0 / K
-        tau_i = float(np.sum(tau)) + Td
-        Kp = Kr * Cp
-        Ki = Kr / tau_i * Ci
-        Kd = Kr * tau_i / 8.0 * Cd
+        tau_i = float(np.sum(tau)) + L
+        Kp = Kr * gp
+        Ki = Kr / tau_i * gi
+        Kd = Kr * tau_i / 8.0 * gd
     else:
-        Kp, Ki, Kd = Cp, Ci, Cd
+        Kp, Ki, Kd = gp, gi, gd
     return float(Kp), float(Ki), float(Kd)
 
 
@@ -90,7 +90,7 @@ def _sensitivity_tf(num_c, den_c, num_p, den_p):
     return num_u, den_u
 
 
-def pid_response_linear(tau, K, Td, Cp, Ci, Cd, T, Ts,
+def pid_response_linear(tau, K, L, gp, gi, gd, T_sim, Ts,
                         corr_type: bool = False, dtype: str = 'y'):
     """
     Simulate closed-loop step response using linear TF arithmetic.
@@ -98,14 +98,14 @@ def pid_response_linear(tau, K, Td, Cp, Ci, Cd, T, Ts,
     Returns (y, u, t, Kp, Ki, Kd).
     """
     tau = np.atleast_1d(np.asarray(tau, dtype=float))
-    Kp, Ki, Kd = _scale_gains(tau, K, Td, Cp, Ci, Cd, corr_type)
+    Kp, Ki, Kd = _scale_gains(tau, K, L, gp, gi, gd, corr_type)
 
-    T_sim = max(T, 10 + K1_PADDING + K2_PADDING)
+    T_sim = max(T_sim, 10 + K1_PADDING + K2_PADDING)
     t = np.arange(0.0, T_sim + Ts * 0.5, Ts)
     N = len(t)
     u_in = np.ones(N)
 
-    num_p, den_p = plant_tf(tau, K, Td, Ts)
+    num_p, den_p = plant_tf(tau, K, L, Ts)
 
     if dtype == 'y':
         # Derivative on output: D(z) = Kd*(1 - z^-1) = Kd*[1,-1]/[1,0]
@@ -144,7 +144,7 @@ def pid_response_linear(tau, K, Td, Cp, Ci, Cd, T, Ts,
     return y.ravel(), u.ravel(), t, Kp, Ki, Kd
 
 
-def pid_response_awup(tau, K, Td, Cp, Ci, Cd, T, Ts,
+def pid_response_awup(tau, K, L, gp, gi, gd, T_sim, Ts,
                       corr_type: bool = False, dtype: str = 'y',
                       minu: float = -1.0, maxu: float = 1.0,
                       dist_a: float = 0.0, dist_b: float = 0.0):
@@ -155,9 +155,9 @@ def pid_response_awup(tau, K, Td, Cp, Ci, Cd, T, Ts,
     Returns (y, u, t, Kp, Ki, Kd).
     """
     tau = np.atleast_1d(np.asarray(tau, dtype=float))
-    Kp, Ki, Kd = _scale_gains(tau, K, Td, Cp, Ci, Cd, corr_type)
+    Kp, Ki, Kd = _scale_gains(tau, K, L, gp, gi, gd, corr_type)
 
-    nd = int(round(Td / Ts))
+    nd = int(round(L / Ts))
     ns = len(tau)
 
     # Build continuous-time state matrix for cascade of first-order systems
@@ -172,7 +172,7 @@ def pid_response_awup(tau, K, Td, Cp, Ci, Cd, T, Ts,
     A = M[1:, 1:]       # ns×ns plant state matrix
     B = M[1:, 0]        # ns×1 input vector
 
-    N = 1 + int(np.ceil(T / Ts))
+    N = 1 + int(np.ceil(T_sim / Ts))
     y = np.zeros(N)
     u_out = np.zeros(N)
     t = np.arange(N) * Ts
@@ -214,13 +214,13 @@ def pid_response_awup(tau, K, Td, Cp, Ci, Cd, T, Ts,
 
 
 def action_components(y: np.ndarray, Kp: float, Ki: float, Kd: float,
-                      Ts: float, T: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                      Ts: float, T_sim: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Decompose total control action into P, I, D contributions.
 
     Mirrors MATLAB action_components using lfilter (dlsim equivalent).
     """
-    t = np.arange(0.0, T + Ts * 0.5, Ts)
+    t = np.arange(0.0, T_sim + Ts * 0.5, Ts)
     N = len(t)
     y_trim = y[:N]
     e = y_trim - 1.0
