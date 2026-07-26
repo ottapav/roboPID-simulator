@@ -108,7 +108,7 @@ def _controller_card(default_ctype, default_limits, default_niter,
 
     def _box_input(sid, val):
         return dcc.Input(id=sid, type='number', value=val,
-                         debounce=True, step=0.5, min=0.0001, max=1000.0,
+                         debounce=True, step='any', min=0.0001, max=1000.0,
                          style={'width': '70px'})
 
     def _param_row(label, *pairs):
