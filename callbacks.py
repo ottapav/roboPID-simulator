@@ -93,6 +93,20 @@ def _log_gain(gain: float) -> float:
     return float(np.log10(gain)) if gain > 0 else -2.0
 
 
+def _gain_slider_marks(kmin: float, kmax: float) -> dict:
+    """Log-scale slider marks spanning [kmin, kmax]: one per whole decade
+    inside the range, plus the exact endpoints."""
+    def fmt(v: float) -> str:
+        return f'{v:g}'
+
+    lo, hi = np.log10(kmin), np.log10(kmax)
+    start, end = int(np.ceil(lo - 1e-9)), int(np.floor(hi + 1e-9))
+    marks = {i: fmt(10.0 ** i) for i in range(start, end + 1)}
+    marks[lo] = fmt(kmin)
+    marks[hi] = fmt(kmax)
+    return marks
+
+
 def _parses(val) -> bool:
     try:
         return np.isfinite(float(val))
@@ -388,6 +402,49 @@ def register_callbacks(app, default_Ts: float = 1.0):
         niter = N_ITER_BY_CTYPE.get(ctype, 200)
         empty_history = _build_gains_history_fig([], [], [])
         return 0.5, 0.75, 1.0, 0.01, 10.0, 0.1, 0.1, niter, True, empty_history
+
+    # ── 0f. Gain slider range follows the gain box [Kmin, Kmax] ────────────
+    # The Kp/Ki/Kd sliders are log-scale over [Kmin, Kmax] (paper Section 6's
+    # gain boundary), so widening/narrowing the box has to re-scale the
+    # sliders' own range, not just the tuning search/clamp bounds. Any
+    # slider currently outside the new range gets pulled back inside it.
+    @app.callback(
+        Output('slider-kp', 'min'),
+        Output('slider-kp', 'max'),
+        Output('slider-kp', 'marks'),
+        Output('slider-ki', 'min'),
+        Output('slider-ki', 'max'),
+        Output('slider-ki', 'marks'),
+        Output('slider-kd', 'min'),
+        Output('slider-kd', 'max'),
+        Output('slider-kd', 'marks'),
+        Output('slider-kp', 'value', allow_duplicate=True),
+        Output('slider-ki', 'value', allow_duplicate=True),
+        Output('slider-kd', 'value', allow_duplicate=True),
+        Input('input-kmin', 'value'),
+        Input('input-kmax', 'value'),
+        State('slider-kp', 'value'),
+        State('slider-ki', 'value'),
+        State('slider-kd', 'value'),
+        prevent_initial_call=True,
+    )
+    def update_gain_slider_range(kmin_raw, kmax_raw, kp_log, ki_log, kd_log):
+        kmin = max(_f(kmin_raw, 0.01), 1e-6)
+        kmax = _f(kmax_raw, 10.0)
+        if kmax <= kmin:
+            return (no_update,) * 12
+
+        lo, hi = np.log10(kmin), np.log10(kmax)
+        marks = _gain_slider_marks(kmin, kmax)
+
+        def clamp(v):
+            if v is None:
+                return no_update
+            c = float(np.clip(v, lo, hi))
+            return no_update if abs(c - v) < 1e-9 else c
+
+        return (lo, hi, marks, lo, hi, marks, lo, hi, marks,
+                clamp(kp_log), clamp(ki_log), clamp(kd_log))
 
     # ── 1a. Full figure rebuild ────────────────────────────────────────────
     # Triggered by: ctype change, feature limit changes.
