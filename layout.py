@@ -309,7 +309,7 @@ def make_layout(default_tau: str = '[5,5,5,5]',
     }, children=[
 
         # ── Title ──────────────────────────────────────────────────────────
-        dbc.Row(dbc.Col(html.H4('RoboPID', className='mt-2 mb-2'))),
+        dbc.Row(dbc.Col(html.H4('roboPID', className='mt-2 mb-2'))),
 
         # ── Description ───────────────────────────────────────────────────
         dbc.Row(dbc.Col(html.P([
