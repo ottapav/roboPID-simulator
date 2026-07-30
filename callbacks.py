@@ -27,7 +27,7 @@ import numpy as np
 from dash import Input, Output, State, Patch, no_update, ctx
 import plotly.graph_objects as go
 
-from core.config import read_config, build_disturbance_model
+from core.config import read_config, build_noise_model
 from core.features import standard_pid_features, loop_response_features
 from core.signals import min_sim_time
 from core.tuning import pid_tuning, MANUAL_READING
@@ -128,23 +128,29 @@ def _build_warning(tau_str, K_val, L_val, Nbar0, Nbar1, Nbar2) -> str:
 _cfg_cache: dict = {}
 
 
-def _load_cfg(Ts: float):
-    """Read robopid.config + build the disturbance model, cached by the
-    config file's mtime so repeated calls (every slider drag) don't re-read
-    the file or redo the expm/Lyapunov solve unless it actually changed on
-    disk — this keeps the documented hot-reload behavior while avoiding
-    per-callback recomputation."""
+def _load_cfg():
+    """Read robopid.config, cached by the config file's mtime so repeated
+    calls (every slider drag) don't re-read the file unless it actually
+    changed on disk — this keeps the documented hot-reload behavior while
+    avoiding per-callback re-parsing."""
     try:
         mtime = os.path.getmtime(CONFIG_FILE)
     except OSError:
         mtime = None
-    key = (mtime, Ts)
-    if _cfg_cache.get('key') != key:
-        cfg = read_config(CONFIG_FILE)
-        dist_a, dist_b = build_disturbance_model(cfg, Ts)
-        _cfg_cache['key'] = key
-        _cfg_cache['value'] = (cfg, dist_a, dist_b)
+    if 'key' not in _cfg_cache or _cfg_cache['key'] != mtime:
+        _cfg_cache['key'] = mtime
+        _cfg_cache['value'] = read_config(CONFIG_FILE)
     return _cfg_cache['value']
+
+
+def _noise_coeffs(enabled, std_raw, tau_raw, Ts: float) -> tuple[float, float]:
+    """AR(1) coefficients for the plant-output noise filter, or (0, 0) when
+    the Plant card's noise checkbox is unchecked."""
+    if not enabled:
+        return 0.0, 0.0
+    std = max(_f(std_raw, 1.0), 0.0) / 100.0
+    tau = max(_f(tau_raw, 0.5), 1e-4)
+    return build_noise_model(tau, std, Ts)
 
 
 def _simulate(tau, K, L, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
@@ -332,6 +338,57 @@ def register_callbacks(app, default_Ts: float = 1.0):
             return 0.0, True
         return 0.02, False
 
+    # ── 0c. Output-noise checkbox toggle ─────────────────────────────────
+    # Greys the sigma/tau fields out when unchecked; their values are left
+    # alone (unlike guard-mode's delta, there's no "pinned" state to apply —
+    # the checkbox itself, not the field values, gates whether noise is
+    # simulated at all, see _noise_coeffs).
+    @app.callback(
+        Output('input-noise-std', 'disabled'),
+        Output('input-noise-tau', 'disabled'),
+        Input('noise-enabled', 'value'),
+        prevent_initial_call=True,
+    )
+    def toggle_noise_mode(enabled):
+        return not enabled, not enabled
+
+    # ── 0d. Reset controller gains ───────────────────────────────────────
+    @app.callback(
+        Output('slider-kp', 'value', allow_duplicate=True),
+        Output('slider-ki', 'value', allow_duplicate=True),
+        Output('slider-kd', 'value', allow_duplicate=True),
+        Input('btn-reset-controller', 'n_clicks'),
+        prevent_initial_call=True,
+    )
+    def reset_controller(n_clicks):
+        return 0.0, 0.0, 0.0
+
+    # ── 0e. Reset tuner parameters ───────────────────────────────────────
+    # Restores the paper's dimensionless constants and tuner settings to
+    # their make_layout() defaults and clears the Tuning History plot from
+    # any previous run. Iter resets to the current controller structure's
+    # budget (matching reset_niter_default's ctype-based logic) rather than
+    # a single fixed number.
+    @app.callback(
+        Output('input-nbar0', 'value', allow_duplicate=True),
+        Output('input-nbar1', 'value', allow_duplicate=True),
+        Output('input-nbar2', 'value', allow_duplicate=True),
+        Output('input-kmin', 'value', allow_duplicate=True),
+        Output('input-kmax', 'value', allow_duplicate=True),
+        Output('input-eps', 'value', allow_duplicate=True),
+        Output('input-beta', 'value', allow_duplicate=True),
+        Output('input-niter', 'value', allow_duplicate=True),
+        Output('guard-mode', 'value', allow_duplicate=True),
+        Output('graph-gains-history', 'figure', allow_duplicate=True),
+        Input('btn-reset-tuner', 'n_clicks'),
+        State('dropdown-ctype', 'value'),
+        prevent_initial_call=True,
+    )
+    def reset_tuner(n_clicks, ctype):
+        niter = N_ITER_BY_CTYPE.get(ctype, 200)
+        empty_history = _build_gains_history_fig([], [], [])
+        return 0.5, 0.75, 1.0, 0.01, 10.0, 0.1, 0.1, niter, True, empty_history
+
     # ── 1a. Full figure rebuild ────────────────────────────────────────────
     # Triggered by: ctype change, feature limit changes.
     # Plant params (tau/K/L) are State here — they're handled as fast Inputs
@@ -354,10 +411,14 @@ def register_callbacks(app, default_Ts: float = 1.0):
         State('input-tau', 'value'),
         State('input-K', 'value'),
         State('input-L', 'value'),
+        State('noise-enabled', 'value'),
+        State('input-noise-std', 'value'),
+        State('input-noise-tau', 'value'),
         prevent_initial_call=False,
     )
     def update_figures_full(ctype, nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
-                            Kp_log, Ki_log, Kd_log, tau_str, K_val, L_val):
+                            Kp_log, Ki_log, Kd_log, tau_str, K_val, L_val,
+                            noise_enabled, noise_std_raw, noise_tau_raw):
         tau = _parse_tau(tau_str)
         K   = _f(K_val, 1.0)
         L   = _deadtime(L_val)
@@ -365,7 +426,8 @@ def register_callbacks(app, default_Ts: float = 1.0):
         eps, delta = _f(eps_raw, 0.1), _f(delta_raw, 0.02)
         Kp, Ki, Kd = _gain(Kp_log), _gain(Ki_log), _gain(Kd_log)
 
-        cfg, dist_a, dist_b = _load_cfg(default_Ts)
+        cfg = _load_cfg()
+        dist_a, dist_b = _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, default_Ts)
         feats, sigs = _simulate(
             tau, K, L, default_Ts, Kp, Ki, Kd, ctype,
             Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b)
@@ -389,6 +451,9 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Input('input-tau', 'value'),
         Input('input-K', 'value'),
         Input('input-L', 'value'),
+        Input('noise-enabled', 'value'),
+        Input('input-noise-std', 'value'),
+        Input('input-noise-tau', 'value'),
         State('dropdown-ctype', 'value'),
         State('input-nbar0', 'value'),
         State('input-nbar1', 'value'),
@@ -398,6 +463,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
         prevent_initial_call=True,
     )
     def update_figures_patch(Kp_log, Ki_log, Kd_log, tau_str, K_val, L_val,
+                             noise_enabled, noise_std_raw, noise_tau_raw,
                              ctype, nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw):
         tau = _parse_tau(tau_str)
         K   = _f(K_val, 1.0)
@@ -406,7 +472,8 @@ def register_callbacks(app, default_Ts: float = 1.0):
         eps, delta = _f(eps_raw, 0.1), _f(delta_raw, 0.02)
         Kp, Ki, Kd = _gain(Kp_log), _gain(Ki_log), _gain(Kd_log)
 
-        cfg, dist_a, dist_b = _load_cfg(default_Ts)
+        cfg = _load_cfg()
+        dist_a, dist_b = _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, default_Ts)
         p_f1, p_f2, p_f3, p_time = _patch_figures(
             tau, K, L, default_Ts, Kp, Ki, Kd, ctype,
             Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b)
@@ -464,6 +531,18 @@ def register_callbacks(app, default_Ts: float = 1.0):
         prevent_initial_call=False,
     )(_make_round2(0.0))
 
+    app.callback(
+        Output('input-noise-std', 'value'),
+        Input('input-noise-std', 'value'),
+        prevent_initial_call=False,
+    )(_make_round2(1.0, minimum=0.0))
+
+    app.callback(
+        Output('input-noise-tau', 'value'),
+        Input('input-noise-tau', 'value'),
+        prevent_initial_call=False,
+    )(_make_round2(0.5, minimum=0.01))
+
     # ── 3. Tune button ────────────────────────────────────────────────────
     # Background callback: runs pid_tuning() in a worker process (DiskcacheManager)
     # and streams live progress (sliders, status text, and the same figure patches
@@ -481,6 +560,9 @@ def register_callbacks(app, default_Ts: float = 1.0):
         State('input-tau', 'value'),
         State('input-K', 'value'),
         State('input-L', 'value'),
+        State('noise-enabled', 'value'),
+        State('input-noise-std', 'value'),
+        State('input-noise-tau', 'value'),
         State('dropdown-ctype', 'value'),
         State('input-nbar0', 'value'),
         State('input-nbar1', 'value'),
@@ -510,8 +592,8 @@ def register_callbacks(app, default_Ts: float = 1.0):
         prevent_initial_call=True,
     )
     def run_tune(set_progress, n_clicks, Kp_log, Ki_log, Kd_log,
-                 tau_str, K_val, L_val, ctype,
-                 Nbar0, Nbar1, Nbar2, niter_val, eps_val, delta_val, beta_val,
+                 tau_str, K_val, L_val, noise_enabled, noise_std_raw, noise_tau_raw,
+                 ctype, Nbar0, Nbar1, Nbar2, niter_val, eps_val, delta_val, beta_val,
                  kmin_val, kmax_val):
         if not n_clicks:
             return no_update, no_update, no_update, no_update, no_update
@@ -529,7 +611,8 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Kd_base = 0.0 if ctype in ('I', 'PI') else Kd
 
         T_sim = min_sim_time(tau, L)
-        cfg, dist_a, dist_b = _load_cfg(default_Ts)
+        cfg = _load_cfg()
+        dist_a, dist_b = _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, default_Ts)
         n_iter     = int(_f(niter_val, N_ITER_BY_CTYPE.get(ctype, 200)))
         n_iter     = max(10, min(n_iter, 2000))
         eps_tune   = _f(eps_val, 0.1)

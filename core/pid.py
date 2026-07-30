@@ -91,7 +91,8 @@ def _sensitivity_tf(num_c, den_c, num_p, den_p):
 
 
 def pid_response_linear(tau, K, L, gp, gi, gd, T_sim, Ts,
-                        corr_type: bool = False, dtype: str = 'y'):
+                        corr_type: bool = False, dtype: str = 'y',
+                        dist_a: float = 0.0, dist_b: float = 0.0):
     """
     Simulate closed-loop step response using linear TF arithmetic.
 
@@ -141,7 +142,14 @@ def pid_response_linear(tau, K, L, gp, gi, gd, T_sim, Ts,
     _, y = dlsim(sys_y, u_in, t=t)
     _, u = dlsim(sys_u, u_in, t=t)
 
-    return y.ravel(), u.ravel(), t, Kp, Ki, Kd
+    if dist_b != 0.0:
+        rng = np.random.default_rng()
+        w = rng.standard_normal(N)
+        y = y.ravel() + lfilter([dist_b], [1.0, -dist_a], w)
+    else:
+        y = y.ravel()
+
+    return y, u.ravel(), t, Kp, Ki, Kd
 
 
 def pid_response_awup(tau, K, L, gp, gi, gd, T_sim, Ts,

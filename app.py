@@ -20,7 +20,7 @@ import diskcache
 from dash import DiskcacheManager
 
 from layout import make_layout
-from callbacks import register_callbacks
+from callbacks import register_callbacks, _parse_tau
 
 
 def parse_args():
@@ -67,6 +67,7 @@ app.layout = make_layout(
     default_tau=args.tau,
     default_K=str(args.K),
     default_L=str(args.L),
+    default_noise_tau=0.1 * float(np.mean(_parse_tau(args.tau))),
     default_ctype=args.ctype,
 )
 

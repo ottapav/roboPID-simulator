@@ -8,8 +8,6 @@ DEFAULTS = {
     'simtype': 0,
     'minu': -1.0,
     'maxu': 1.0,
-    'dist_tau': 120.0,
-    'dist_std': 0.05,
     'lipsch_const': 0.0,
 }
 
@@ -32,31 +30,29 @@ def read_config(path: str) -> dict:
     return cfg
 
 
-def build_disturbance_model(cfg: dict, Ts: float) -> tuple[float, float]:
+def build_noise_model(tau: float, std: float, Ts: float) -> tuple[float, float]:
     """
-    Compute first-order disturbance model matrices (dist_A, dist_B).
+    Compute first-order filtered white-noise model matrices (noise_A, noise_B)
+    for a given filter time constant and target stationary standard deviation.
 
     Mirrors MATLAB:
-        A = [-1/dist_tau, 1/dist_tau; 0, 0];
+        A = [-1/tau, 1/tau; 0, 0];
         M = expm(A * Ts);
-        dist_A = M(1,1); dist_B = M(1,2);
-        X = dlyap(dist_A, dist_B*dist_B');
-        dist_B = dist_B / sqrt(X) * dist_std;
+        noise_A = M(1,1); noise_B = M(1,2);
+        X = dlyap(noise_A, noise_B*noise_B');
+        noise_B = noise_B / sqrt(X) * std;
     """
-    dist_tau = cfg['dist_tau']
-    dist_std = cfg['dist_std']
-
-    A_cont = np.array([[-1.0 / dist_tau, 1.0 / dist_tau],
+    A_cont = np.array([[-1.0 / tau, 1.0 / tau],
                         [0.0, 0.0]])
     M = scipy.linalg.expm(A_cont * Ts)
-    dist_A = float(M[0, 0])
-    dist_B = float(M[0, 1])
+    noise_A = float(M[0, 0])
+    noise_B = float(M[0, 1])
 
-    if dist_std == 0.0:
-        return dist_A, 0.0
+    if std == 0.0:
+        return noise_A, 0.0
 
     X = scipy.linalg.solve_discrete_lyapunov(
-        np.array([[dist_A]]), np.array([[dist_B ** 2]])
+        np.array([[noise_A]]), np.array([[noise_B ** 2]])
     )
-    dist_B = dist_B / float(np.sqrt(X[0, 0])) * dist_std
-    return dist_A, dist_B
+    noise_B = noise_B / float(np.sqrt(X[0, 0])) * std
+    return noise_A, noise_B

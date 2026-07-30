@@ -42,6 +42,9 @@ tuning pass visible in real time.
   sliders (0.01-10, only the gains relevant to the selected controller
   type are shown), live step-response plot, the three Pachner-plot
   (Γ0/Γ1/Γ2) phase planes, and a gain-history plot of the last Tune run
+- Optional first-order filtered white noise on the plant output, toggled
+  from the Plant card (off by default), with live σ and filter time
+  constant controls
 - Runtime-configurable simulation settings via `robopid.config`
 
 ## Requirements
@@ -89,10 +92,8 @@ per line):
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `simtype` | `0` | `0` = linear simulation, `1` = discrete simulation with actuator saturation + disturbance |
+| `simtype` | `0` | `0` = linear simulation, `1` = discrete simulation with actuator saturation |
 | `minu` / `maxu` | `-1.0` / `1.0` | Actuator output limits (used when `simtype=1`) |
-| `dist_tau` | `120.0` | Disturbance model time constant |
-| `dist_std` | `0.05` | Disturbance standard deviation |
 | `lipsch_const` | `0.0` | Lipschitz constant used by the tuning search |
 
 The paper's dimensionless constants — the Γ0/Γ1/Γ2 loop limits, the
@@ -101,6 +102,12 @@ adjustable live from the Controller card instead, next to the Tune button,
 rather than through `robopid.config`. The same card also exposes the gain
 boundary [Kmin, Kmax] that bounds the tuning search box, so it can be
 widened if a run stalls at its bound (Section 6 of the paper).
+
+The Plant card exposes an "Output noise" checkbox (off by default) that
+adds first-order filtered white noise to the plant's `y` output — a target
+standard deviation σ (default 1%) and the noise filter's time constant
+(default 0.1 × the average plant τ). Both fields are only editable while
+the checkbox is checked.
 
 ## Project Structure
 
@@ -117,7 +124,7 @@ roboPID-simulator/
     ├── tuning.py             # Triangular tuning rule (paper Table 1)
     ├── features.py           # Pachner plots Γ0/Γ1/Γ2 + encirclement counts
     ├── signals.py            # Loop signals, settling guard, stability screen
-    └── config.py             # Config file reader + disturbance model builder
+    └── config.py             # Config file reader + noise model builder
 ```
 
 ## License

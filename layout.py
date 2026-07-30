@@ -39,11 +39,15 @@ def _slider(sid: str, label: str, col_id: str | None = None) -> dbc.Col:
     ], width=12, id=col_id)
 
 
-def _plant_card(default_tau, default_K, default_L) -> dbc.Card:
+def _plant_card(default_tau, default_K, default_L, default_noise_tau) -> dbc.Card:
     formula = html.P([
         'P(s) = K · e',
         html.Sup('−L·s'),
         ' / ∏ (τᵢ·s + 1)',
+    ], style={'fontStyle': 'italic', 'fontSize': '13px', 'color': '#555', 'marginBottom': '10px'})
+
+    noise_formula = html.P([
+        'n(s) = σ·√(2τ) / (τ·s + 1) · w(s)',
     ], style={'fontStyle': 'italic', 'fontSize': '13px', 'color': '#555', 'marginBottom': '10px'})
 
     def _row(label, input_elem):
@@ -86,6 +90,25 @@ def _plant_card(default_tau, default_K, default_L) -> dbc.Card:
                 id='input-L', type='text', value=f'{float(default_L):.2f}',
                 debounce=True, style={'width': '100%'},
             )),
+            html.Hr(style={'borderColor': '#e0e0e0', 'margin': '10px 0'}),
+            dbc.Row([
+                dbc.Col(html.Div([
+                    dbc.Checkbox(
+                        id='noise-enabled', value=False,
+                        className='mb-0', style={'marginRight': '6px'},
+                    ),
+                    html.Label('Output noise', style={'fontSize': '13px', 'marginBottom': 0}),
+                ], className='d-flex align-items-center'), width=12),
+            ], className='mb-2'),
+            noise_formula,
+            _row('σ (noise std, %)', dcc.Input(
+                id='input-noise-std', type='text', value=f'{1.0:.2f}',
+                debounce=True, disabled=True, style={'width': '100%'},
+            )),
+            _row('τ (noise filter)', dcc.Input(
+                id='input-noise-tau', type='text', value=f'{float(default_noise_tau):.2f}',
+                debounce=True, disabled=True, style={'width': '100%'},
+            )),
         ]),
     ], className='h-100')
 
@@ -95,6 +118,27 @@ def _controller_card(default_ctype, default_limits, default_niter,
     Nbar0, Nbar1, Nbar2 = default_limits
     default_eps, default_delta, default_beta = default_tuner_params
     default_kmin, default_kmax = default_box
+
+    controller_formula = html.P([
+        'C(s) = Kp + Ki / s + Kd · s',
+    ], style={'fontStyle': 'italic', 'fontSize': '13px', 'color': '#555', 'marginBottom': '0'})
+
+    def _reset_button(bid: str, label: str, tooltip: str) -> html.Button:
+        return html.Button(
+            label, id=bid, n_clicks=0, title=tooltip,
+            className=f'{BTN} btn-outline-secondary py-0',
+            style={'fontSize': '11px'},
+        )
+
+    controller_header_row = dbc.Row([
+        dbc.Col(controller_formula, className='flex-grow-1', style={'minWidth': 0}),
+        dbc.Col(html.Div([
+            _reset_button('btn-reset-controller', 'Reset controller',
+                         'Reset Kp/Ki/Kd gains to their defaults'),
+            _reset_button('btn-reset-tuner', 'Reset tuner',
+                         'Reset tuning parameters to their defaults and clear the Tuning History'),
+        ], className='d-flex', style={'gap': '6px'}), width='auto'),
+    ], align='center', justify='between', className='g-2 flex-nowrap mb-2')
 
     def _limit_input(sid, val):
         return dcc.Input(id=sid, type='number', value=val,
@@ -135,8 +179,8 @@ def _controller_card(default_ctype, default_limits, default_niter,
                         width='auto', className='align-self-center'),
                 dbc.Col(html.Button(
                     'TUNE', id='btn-tune', n_clicks=0,
-                    className=f'{BTN} btn-success py-0',
-                    style={'fontSize': '12px', 'fontWeight': 'bold'},
+                    className='btn btn-success',
+                    style={'fontSize': '14px', 'fontWeight': 'bold', 'padding': '4px 18px'},
                 ), width='auto'),
                 dbc.Col(html.Div(id='tune-status',
                                  style={
@@ -155,6 +199,7 @@ def _controller_card(default_ctype, default_limits, default_niter,
             style=CARD_HEADER_STYLE,
         ),
         dbc.CardBody([
+            controller_header_row,
             # Sliders
             dbc.Row([
                 _slider('slider-kp', 'Kp', col_id='col-kp'),
@@ -188,8 +233,9 @@ def _controller_card(default_ctype, default_limits, default_niter,
             # Settle δ lives next to the checkbox since unchecking
             # pins/disables it directly.
             dbc.Row([
+                dbc.Col(html.Small('Simulation:', style={'color': '#777'}),
+                        width='auto', style={'width': PARAM_GROUP_LABEL_WIDTH}),
                 dbc.Col(html.Div([
-                    html.Small('Simulation:', style={'color': '#777'}),
                     html.Small('Iter', style={'color': '#777'}),
                     dcc.Input(id='input-niter', type='number', value=default_niter,
                              debounce=True, step=10, min=10, max=2000,
@@ -205,8 +251,9 @@ def _controller_card(default_ctype, default_limits, default_niter,
                     html.Small('Settle δ', style={'color': '#777'}),
                     _tuner_param_input('input-delta', default_delta, 0.01),
                 ], className='d-flex align-items-center', style={'gap': '4px'}),
+                        className='ms-auto',
                         width='auto'),
-            ], align='center', justify='between', className='mb-2 g-2 flex-wrap'),
+            ], align='center', className='mb-2 g-2 flex-wrap'),
         ]),
     ], className='h-100')
 
@@ -250,6 +297,7 @@ def _gains_history_card() -> dbc.Card:
 def make_layout(default_tau: str = '[5,5,5,5]',
                 default_K: str = '1.25',
                 default_L: str = '8.0',
+                default_noise_tau: float = 0.5,
                 default_ctype: str = 'PID',
                 default_limits: tuple = (0.5, 0.75, 1.0),
                 default_niter: int = 200,
@@ -263,9 +311,29 @@ def make_layout(default_tau: str = '[5,5,5,5]',
         # ── Title ──────────────────────────────────────────────────────────
         dbc.Row(dbc.Col(html.H4('RoboPID', className='mt-2 mb-2'))),
 
+        # ── Description ───────────────────────────────────────────────────
+        dbc.Row(dbc.Col(html.P([
+            'roboPID is the open academic reference implementation of '
+            'SPIN-based PID tuning — a browser-hosted simulator and Python '
+            'library, released alongside the paper so readers can inspect '
+            'and reproduce the method. It closes a loop around a simulated '
+            'process, steps the setpoint, forms the three Pachner plots of '
+            'the recorded error, computes each band’s turn index, and '
+            'applies the triangular rule, iterating with fixed default '
+            'constants. Because it displays the step response, the '
+            'portraits with their counts and limits, and the gain '
+            'trajectory, every decision the algorithm makes is visible '
+            'rather than inferred. It reproduces every figure and table in '
+            'the paper exactly, and is available at ',
+            html.A('github.com/ottapav/roboPID-simulator',
+                  href='https://github.com/ottapav/roboPID-simulator',
+                  target='_blank', rel='noopener noreferrer'),
+            '.',
+        ], style={'fontSize': '13px', 'color': '#555', 'marginBottom': '14px'}))),
+
         # ── Plant | Controller cards ────────────────────────────────────────
         dbc.Row([
-            dbc.Col(_plant_card(default_tau, default_K, default_L),
+            dbc.Col(_plant_card(default_tau, default_K, default_L, default_noise_tau),
                     width=12, md=5, className='mb-2'),
             dbc.Col(_controller_card(default_ctype, default_limits, default_niter,
                                      default_tuner_params, default_box),

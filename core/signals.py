@@ -43,7 +43,8 @@ def loop_signals(tau, K, L, Ts, Kp, Ki, Kd, dtype: str = 'y',
 
     if simtype == 0:
         y, u, t, _, _, _ = pid_response_linear(
-            tau, K, L, Kp, Ki, Kd, T_sim, Ts, corr_type=False, dtype=dtype)
+            tau, K, L, Kp, Ki, Kd, T_sim, Ts, corr_type=False, dtype=dtype,
+            dist_a=dist_a, dist_b=dist_b)
     else:
         y, u, t, _, _, _ = pid_response_awup(
             tau, K, L, Kp, Ki, Kd, T_sim, Ts, corr_type=False, dtype=dtype,
