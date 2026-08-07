@@ -8,6 +8,7 @@ Ki, N1 indicts Kp, N2 indicts Kd (Section "The encirclement features").
 
 from __future__ import annotations
 from dataclasses import dataclass, field
+from typing import Callable
 import numpy as np
 
 from .signals import loop_signals, add_derivatives
@@ -139,10 +140,22 @@ def encirc(x: np.ndarray, y: np.ndarray, eps: float = EPSILON) -> float:
     return angle / (2.0 * np.pi) - n1 + n2
 
 
+# Swappable trajectory-scoring algorithms: (x, y, eps) -> N. Register a new
+# key here to make an alternative metric selectable via
+# compute_features(..., metric=<fn>) / loop_response_features(..., metric=<fn>)
+# without editing this module.
+EncirclementMetric = Callable[[np.ndarray, np.ndarray, float], float]
+
+ENCIRCLEMENT_METRICS: dict[str, EncirclementMetric] = {
+    'winding_number': encirc,
+}
+
+
 def compute_features(description: list[FeatureDescription],
                      ext_signals: dict,
                      k1: int, k2: int,
-                     eps: float = EPSILON) -> list[dict]:
+                     eps: float = EPSILON,
+                     metric: EncirclementMetric = encirc) -> list[dict]:
     """
     Compute the encirclement count N for each feature descriptor.
 
@@ -192,7 +205,7 @@ def compute_features(description: list[FeatureDescription],
             yw_norm = yw / my
             N = -np.inf
             for x0, y0 in zip(desc.x0, desc.y0):
-                N = max(N, desc.signum * encirc(
+                N = max(N, desc.signum * metric(
                     xw_norm - x0, yw_norm - y0, eps))
 
         results.append({
@@ -212,7 +225,7 @@ def loop_response_features(description, tau, K, L, Ts,
                            Kp, Ki, Kd, dtype='y', T_sim=None,
                            simtype=0, minu=-1.0, maxu=1.0,
                            dist_a=0.0, dist_b=0.0, delta=DELTA,
-                           eps=EPSILON):
+                           eps=EPSILON, metric: EncirclementMetric = encirc):
     """
     Full pipeline: simulate → signals → derivatives → encirclement features.
 
@@ -227,6 +240,6 @@ def loop_response_features(description, tau, K, L, Ts,
     k_delta = sigs['k_delta']
 
     ext = add_derivatives(sigs, nd=2)
-    features = compute_features(description, ext, k1, k_delta, eps)
+    features = compute_features(description, ext, k1, k_delta, eps, metric)
 
     return features, k1, k2, sigs

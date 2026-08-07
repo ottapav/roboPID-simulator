@@ -15,8 +15,11 @@ from __future__ import annotations
 from typing import Callable
 import numpy as np
 
-from .features import loop_response_features, FeatureDescription, DELTA, EPSILON
-from .signals import find_index
+from .features import (
+    loop_response_features, FeatureDescription, DELTA, EPSILON,
+    encirc, EncirclementMetric,
+)
+from .signals import find_index, StabilityScreen
 
 
 # Table 2's rightmost column, keyed by which row fired this iteration.
@@ -26,6 +29,80 @@ MANUAL_READING = {
     'N1': 'ringing: less gain',
     'N2': 'buzzing: less rate',
     'none': 'all quiet: tighten',
+}
+
+
+# Swappable gain-update decisions: given the current features/gains, decide
+# the next multipliers and which MANUAL_READING row fired. Register a new
+# key here to make an alternative rule selectable via
+# pid_tuning(..., rule=<fn>) without editing the iteration loop below.
+TuningRule = Callable[
+    [list[dict], tuple[float, float, float], bool,
+     float, float, float, float,
+     float, float, float, float, float, float],
+    tuple[float, float, float, str]
+]
+
+
+def triangular_rule(
+    feats: list[dict],
+    Nbar: tuple[float, float, float],
+    unstable: bool,
+    Fp_cur: float, Fi_cur: float, Fd_cur: float,
+    gamma: float,
+    Fp_min: float, Fp_max: float,
+    Fi_min: float, Fi_max: float,
+    Fd_min: float, Fd_max: float,
+) -> tuple[float, float, float, str]:
+    """
+    Table 2's triangular tuning rule (paper eq. "triangular").
+
+    feats must be the 3-element list produced against standard_pid_features()
+    ordering: feats[0]=Gamma0 (indicts Ki), feats[1]=Gamma1 (indicts Kp),
+    feats[2]=Gamma2 (indicts Kd). Returns (Fp_new, Fi_new, Fd_new, row); row
+    must be a MANUAL_READING key, since callers such as callbacks.py's
+    on_iteration dereference MANUAL_READING[row] directly with no fallback.
+    """
+    Fp_new, Fi_new, Fd_new = Fp_cur, Fi_cur, Fd_cur
+
+    if unstable:
+        # Record grows rather than decays: coarse halving (Table 2,
+        # unstable row: "Downarrow" = divide by 2), deliberately
+        # cruder than the gamma notch used by the count-based rows
+        # below -- "instability is a state to be exited quickly, not
+        # corrected delicately."
+        row = 'unstable'
+        Fp_new = max(Fp_cur * 0.5, Fp_min)
+        Fi_new = max(Fi_cur * 0.5, Fi_min)
+        Fd_new = max(Fd_cur * 0.5, Fd_min)
+
+    elif feats[0]['N'] > Nbar[0]:
+        row = 'N0'
+        Fi_new = max(Fi_cur / gamma, Fi_min)
+
+    elif feats[1]['N'] > Nbar[1]:
+        row = 'N1'
+        Fp_new = max(Fp_cur / gamma, Fp_min)
+        Fi_new = min(Fi_cur * gamma, Fi_max)
+
+    elif feats[2]['N'] > Nbar[2]:
+        row = 'N2'
+        Fd_new = max(Fd_cur / gamma, Fd_min)
+        Fp_new = min(Fp_cur * gamma, Fp_max)
+        Fi_new = min(Fi_cur * gamma, Fi_max)
+
+    else:
+        # All features within limits: raise all bands.
+        row = 'none'
+        Fi_new = min(Fi_cur * gamma, Fi_max)
+        Fp_new = min(Fp_cur * gamma, Fp_max)
+        Fd_new = min(Fd_cur * gamma, Fd_max)
+
+    return Fp_new, Fi_new, Fd_new, row
+
+
+TUNING_RULES: dict[str, TuningRule] = {
+    'triangular': triangular_rule,
 }
 
 
@@ -47,9 +124,12 @@ def pid_tuning(
     delta: float = DELTA,
     eps: float = EPSILON,
     on_iteration: Callable[[int, int, float, float, float, str], None] | None = None,
+    rule: TuningRule = triangular_rule,
+    stability_screen: StabilityScreen = find_index,
+    metric: EncirclementMetric = encirc,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Run n_iter iterations of the triangular tuning rule.
+    Run n_iter iterations of the given tuning rule (default: the triangular rule).
 
     Returns (Fp_hist, Fi_hist, Fd_hist): history of multipliers for each iteration.
     The final multipliers are the last elements.
@@ -64,6 +144,10 @@ def pid_tuning(
                   iteration with the pre-update multipliers and the
                   MANUAL_READING key for the row that fired, plus once more
                   after the loop with (n_iter, n_iter, <final multipliers>, row).
+    rule: swappable gain-update decision, see TuningRule/TUNING_RULES.
+    stability_screen: swappable instability test, see StabilityScreen/STABILITY_SCREENS.
+    metric: swappable trajectory-scoring algorithm used by the per-iteration
+            feature evaluation, see EncirclementMetric/ENCIRCLEMENT_METRICS.
     """
     if Nbar is None:
         Nbar = tuple(d.Nbar for d in description)
@@ -92,46 +176,15 @@ def pid_tuning(
             dtype=dtype, T_sim=T_sim,
             simtype=simtype, minu=minu, maxu=maxu,
             dist_a=dist_a, dist_b=dist_b, delta=delta, eps=eps,
+            metric=metric,
         )
 
-        _, unstable = find_index(k1, k2, sigs['e'])
+        _, unstable = stability_screen(k1, k2, sigs['e'])
 
-        Fp_new = Fp_cur
-        Fi_new = Fi_cur
-        Fd_new = Fd_cur
-
-        if unstable:
-            # Record grows rather than decays: coarse halving (Table 2,
-            # unstable row: "Downarrow" = divide by 2), deliberately
-            # cruder than the gamma notch used by the count-based rows
-            # below -- "instability is a state to be exited quickly, not
-            # corrected delicately."
-            row = 'unstable'
-            Fp_new = max(Fp_cur * 0.5, Fp_min)
-            Fi_new = max(Fi_cur * 0.5, Fi_min)
-            Fd_new = max(Fd_cur * 0.5, Fd_min)
-
-        elif feats[0]['N'] > Nbar[0]:
-            row = 'N0'
-            Fi_new = max(Fi_cur / gamma, Fi_min)
-
-        elif feats[1]['N'] > Nbar[1]:
-            row = 'N1'
-            Fp_new = max(Fp_cur / gamma, Fp_min)
-            Fi_new = min(Fi_cur * gamma, Fi_max)
-
-        elif feats[2]['N'] > Nbar[2]:
-            row = 'N2'
-            Fd_new = max(Fd_cur / gamma, Fd_min)
-            Fp_new = min(Fp_cur * gamma, Fp_max)
-            Fi_new = min(Fi_cur * gamma, Fi_max)
-
-        else:
-            # All features within limits: raise all bands.
-            row = 'none'
-            Fi_new = min(Fi_cur * gamma, Fi_max)
-            Fp_new = min(Fp_cur * gamma, Fp_max)
-            Fd_new = min(Fd_cur * gamma, Fd_max)
+        Fp_new, Fi_new, Fd_new, row = rule(
+            feats, Nbar, unstable, Fp_cur, Fi_cur, Fd_cur, gamma,
+            Fp_min, Fp_max, Fi_min, Fi_max, Fd_min, Fd_max,
+        )
 
         if on_iteration is not None:
             on_iteration(i, n_iter, float(Fp_cur), float(Fi_cur), float(Fd_cur), row)

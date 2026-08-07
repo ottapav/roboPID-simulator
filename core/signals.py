@@ -8,6 +8,7 @@ maximum-likelihood stability screen from the same paper.
 """
 
 from __future__ import annotations
+from typing import Callable
 import numpy as np
 
 from .pid import pid_response_linear, pid_response_awup, action_components
@@ -201,3 +202,13 @@ def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
             unstable = var2 > var1
 
     return ind, unstable
+
+
+# Swappable instability-detection algorithms: (m, n, M) -> (ind, unstable).
+# Register a new key here to make an alternative screen selectable via
+# pid_tuning(..., stability_screen=<fn>) without editing tuning.py.
+StabilityScreen = Callable[[int, int, np.ndarray], tuple[int, bool]]
+
+STABILITY_SCREENS: dict[str, StabilityScreen] = {
+    'bayesian_changepoint': find_index,
+}
