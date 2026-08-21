@@ -12,15 +12,19 @@ object defined below, e.g.:
 """
 
 import argparse
+import glob
 import os
+import shutil
 import numpy as np
 import dash
 import dash_bootstrap_components as dbc
 import diskcache
 from dash import DiskcacheManager
 
+from core.params import N_POINTS, parse_tau
+from core.signals import auto_grid
 from layout import make_layout
-from callbacks import register_callbacks, _parse_tau
+from callbacks import register_callbacks
 
 
 def parse_args():
@@ -29,7 +33,8 @@ def parse_args():
                    help='Time constants, e.g. "[5,5,5,5]" or "10"')
     p.add_argument('--K', type=float, default=1.25, help='Plant gain')
     p.add_argument('--L', type=float, default=8.0, help='Dead time')
-    p.add_argument('--Ts', type=float, default=1.0, help='Sampling period')
+    p.add_argument('--N', type=int, default=N_POINTS,
+                   help='Samples per simulation (the auto-grid proposal)')
     p.add_argument('--ctype', default='PID', choices=['I', 'PI', 'PID'],
                    help='Controller type')
     p.add_argument('--port', type=int, default=8050, help='Port')
@@ -41,17 +46,37 @@ def parse_args():
 
 args = parse_args()
 
-cache_dir = os.path.join(os.path.dirname(__file__), '.cache')
-cache = diskcache.Cache(cache_dir)
-# DiskcacheManager keys jobs by (callback source + arg values), not by time,
-# and the cache persists across restarts. Since the app's default inputs are
-# identical on every launch, the first Tune click of a new session can hash
-# to a stale, already-completed job from a previous run: Dash then returns
-# that cached result instantly and kills the freshly spawned worker before
-# it ever streams progress, so the sliders/status jump straight to the
-# (correct but stale) final values while the plots never get patched.
-# Clearing the cache at startup avoids these cross-session collisions.
-cache.clear()
+_CACHE_ROOT = os.path.join(os.path.dirname(__file__), '.cache')
+
+
+def _make_cache() -> diskcache.Cache:
+    """
+    Per-process background-callback cache.
+
+    DiskcacheManager keys jobs by (callback source + arg values), not by time,
+    and the cache persists across restarts. Since the app's default inputs are
+    identical on every launch, the first Tune click of a new session can hash
+    to a stale, already-completed job from a previous run: Dash then returns
+    that cached result instantly and kills the freshly spawned worker before
+    it ever streams progress, so the sliders/status jump straight to the
+    (correct but stale) final values while the plots never get patched.
+
+    Giving each process its own directory avoids those cross-session
+    collisions without a shared clear(). The Procfile runs gunicorn with
+    --workers 2 and no --preload, so each worker imports this module
+    separately; a single shared cache.clear() at import time would let a
+    recycled worker (max-requests, timeout) wipe the cache out from under
+    another worker's in-flight tuning job.
+    """
+    for stale in glob.glob(os.path.join(_CACHE_ROOT, 'pid-*')):
+        # Best effort: a live worker holds its own directory open, and on
+        # Windows that makes the removal fail. Skipping it is fine — the
+        # sweep is housekeeping, not correctness.
+        shutil.rmtree(stale, ignore_errors=True)
+    return diskcache.Cache(os.path.join(_CACHE_ROOT, f'pid-{os.getpid()}'))
+
+
+cache = _make_cache()
 background_callback_manager = DiskcacheManager(cache)
 
 app = dash.Dash(
@@ -63,15 +88,22 @@ app = dash.Dash(
 # WSGI entry point for Gunicorn/Render: `gunicorn app:server`.
 server = app.server
 
+_default_tau = parse_tau(args.tau)[0]
+# Seed the header's grid fields with the same proposal propose_grid would make,
+# so the first paint is already consistent with what any τ/L edit produces.
+_default_tsim, _default_ts = auto_grid(_default_tau, args.L, args.N)
+
 app.layout = make_layout(
     default_tau=args.tau,
     default_K=str(args.K),
     default_L=str(args.L),
-    default_noise_tau=0.1 * float(np.mean(_parse_tau(args.tau))),
+    default_noise_tau=0.1 * float(np.mean(_default_tau)),
+    default_tsim=f'{_default_tsim:.4g}',
+    default_ts=f'{_default_ts:.4g}',
     default_ctype=args.ctype,
 )
 
-register_callbacks(app, default_Ts=args.Ts)
+register_callbacks(app, n_points=args.N)
 
 
 def main():
@@ -80,7 +112,8 @@ def main():
     port = int(os.environ.get('PORT', args.port))
 
     print(f'\n  RoboPID running at http://localhost:{port}')
-    print(f'  Plant: tau={args.tau}, K={args.K}, L={args.L}, Ts={args.Ts}')
+    print(f'  Plant: tau={args.tau}, K={args.K}, L={args.L}')
+    print(f'  Grid: N={args.N}, Tsim={_default_tsim:.4g}, Ts={_default_ts:.4g}')
     print(f'  Controller: {args.ctype}\n')
 
     app.run(debug=args.debug, host='0.0.0.0', port=port, threaded=True)

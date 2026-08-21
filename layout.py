@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import math
+
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 
-SLIDER_MARKS = {-2: '0.01', -1: '0.1', 0: '1', 1: '10'}
+from core.params import (
+    BETA, DELTA, EPS, GAIN_BOX, NBAR, N_ITER_BY_CTYPE, gain_slider_marks,
+)
+
+# The gain sliders are log-scale over the gain box, so their range and marks
+# are derived from it rather than restated — update_gain_slider_range rebuilds
+# both with the same helper when the box changes at runtime.
+GAIN_LOG_MIN = math.log10(GAIN_BOX[0])
+GAIN_LOG_MAX = math.log10(GAIN_BOX[1])
+SLIDER_MARKS = gain_slider_marks(*GAIN_BOX)
 GRAPH_STYLE = {'height': '300px'}
 GRAPH_CONFIG = {
     'displayModeBar': True,
@@ -29,7 +40,7 @@ def _slider(sid: str, label: str, col_id: str | None = None) -> dbc.Col:
     return dbc.Col([
         html.Label(label, style={'fontWeight': 'bold', 'fontSize': '13px', 'marginBottom': '2px'}),
         dcc.Slider(
-            id=sid, min=-2, max=1, step=0.01, value=0.0,
+            id=sid, min=GAIN_LOG_MIN, max=GAIN_LOG_MAX, step=0.01, value=0.0,
             marks=SLIDER_MARKS, updatemode='drag',
             tooltip={
                 'placement': 'bottom', 'always_visible': True,
@@ -39,7 +50,8 @@ def _slider(sid: str, label: str, col_id: str | None = None) -> dbc.Col:
     ], width=12, id=col_id)
 
 
-def _plant_card(default_tau, default_K, default_L, default_noise_tau) -> dbc.Card:
+def _plant_card(default_tau, default_K, default_L, default_noise_tau,
+                default_tsim, default_ts) -> dbc.Card:
     formula = html.P([
         'P(s) = K · e',
         html.Sup('−L·s'),
@@ -63,6 +75,16 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau) -> dbc.Car
             style={'fontSize': '11px'},
         ), width='auto')
 
+    def _grid_field(label, field_id, value, tooltip, cls='') -> dbc.Col:
+        return dbc.Col(html.Div([
+            html.Small(f'{label} ', style={'color': '#777'}),
+            dcc.Input(
+                id=field_id, type='text', value=value, debounce=True,
+                style={'width': '64px', 'fontSize': '12px', 'padding': '0 4px'},
+            ),
+        ], className='d-flex align-items-center gap-1', title=tooltip),
+            width='auto', className=f'{cls} align-self-center'.strip())
+
     presets_row = dbc.Row([
         dbc.Col(html.Small('Battery presets:', style={'color': '#777'}),
                 width='auto', className='align-self-center'),
@@ -73,7 +95,40 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau) -> dbc.Car
     ], className='mb-2 g-1 align-items-center')
 
     return dbc.Card([
-        dbc.CardHeader(html.Strong('Plant', style=CARD_TITLE_STYLE), style=CARD_HEADER_STYLE),
+        # The simulation grid describes how the plant is *observed*, not what it
+        # is, so it sits in the header alongside the card title rather than in
+        # the body among the τ/K/L fields that define the plant itself. Both
+        # values are proposed automatically from τ and L (see auto_grid) and
+        # rewritten whenever those change, but stay editable — hence ↺ to get
+        # the proposal back. N is derived from the pair and read-only.
+        #
+        # The Row needs w-100 because CARD_HEADER_STYLE makes the header a flex
+        # container — without it the Row won't span and ms-auto can't push the
+        # grid to the right edge (same reason the Controller header carries it).
+        dbc.CardHeader(
+            dbc.Row([
+                dbc.Col(html.Strong('Plant', style=CARD_TITLE_STYLE),
+                        width='auto', className='align-self-center'),
+                _grid_field('Tsim', 'input-tsim', default_tsim,
+                            'Simulation horizon — proposed as 10 plant spans '
+                            '(sum τ + L), editable', cls='ms-auto'),
+                _grid_field('Ts', 'input-ts', default_ts,
+                            'Sampling period — proposed as Tsim / 499, editable'),
+                dbc.Col(html.Small(
+                    ['N ', html.Span(id='display-n',
+                                     style={'fontWeight': 'bold', 'color': '#333'})],
+                    style={'color': '#777', 'whiteSpace': 'nowrap'},
+                    title='Samples evaluated — 500 unless Tsim or Ts is overridden'),
+                    width='auto', className='align-self-center'),
+                dbc.Col(html.Button(
+                    '↺', id='btn-grid-auto', n_clicks=0,
+                    title='Back to the automatic grid',
+                    className=f'{BTN} btn-link p-0',
+                    style={'fontSize': '14px', 'lineHeight': 1, 'color': '#777'},
+                ), width='auto', className='align-self-center'),
+            ], align='center', className='g-2 flex-nowrap w-100'),
+            style=CARD_HEADER_STYLE,
+        ),
         dbc.CardBody([
             formula,
             presets_row,
@@ -114,7 +169,7 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau) -> dbc.Car
 
 
 def _controller_card(default_ctype, default_limits, default_niter,
-                     default_tuner_params, default_box=(0.01, 10.0)) -> dbc.Card:
+                     default_tuner_params, default_box=GAIN_BOX) -> dbc.Card:
     Nbar0, Nbar1, Nbar2 = default_limits
     default_eps, default_delta, default_beta = default_tuner_params
     default_kmin, default_kmax = default_box
@@ -294,19 +349,62 @@ def _gains_history_card() -> dbc.Card:
     ])
 
 
+_BIBTEX = """@misc{pachner2026robopid,
+  author = {Pachner, Daniel and Otta, Pavel and Dostál, Jiří and Havlena, Vladimír},
+  title  = {Model-Free PID Tuning by Step-Response Inspection},
+  note   = {Submitted to Journal of Process Control},
+  year   = {2026},
+  url    = {https://github.com/ottapav/roboPID-simulator}
+}"""
+
+
+def _footer() -> html.Div:
+    return html.Div([
+        html.Hr(style={'borderColor': '#e0e0e0', 'margin': '18px 0 10px'}),
+        html.P([
+            'If roboPID is useful in your research, please consider citing '
+            'the paper it implements: D. Pachner, P. Otta, J. Dostál, '
+            'V. Havlena, “Model-Free PID Tuning by Step-Response '
+            'Inspection,” submitted to Journal of Process Control.',
+        ], style={'fontSize': '12px', 'color': '#777', 'marginBottom': '6px'}),
+        html.Pre(_BIBTEX, style={
+            'fontSize': '11px', 'color': '#555', 'backgroundColor': '#f8f9fa',
+            'border': '1px solid #e0e0e0', 'borderRadius': '4px',
+            'padding': '8px 10px', 'whiteSpace': 'pre-wrap',
+            'marginBottom': '14px',
+        }),
+    ])
+
+
 def make_layout(default_tau: str = '[5,5,5,5]',
                 default_K: str = '1.25',
                 default_L: str = '8.0',
                 default_noise_tau: float = 0.5,
+                default_tsim: str = '280',
+                default_ts: str = '0.5611',
                 default_ctype: str = 'PID',
-                default_limits: tuple = (0.5, 0.75, 1.0),
-                default_niter: int = 200,
-                default_tuner_params: tuple = (0.1, 0.02, 0.1),
-                default_box: tuple = (0.01, 10.0)):
+                default_limits: tuple = NBAR,
+                default_niter: int = N_ITER_BY_CTYPE['PID'],
+                default_tuner_params: tuple = (EPS, DELTA, BETA),
+                default_box: tuple = GAIN_BOX):
     """Build and return the full app layout."""
     return dbc.Container(fluid=False, style={
         'width': '100%', 'maxWidth': '800px', 'overflowX': 'hidden',
     }, children=[
+
+        # Set for the duration of a Tune run via run_tune's `running=` list.
+        # update_figures_patch reads it as State and short-circuits, so the
+        # slider values the tuner streams don't each trigger a redundant
+        # simulation racing the patches the tuner is already pushing.
+        dcc.Store(id='tuning-active', data=False),
+
+        # The resolved simulation grid: {'sig', 'Tsim', 'Ts', 'notes'}. Written
+        # by commit_grid from whatever the header fields hold, read by all three
+        # simulating callbacks, so the proposal/override arbitration happens
+        # once rather than in each of them. 'sig' stamps the plant the grid was
+        # derived for, which is how update_figures_patch tells a fresh grid from
+        # one belonging to the previous τ/L.
+        dcc.Store(id='grid-store'),
 
         # ── Title ──────────────────────────────────────────────────────────
         dbc.Row(dbc.Col(html.H4('roboPID', className='mt-2 mb-2'))),
@@ -333,7 +431,8 @@ def make_layout(default_tau: str = '[5,5,5,5]',
 
         # ── Plant | Controller cards ────────────────────────────────────────
         dbc.Row([
-            dbc.Col(_plant_card(default_tau, default_K, default_L, default_noise_tau),
+            dbc.Col(_plant_card(default_tau, default_K, default_L, default_noise_tau,
+                                default_tsim, default_ts),
                     width=12, md=5, className='mb-2'),
             dbc.Col(_controller_card(default_ctype, default_limits, default_niter,
                                      default_tuner_params, default_box),
@@ -354,4 +453,7 @@ def make_layout(default_tau: str = '[5,5,5,5]',
 
         # ── Tuning History ──────────────────────────────────────────────────
         dbc.Row(dbc.Col(_gains_history_card(), width=12), className='mb-1'),
+
+        # ── Footer: citation note ─────────────────────────────────────────
+        dbc.Row(dbc.Col(_footer(), width=12)),
     ])

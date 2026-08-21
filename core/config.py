@@ -8,7 +8,6 @@ DEFAULTS = {
     'simtype': 0,
     'minu': -1.0,
     'maxu': 1.0,
-    'lipsch_const': 0.0,
 }
 
 

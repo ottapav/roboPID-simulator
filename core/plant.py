@@ -11,7 +11,8 @@ where p_i = exp(-Ts/tau_i), nd = round(L/Ts).
 
 from __future__ import annotations
 import numpy as np
-from scipy.signal import dlsim, dlti
+
+from .params import time_grid
 
 
 def plant_tf(tau: np.ndarray, K: float, L: float, Ts: float
@@ -43,18 +44,17 @@ def plant_tf(tau: np.ndarray, K: float, L: float, Ts: float
 
 
 def plant_step_response(tau: np.ndarray, K: float, L: float,
-                        T_sim: float, Ts: float) -> tuple[np.ndarray, np.ndarray]:
+                        Tsim: float, Ts: float) -> tuple[np.ndarray, np.ndarray]:
     """
     Open-loop unit-step response of the plant.
 
-    Returns (y, t) where t = [0, Ts, 2*Ts, ..., T_sim].
+    Returns (y, t) where t = [0, Ts, 2*Ts, ..., Tsim].
     """
     tau = np.atleast_1d(np.asarray(tau, dtype=float))
-    t = np.arange(0.0, T_sim + Ts * 0.5, Ts)
+    t = time_grid(Tsim, Ts)
     N = len(t)
 
+    from .pid import _tf_step   # local import: pid imports plant_tf from here
+
     num, den = plant_tf(tau, K, L, Ts)
-    sys = dlti(num, den, dt=Ts)
-    u = np.ones(N)
-    _, y = dlsim(sys, u, t=t)
-    return y.ravel(), t
+    return _tf_step(num, den, np.ones(N)), t

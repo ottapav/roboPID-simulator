@@ -46,6 +46,8 @@ tuning pass visible in real time.
   from the Plant card (off by default), with live σ and filter time
   constant controls
 - Runtime-configurable simulation settings via `robopid.config`
+- The sampling period `Ts` is derived from the plant, not entered: it is shown
+  in the Plant card header and updates live as `τ` and `L` change
 
 ## Requirements
 
@@ -94,7 +96,9 @@ per line):
 |-----|---------|---------|
 | `simtype` | `0` | `0` = linear simulation, `1` = discrete simulation with actuator saturation |
 | `minu` / `maxu` | `-1.0` / `1.0` | Actuator output limits (used when `simtype=1`) |
-| `lipsch_const` | `0.0` | Lipschitz constant used by the tuning search |
+
+(`robopid.config` may still carry a `lipsch_const` line from an earlier
+revision. Nothing reads it — it is inert and can be deleted.)
 
 The paper's dimensionless constants — the Γ0/Γ1/Γ2 loop limits, the
 truncation radius ε, the settling-band guard δ, and the step size β — are
@@ -118,14 +122,39 @@ roboPID-simulator/
 ├── callbacks.py          # Dash callbacks: background "Tune", plot updates
 ├── robopid.config        # Runtime simulation settings (see Configuration)
 ├── requirements.txt
-└── core/                  # Pure simulation/control logic, no UI dependencies
-    ├── plant.py             # FOPTD plant transfer function + step response
-    ├── pid.py                # Closed-loop PID simulation (linear + anti-windup)
-    ├── tuning.py             # Triangular tuning rule (paper Table 1)
-    ├── features.py           # Pachner plots Γ0/Γ1/Γ2 + encirclement counts
-    ├── signals.py            # Loop signals, settling guard, stability screen
-    └── config.py             # Config file reader + noise model builder
+├── core/                  # Pure simulation/control logic, no UI dependencies
+│   ├── params.py            # Shared constants + plant-parameter parsing
+│   ├── plant.py             # FOPTD plant transfer function + step response
+│   ├── pid.py                # Closed-loop PID simulation (linear + anti-windup)
+│   ├── tuning.py             # Triangular tuning rule (paper Table 1)
+│   ├── features.py           # Pachner plots Γ0/Γ1/Γ2 + encirclement counts
+│   ├── signals.py            # Loop signals, settling guard, stability screen
+│   └── config.py             # Config file reader + noise model builder
+└── tests/                 # Regression suite (see Tests)
+    ├── goldens/             # Recorded reference outputs (.npz)
+    └── generate_goldens.py  # Regenerates them; run only on an intended change
 ```
+
+## Tests
+
+```
+pip install pytest
+python -m pytest tests/ -q
+```
+
+The suite pins the simulation against recorded goldens for the four battery
+plants P1–P4: step responses, loop signals, encirclement counts and full
+tuning trajectories. Any numeric change shows up as a diff there.
+
+`tests/generate_goldens.py` rewrites those references. Only run it when a
+behaviour change is intended, and review the resulting diff — regenerating
+goldens to make a failing test pass defeats the point of having them.
+
+Note on tolerances: discrete outcomes (window indices, tuning trajectories,
+which rule branch fired) are reproduced exactly. Floating step responses carry
+a looser bound, because the closed-loop denominators are high-order and near
+the unit circle — P4 is degree 12 — so any change to summation order moves the
+last few digits without changing behaviour.
 
 ## License
 

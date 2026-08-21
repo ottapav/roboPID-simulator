@@ -111,7 +111,7 @@ def pid_tuning(
     tau, K: float, L: float, Ts: float,
     Kp: float, Ki: float, Kd: float,
     dtype: str = 'y',
-    T_sim: float | None = None,
+    Tsim: float | None = None,
     n_iter: int = 200,
     Fp_limits: tuple[float, float] = (0.01, 10.0),
     Fi_limits: tuple[float, float] = (0.01, 10.0),
@@ -123,10 +123,12 @@ def pid_tuning(
     dist_a: float = 0.0, dist_b: float = 0.0,
     delta: float = DELTA,
     eps: float = EPSILON,
-    on_iteration: Callable[[int, int, float, float, float, str], None] | None = None,
+    on_iteration: Callable[
+        [int, int, float, float, float, str, list[dict], dict], None] | None = None,
     rule: TuningRule = triangular_rule,
     stability_screen: StabilityScreen = find_index,
     metric: EncirclementMetric = encirc,
+    seed: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Run n_iter iterations of the given tuning rule (default: the triangular rule).
@@ -140,14 +142,22 @@ def pid_tuning(
     delta: settling-band guard fraction of peak error (Definition 4).
     eps: truncation disc radius for the encirclement count (Definition 1).
     on_iteration: optional callback invoked as
-                  on_iteration(i, n_iter, Fp_cur, Fi_cur, Fd_cur, row) once per
-                  iteration with the pre-update multipliers and the
-                  MANUAL_READING key for the row that fired, plus once more
-                  after the loop with (n_iter, n_iter, <final multipliers>, row).
+                  on_iteration(i, n_iter, Fp_cur, Fi_cur, Fd_cur, row, feats,
+                  sigs) once per iteration with the pre-update multipliers, the
+                  MANUAL_READING key for the row that fired, and the features
+                  and signal dict this iteration was actually scored on — so a
+                  caller that wants to display the iteration does not have to
+                  re-simulate it. Invoked once more after the loop with
+                  (n_iter, n_iter, <final multipliers>, row, feats, sigs).
     rule: swappable gain-update decision, see TuningRule/TUNING_RULES.
     stability_screen: swappable instability test, see StabilityScreen/STABILITY_SCREENS.
     metric: swappable trajectory-scoring algorithm used by the per-iteration
             feature evaluation, see EncirclementMetric/ENCIRCLEMENT_METRICS.
+    seed: makes a run with output noise reproducible. Each iteration is given
+          its own Generator derived from this seed, so iteration i always sees
+          the same noise realization no matter how many iterations run --
+          without it, every iteration draws a fresh realization and the same
+          gains score differently each time they are visited.
     """
     if Nbar is None:
         Nbar = tuple(d.Nbar for d in description)
@@ -163,6 +173,7 @@ def pid_tuning(
     Fd_hist = np.clip(np.ones(n_iter), Fd_min, Fd_max)
 
     row = 'none'
+    seed_seq = None if seed is None else np.random.SeedSequence(seed)
 
     for i in range(1, n_iter):
         Fp_cur = Fp_hist[i - 1]
@@ -173,10 +184,12 @@ def pid_tuning(
             description,
             tau, K, L, Ts,
             Fp_cur * Kp, Fi_cur * Ki, Fd_cur * Kd,
-            dtype=dtype, T_sim=T_sim,
+            dtype=dtype, Tsim=Tsim,
             simtype=simtype, minu=minu, maxu=maxu,
             dist_a=dist_a, dist_b=dist_b, delta=delta, eps=eps,
             metric=metric,
+            rng=(None if seed_seq is None
+                 else np.random.default_rng(seed_seq.spawn(1)[0])),
         )
 
         _, unstable = stability_screen(k1, k2, sigs['e'])
@@ -187,13 +200,15 @@ def pid_tuning(
         )
 
         if on_iteration is not None:
-            on_iteration(i, n_iter, float(Fp_cur), float(Fi_cur), float(Fd_cur), row)
+            on_iteration(i, n_iter, float(Fp_cur), float(Fi_cur), float(Fd_cur),
+                         row, feats, sigs)
 
         Fp_hist[i] = Fp_new
         Fi_hist[i] = Fi_new
         Fd_hist[i] = Fd_new
 
     if on_iteration is not None:
-        on_iteration(n_iter, n_iter, float(Fp_hist[-1]), float(Fi_hist[-1]), float(Fd_hist[-1]), row)
+        on_iteration(n_iter, n_iter, float(Fp_hist[-1]), float(Fi_hist[-1]),
+                     float(Fd_hist[-1]), row, feats, sigs)
 
     return Fp_hist, Fi_hist, Fd_hist

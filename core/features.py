@@ -155,13 +155,16 @@ def compute_features(description: list[FeatureDescription],
                      ext_signals: dict,
                      k1: int, k2: int,
                      eps: float = EPSILON,
-                     metric: EncirclementMetric = encirc) -> list[dict]:
+                     metric: EncirclementMetric = encirc,
+                     nd: int = 2) -> list[dict]:
     """
     Compute the encirclement count N for each feature descriptor.
 
+    nd must match the order the extended signal matrix was built with, since
+    it is what maps a descriptor's x_deg/y_deg onto a column.
+
     Returns a list of dicts with keys: name, N, xdata, ydata, xname, yname, Nbar.
     """
-    nd = 2  # fixed derivative order used in add_derivatives
     results = []
 
     for desc in description:
@@ -196,7 +199,27 @@ def compute_features(description: list[FeatureDescription],
 
         mx = np.max(np.abs(xw))
         my = np.max(np.abs(yw))
-        if mx < 1e-12 or my < 1e-12:
+        if not (np.all(np.isfinite(xw)) and np.all(np.isfinite(yw))):
+            # A diverged run. Scoring it 0.0 -- which is what the peak
+            # normalization below produces from inf, since xw/inf is 0 or nan
+            # and the winding count of that is nothing -- reads as the quietest
+            # possible trajectory, and the tuning rule answers "all quiet" by
+            # raising the very gains that blew up. inf rather than nan because
+            # every band test is `N > Nbar`: inf makes any rule in TUNING_RULES
+            # cut a gain, while nan compares False and lands back on the same
+            # "all quiet" branch. find_index is the primary guard (it reports
+            # unstable, which triangular_rule checks first); this keeps the
+            # feature value itself from lying to a rule that reads it directly.
+            #
+            # Guarded here rather than inside encirc because desc.signum is
+            # applied to the metric's result: signum is +1 for all three
+            # standard descriptors, but a -1 descriptor would turn a
+            # maximally-bad inf into a maximally-good -inf. Short-circuiting
+            # before the call also covers any swapped-in metric=.
+            N = float('inf')
+            xw_norm = xw
+            yw_norm = yw
+        elif mx < 1e-12 or my < 1e-12:
             N = 0.0
             xw_norm = xw
             yw_norm = yw
@@ -222,10 +245,11 @@ def compute_features(description: list[FeatureDescription],
 
 
 def loop_response_features(description, tau, K, L, Ts,
-                           Kp, Ki, Kd, dtype='y', T_sim=None,
+                           Kp, Ki, Kd, dtype='y', Tsim=None,
                            simtype=0, minu=-1.0, maxu=1.0,
                            dist_a=0.0, dist_b=0.0, delta=DELTA,
-                           eps=EPSILON, metric: EncirclementMetric = encirc):
+                           eps=EPSILON, metric: EncirclementMetric = encirc,
+                           nd: int = 2, rng=None):
     """
     Full pipeline: simulate → signals → derivatives → encirclement features.
 
@@ -233,13 +257,17 @@ def loop_response_features(description, tau, K, L, Ts,
     (Definition 4), not the raw k2, so the winding counts stay window-length
     independent (Proposition "well-posedness"). Returns (features, k1, k2, signals).
     """
-    sigs = loop_signals(tau, K, L, Ts, Kp, Ki, Kd, dtype, T_sim,
-                        simtype, minu, maxu, dist_a, dist_b, delta)
+    sigs = loop_signals(tau, K, L, Ts, Kp, Ki, Kd, dtype, Tsim,
+                        simtype, minu, maxu, dist_a, dist_b, delta, rng)
     k1 = sigs['k1']
     k2 = sigs['k2']
     k_delta = sigs['k_delta']
 
-    ext = add_derivatives(sigs, nd=2)
-    features = compute_features(description, ext, k1, k_delta, eps, metric)
+    # Only the signals the descriptors actually name get differentiated and
+    # integrated. The standard three all read 'e', so augmenting the whole
+    # 11-signal dict was building ten unused N x (2*nd+1) matrices per call.
+    named = {d.xdata for d in description} | {d.ydata for d in description}
+    ext = add_derivatives({k: v for k, v in sigs.items() if k in named}, nd=nd)
+    features = compute_features(description, ext, k1, k_delta, eps, metric, nd)
 
     return features, k1, k2, sigs

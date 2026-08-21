@@ -19,9 +19,9 @@ Split into two figure-update callbacks for performance:
 """
 
 from __future__ import annotations
-import ast
 import os
 import time
+from dataclasses import dataclass
 
 import numpy as np
 from dash import Input, Output, State, Patch, no_update, ctx
@@ -29,7 +29,11 @@ import plotly.graph_objects as go
 
 from core.config import read_config, build_noise_model
 from core.features import standard_pid_features, loop_response_features
-from core.signals import min_sim_time
+from core.params import (
+    BETA, DELTA, EPS, GAIN_BOX, NBAR, N_ITER_BY_CTYPE, N_MAX, N_MIN, N_POINTS,
+    gain_slider_marks, parse_tau,
+)
+from core.signals import auto_grid
 from core.tuning import pid_tuning, MANUAL_READING
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'robopid.config')
@@ -41,12 +45,6 @@ _T_Y, _T_R, _T_U = 0, 1, 2
 _C = {
     'y': 'red', 'r': 'rgba(200,0,0,0.4)', 'u': 'royalblue',
 }
-
-# Default tuning iteration budget per controller structure — fewer terms to
-# search converge faster, so I/PI don't need as many iterations as full PID.
-# Used as a fallback when the GUI's iterations input is empty/invalid; the
-# user can otherwise override the count directly from the GUI.
-N_ITER_BY_CTYPE = {'I': 50, 'PI': 100, 'PID': 200}
 
 # Battery plants from RoboPID_JPC_paper/main.tex, Section "Validation on a
 # plant battery": (tau string for input-tau, K, L). Keyed by button id.
@@ -60,14 +58,6 @@ BATTERY_PRESETS = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _parse_tau(tau_str) -> np.ndarray:
-    try:
-        val = ast.literal_eval(str(tau_str).strip())
-        return np.atleast_1d(np.asarray(val, dtype=float))
-    except Exception:
-        return np.array([5.0])
-
-
 def _f(val, default: float) -> float:
     try:
         v = float(val)
@@ -78,8 +68,9 @@ def _f(val, default: float) -> float:
 
 def _deadtime(val) -> float:
     """Parse dead time and clamp to >=0 (negative L is a no-op in plant_tf's
-    delay padding, so a raw negative value would be silently inconsistent
-    with the T_sim-floor/gain-scaling formulas that still subtract it)."""
+    delay padding, so a raw negative value would be silently inconsistent with
+    the span = sum(tau) + L that auto_grid and the gain scaling both add it
+    into)."""
     return max(_f(val, 0.0), 0.0)
 
 
@@ -93,20 +84,6 @@ def _log_gain(gain: float) -> float:
     return float(np.log10(gain)) if gain > 0 else -2.0
 
 
-def _gain_slider_marks(kmin: float, kmax: float) -> dict:
-    """Log-scale slider marks spanning [kmin, kmax]: one per whole decade
-    inside the range, plus the exact endpoints."""
-    def fmt(v: float) -> str:
-        return f'{v:g}'
-
-    lo, hi = np.log10(kmin), np.log10(kmax)
-    start, end = int(np.ceil(lo - 1e-9)), int(np.floor(hi + 1e-9))
-    marks = {i: fmt(10.0 ** i) for i in range(start, end + 1)}
-    marks[lo] = fmt(kmin)
-    marks[hi] = fmt(kmax)
-    return marks
-
-
 def _parses(val) -> bool:
     try:
         return np.isfinite(float(val))
@@ -114,19 +91,14 @@ def _parses(val) -> bool:
         return False
 
 
-def _tau_parses(tau_str) -> bool:
-    try:
-        val = ast.literal_eval(str(tau_str).strip())
-        np.atleast_1d(np.asarray(val, dtype=float))
-        return True
-    except Exception:
-        return False
+def _build_warning(tau_notes, grid_notes, K_val, L_val, Nbar0, Nbar1, Nbar2) -> str:
+    """Assemble the warning line.
 
-
-def _build_warning(tau_str, K_val, L_val, Nbar0, Nbar1, Nbar2) -> str:
-    msgs = []
-    if not _tau_parses(tau_str):
-        msgs.append("tau: couldn't parse — using [5.0]")
+    tau_notes comes from the single core.params.parse_tau call the caller has
+    already made, so the tau field is never parsed a second time just to find
+    out whether it parsed; grid_notes likewise rides along in the grid store
+    from the _clamp_grid call that produced it."""
+    msgs = list(tau_notes) + list(grid_notes)
     if not _parses(K_val):
         msgs.append("K: couldn't parse — using 1.0")
     if not _parses(L_val):
@@ -167,7 +139,137 @@ def _noise_coeffs(enabled, std_raw, tau_raw, Ts: float) -> tuple[float, float]:
     return build_noise_model(tau, std, Ts)
 
 
-def _simulate(tau, K, L, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
+# ── Simulation grid ───────────────────────────────────────────────────────────
+# The grid has two possible sources -- auto_grid's proposal, or whatever the
+# user typed into the Tsim/Ts fields -- and three consumers (update_figures_full,
+# update_figures_patch, run_tune). The arbitration lives here so all three agree.
+
+def _grid_sig(tau, L) -> list:
+    """The plant identity a proposed grid belongs to.
+
+    Deliberately the arguments auto_grid actually consumes, not the raw tau
+    vector: reordering tau, or splitting [5] into [2.5, 2.5], leaves the span
+    and therefore the grid untouched. A signature that changed anyway would
+    strand update_figures_patch's staleness guard waiting for a store update
+    that propose_grid has no reason to produce, and the figures would stop
+    redrawing.
+    """
+    return [float(np.sum(tau)), float(L)]
+
+
+def _propose_grid(tau, L, n_points: int) -> dict:
+    Tsim, Ts = auto_grid(tau, L, n_points)
+    return {'sig': _grid_sig(tau, L), 'Tsim': Tsim, 'Ts': Ts, 'notes': []}
+
+
+def _grid_matches(store, tau, L) -> bool:
+    return isinstance(store, dict) and store.get('sig') == _grid_sig(tau, L)
+
+
+def _resolve_grid(store, tau, L, n_points: int) -> dict:
+    """The grid to simulate on: the store's when it belongs to this plant, the
+    auto proposal otherwise (first paint, or a tau/L edit commit_grid has not
+    answered yet)."""
+    return store if _grid_matches(store, tau, L) else _propose_grid(tau, L, n_points)
+
+
+def _clamp_grid(tsim_raw, ts_raw, fallback: dict) -> dict:
+    """Validate a hand-entered (Tsim, Ts) pair against the last good grid.
+
+    Every correction lands on Ts and never on Tsim, for the reason auto_grid's
+    docstring gives: a truncated horizon ends the record before the response
+    settles, which pins settling_index's k_delta onto k2 and degenerates
+    Definition 4's guard. A coarser Ts only costs resolution the window can
+    spare.
+
+    Corrections are reported through the warning line rather than written back
+    into the fields -- a callback cannot write a component property it also
+    reads, and this matches how a bad K is already handled: the box keeps what
+    was typed, the warning says what was simulated.
+    """
+    notes: list[str] = []
+
+    Tsim = _f(tsim_raw, float('nan'))
+    if not np.isfinite(Tsim) or Tsim <= 0:
+        Tsim = fallback['Tsim']
+        notes.append(f'Tsim: not a positive number — using {Tsim:.4g}')
+
+    Ts = _f(ts_raw, float('nan'))
+    if not np.isfinite(Ts) or Ts <= 0:
+        Ts = Tsim / (N_POINTS - 1)
+        notes.append(f'Ts: not a positive number — using {Ts:.4g}')
+    elif Ts >= Tsim:
+        Ts = Tsim / (N_POINTS - 1)
+        notes.append(f'Ts: must be shorter than Tsim — using {Ts:.4g}')
+
+    N = int(round(Tsim / Ts)) + 1
+    if N > N_MAX:
+        Ts = Tsim / (N_MAX - 1)
+        notes.append(f'grid: N capped at {N_MAX} — simulating at Ts = {Ts:.4g}')
+    elif N < N_MIN:
+        Ts = Tsim / (N_MIN - 1)
+        notes.append(f'grid: N floored at {N_MIN} — simulating at Ts = {Ts:.4g}')
+
+    return {'sig': fallback.get('sig'), 'Tsim': Tsim, 'Ts': Ts, 'notes': notes}
+
+
+@dataclass(frozen=True)
+class SimParams:
+    """Everything the figure callbacks need, parsed once.
+
+    update_figures_full and update_figures_patch differ only in what they do
+    with the result — building this in one place stops a new input having to be
+    parsed identically in two, which is the kind of edit that half-lands.
+    """
+    tau: np.ndarray
+    K: float
+    L: float
+    Tsim: float
+    Ts: float
+    Kp: float
+    Ki: float
+    Kd: float
+    ctype: str
+    Nbar: tuple[float, float, float]
+    delta: float
+    eps: float
+    cfg: dict
+    dist_a: float
+    dist_b: float
+    warning: str
+
+    @property
+    def sim_args(self) -> tuple:
+        """Positional arguments for _simulate/_patch_figures."""
+        return (self.tau, self.K, self.L, self.Tsim, self.Ts,
+                self.Kp, self.Ki, self.Kd, self.ctype, *self.Nbar,
+                self.delta, self.eps, self.cfg, self.dist_a, self.dist_b)
+
+
+def _read_inputs(n_points, grid_store, ctype, tau_str, K_val, L_val,
+                 Kp_log, Ki_log, Kd_log,
+                 nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
+                 noise_enabled, noise_std_raw, noise_tau_raw) -> SimParams:
+    tau, tau_notes = parse_tau(tau_str)
+    K = _f(K_val, 1.0)
+    L = _deadtime(L_val)
+    Nbar = (_f(nbar0_raw, NBAR[0]), _f(nbar1_raw, NBAR[1]), _f(nbar2_raw, NBAR[2]))
+    grid = _resolve_grid(grid_store, tau, L, n_points)
+    Ts = grid['Ts']
+    return SimParams(
+        tau=tau, K=K, L=L, Tsim=grid['Tsim'], Ts=Ts,
+        Kp=_gain(Kp_log), Ki=_gain(Ki_log), Kd=_gain(Kd_log),
+        ctype=ctype, Nbar=Nbar,
+        delta=_f(delta_raw, DELTA), eps=_f(eps_raw, EPS),
+        cfg=_load_cfg(),
+        **dict(zip(('dist_a', 'dist_b'),
+                   _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, Ts))),
+        warning=_build_warning(tau_notes, grid.get('notes', ()), K_val, L_val,
+                               nbar0_raw, nbar1_raw, nbar2_raw),
+    )
+
+
+def _simulate(tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
              delta, eps, cfg, dist_a, dist_b):
     """Run simulation and return (feats, sigs)."""
     Kd_eff = 0.0 if ctype in ('I', 'PI') else Kd
@@ -177,7 +279,7 @@ def _simulate(tau, K, L, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
     desc = standard_pid_features(Nbar=(Nbar0, Nbar1, Nbar2))
     feats, _, _, sigs = loop_response_features(
         desc,
-        tau, K, L, Ts, Kp_eff, Ki_eff, Kd_eff, dtype='y',
+        tau, K, L, Ts, Kp_eff, Ki_eff, Kd_eff, dtype='y', Tsim=Tsim,
         simtype=int(cfg.get('simtype', 0)),
         minu=float(cfg.get('minu', -1.0)),
         maxu=float(cfg.get('maxu', 1.0)),
@@ -188,13 +290,13 @@ def _simulate(tau, K, L, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
     return feats, sigs
 
 
-def _patch_figures(tau, K, L, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
-                   delta, eps, cfg, dist_a, dist_b):
-    """Simulate once and return (patch_f1, patch_f2, patch_f3, patch_time)."""
-    feats, sigs = _simulate(
-        tau, K, L, Ts, Kp, Ki, Kd, ctype,
-        Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b)
+def _patches_from(feats, sigs):
+    """Build the four figure patches from an already-computed simulation.
 
+    Kept separate from _patch_figures so the tuner's progress stream can render
+    the features and signals pid_tuning already produced for that iteration,
+    rather than simulating the same gains a second time to draw them.
+    """
     patches_f = []
     for i, feat in enumerate(feats):
         p = Patch()
@@ -204,13 +306,25 @@ def _patch_figures(tau, K, L, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
             f'Γ{i}: N={feat["N"]:.2f} (limit {feat["Nbar"]})')
         patches_f.append(p)
 
+    # x must be patched together with y: tau/K/L and the Tsim/Ts fields are all
+    # Inputs upstream of here, and any of them can change both the sample count
+    # and the spacing, so patching y alone would draw the new response against
+    # the old time grid.
     pt = Patch()
-    t = sigs['t']
-    pt['data'][_T_Y]['y'] = sigs['y'].tolist()
-    pt['data'][_T_R]['y'] = np.ones(len(t)).tolist()
-    pt['data'][_T_U]['y'] = sigs['u'].tolist()
+    t = sigs['t'].tolist()
+    for idx, arr in ((_T_Y, sigs['y']), (_T_R, np.ones(len(t))), (_T_U, sigs['u'])):
+        pt['data'][idx]['x'] = t
+        pt['data'][idx]['y'] = np.asarray(arr).tolist()
 
     return patches_f[0], patches_f[1], patches_f[2], pt
+
+
+def _patch_figures(tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
+                   delta, eps, cfg, dist_a, dist_b):
+    """Simulate once and return (patch_f1, patch_f2, patch_f3, patch_time)."""
+    return _patches_from(*_simulate(
+        tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype,
+        Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b))
 
 
 # ── Full-figure builders ──────────────────────────────────────────────────────
@@ -222,14 +336,21 @@ _AXIS_STYLE = {
 }
 
 
-def _style_axes(fig: go.Figure, zeroline: bool = True) -> go.Figure:
+def _style_axes(fig: go.Figure, zeroline: bool = True,
+                right_axis: bool = False) -> go.Figure:
     """Slim black gridlines with bolder black axis lines, capped with an
     arrowhead so each axis reads as a directional arrow rather than a bare
     border. zeroline=False when the figure already draws its own line
-    through the origin, to avoid stacking two lines on top of each other."""
+    through the origin, to avoid stacking two lines on top of each other.
+
+    right_axis caps an overlaying secondary y-axis with the same arrowhead, so
+    a two-scale figure doesn't end up with one arrow-tipped axis and one bare
+    one. Call this *before* declaring the secondary axis (see _build_time_fig):
+    update_yaxes writes to every y-axis present, and the secondary one wants
+    its own grid and zeroline settings, not these."""
     fig.update_xaxes(**{**_AXIS_STYLE, 'zeroline': zeroline})
     fig.update_yaxes(**{**_AXIS_STYLE, 'zeroline': zeroline})
-    fig.update_layout(annotations=list(fig.layout.annotations or ()) + [
+    arrows = [
         {  # x-axis arrowhead
             'x': 1, 'y': 0, 'xref': 'paper', 'yref': 'paper',
             'ax': -12, 'ay': 0, 'axref': 'pixel', 'ayref': 'pixel',
@@ -242,7 +363,15 @@ def _style_axes(fig: go.Figure, zeroline: bool = True) -> go.Figure:
             'showarrow': True, 'arrowcolor': 'black', 'arrowwidth': 2,
             'arrowsize': 1, 'arrowhead': 2, 'text': '',
         },
-    ])
+    ]
+    if right_axis:
+        arrows.append({  # secondary y-axis arrowhead
+            'x': 1, 'y': 1, 'xref': 'paper', 'yref': 'paper',
+            'ax': 0, 'ay': 12, 'axref': 'pixel', 'ayref': 'pixel',
+            'showarrow': True, 'arrowcolor': _C['u'], 'arrowwidth': 2,
+            'arrowsize': 1, 'arrowhead': 2, 'text': '',
+        })
+    fig.update_layout(annotations=list(fig.layout.annotations or ()) + arrows)
     return fig
 
 
@@ -268,6 +397,14 @@ def _build_feature_fig(feat: dict, idx: int) -> go.Figure:
 
 
 def _build_time_fig(sigs: dict) -> go.Figure:
+    """Step response: y and r on the left axis, u on its own axis at the right.
+
+    u shares nothing with y dimensionally — it is whatever the actuator takes,
+    bounded by robopid.config's minu/maxu, while y and r sit around 1 — so a
+    shared scale either flattens the response or pushes the action off the top.
+    Each axis is tinted to its traces, since a two-scale plot is unreadable
+    without knowing which curve to read against which side.
+    """
     t = sigs['t']
     fig = go.Figure(data=[
         go.Scatter(x=t.tolist(), y=sigs['y'].tolist(), mode='lines',
@@ -275,29 +412,49 @@ def _build_time_fig(sigs: dict) -> go.Figure:
         go.Scatter(x=t.tolist(), y=np.ones(len(t)).tolist(), mode='lines',
                    name='r (setpoint)', line={'color': _C['r'], 'dash': 'dash'}),
         go.Scatter(x=t.tolist(), y=sigs['u'].tolist(), mode='lines',
-                   name='u (action)', line={'color': _C['u']}),
+                   name='u (action)', line={'color': _C['u']}, yaxis='y2'),
     ])
     fig.update_layout(
         title={'text': 'Step Response', 'font': {'size': 11}},
-        xaxis_title='time', yaxis_title='value',
-        margin={'l': 40, 'r': 8, 't': 38, 'b': 50},
+        xaxis_title='time',
+        yaxis_title={'text': 'y, r', 'font': {'color': _C['y']}},
+        # Right margin has to make room for the tick labels and title that used
+        # to have nowhere to go.
+        margin={'l': 40, 'r': 44, 't': 38, 'b': 50},
         legend={'font': {'size': 10}, 'orientation': 'h', 'y': -0.3, 'x': 0},
         plot_bgcolor='white',
     )
-    return _style_axes(fig)
+    fig = _style_axes(fig, right_axis=True)
+
+    # After _style_axes, which writes to every y-axis that exists: this one
+    # carries no grid (a second set of lines at the right axis's tick positions
+    # would not align with the left's) and no zeroline (u's zero and y's zero
+    # land at different heights, so two of them read as a plotting error).
+    fig.update_layout(yaxis2={
+        'title': {'text': 'u', 'font': {'color': _C['u']}},
+        'overlaying': 'y', 'side': 'right',
+        'showgrid': False, 'zeroline': False,
+        'showline': True, 'linewidth': _AXIS_STYLE['linewidth'],
+        'linecolor': _C['u'], 'tickfont': {'color': _C['u']},
+    })
+    return fig
 
 
 def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
-    Kp_traj, Ki_traj, Kd_traj = np.asarray(Kp_traj), np.asarray(Ki_traj), np.asarray(Kd_traj)
+    """Gain trajectory plot. A trajectory passed as None is omitted entirely —
+    gains the selected controller structure doesn't use have a base of 0, which
+    the [Kmin, Kmax] clamp would otherwise lift to a flat line at Kmin that no
+    iteration ever evaluated."""
+    series = [('Kp', Kp_traj, '#2a78d6'),
+              ('Ki', Ki_traj, '#008300'),
+              ('Kd', Kd_traj, '#4a3aa7')]
+    n = max((len(t) for _, t, _ in series if t is not None), default=0)
     if it is None:
-        it = list(range(len(Kp_traj)))
+        it = list(range(n))
     fig = go.Figure(data=[
-        go.Scatter(x=it, y=Kp_traj.tolist(), mode='lines',
-                   name='Kp', line={'color': '#2a78d6', 'width': 2}),
-        go.Scatter(x=it, y=Ki_traj.tolist(), mode='lines',
-                   name='Ki', line={'color': '#008300', 'width': 2}),
-        go.Scatter(x=it, y=Kd_traj.tolist(), mode='lines',
-                   name='Kd', line={'color': '#4a3aa7', 'width': 2}),
+        go.Scatter(x=it, y=np.asarray(traj).tolist(), mode='lines',
+                   name=name, line={'color': color, 'width': 2})
+        for name, traj, color in series if traj is not None
     ])
     fig.update_layout(
         title={'text': 'Tuning History', 'font': {'size': 11}},
@@ -311,7 +468,7 @@ def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
 
 # ── Callbacks registration ────────────────────────────────────────────────────
 
-def register_callbacks(app, default_Ts: float = 1.0):
+def register_callbacks(app, n_points: int = N_POINTS):
 
     # ── 0a. Battery preset buttons ───────────────────────────────────────
     # Fills tau/K/L from RoboPID_JPC_paper/main.tex's P1-P4 battery; the
@@ -333,6 +490,49 @@ def register_callbacks(app, default_Ts: float = 1.0):
             return no_update, no_update, no_update
         tau_str, K, L = preset
         return tau_str, f'{K:.2f}', f'{L:.2f}'
+
+    # ── 0a2. Simulation grid: propose, then commit ───────────────────────
+    # Two callbacks rather than one because Dash forbids a callback from both
+    # reading and writing the same component property, and the grid fields are
+    # written by the app and read from the user. The split turns out to be the
+    # right shape anyway: neither half has to work out which of the two it is
+    # looking at.
+    #
+    #   propose_grid   τ/L/↺        → the two fields          (the proposal)
+    #   commit_grid    the fields   → grid-store              (the verdict)
+    #
+    # So a τ edit reaches the store the long way round, one callback behind the
+    # figure callbacks that also watch τ. update_figures_patch's staleness guard
+    # is what keeps that from drawing the new plant on the old time base.
+    @app.callback(
+        Output('input-tsim', 'value'),
+        Output('input-ts', 'value'),
+        Input('input-tau', 'value'),
+        Input('input-L', 'value'),
+        Input('btn-grid-auto', 'n_clicks'),
+        prevent_initial_call=True,
+    )
+    def propose_grid(tau_str, L_val, _n_auto):
+        tau, _ = parse_tau(tau_str)
+        grid = _propose_grid(tau, _deadtime(L_val), n_points)
+        return f'{grid["Tsim"]:.4g}', f'{grid["Ts"]:.4g}'
+
+    @app.callback(
+        Output('grid-store', 'data'),
+        Input('input-tsim', 'value'),
+        Input('input-ts', 'value'),
+        State('input-tau', 'value'),
+        State('input-L', 'value'),
+        State('grid-store', 'data'),
+        prevent_initial_call=False,
+    )
+    def commit_grid(tsim_raw, ts_raw, tau_str, L_val, store):
+        tau, _ = parse_tau(tau_str)
+        L = _deadtime(L_val)
+        fallback = _resolve_grid(store, tau, L, n_points)
+        grid = _clamp_grid(tsim_raw, ts_raw, fallback)
+        grid['sig'] = _grid_sig(tau, L)
+        return grid
 
     # ── 0b. Guard mode toggle ────────────────────────────────────────────
     # Checked (Guarded): delta stays whatever the field holds (Definition 4).
@@ -399,9 +599,9 @@ def register_callbacks(app, default_Ts: float = 1.0):
         prevent_initial_call=True,
     )
     def reset_tuner(n_clicks, ctype):
-        niter = N_ITER_BY_CTYPE.get(ctype, 200)
+        niter = N_ITER_BY_CTYPE.get(ctype, N_ITER_BY_CTYPE['PID'])
         empty_history = _build_gains_history_fig([], [], [])
-        return 0.5, 0.75, 1.0, 0.01, 10.0, 0.1, 0.1, niter, True, empty_history
+        return (*NBAR, *GAIN_BOX, EPS, BETA, niter, True, empty_history)
 
     # ── 0f. Gain slider range follows the gain box [Kmin, Kmax] ────────────
     # The Kp/Ki/Kd sliders are log-scale over [Kmin, Kmax] (paper Section 6's
@@ -435,7 +635,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
             return (no_update,) * 12
 
         lo, hi = np.log10(kmin), np.log10(kmax)
-        marks = _gain_slider_marks(kmin, kmax)
+        marks = gain_slider_marks(kmin, kmax)
 
         def clamp(v):
             if v is None:
@@ -456,6 +656,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Output('graph-f3', 'figure'),
         Output('graph-time', 'figure'),
         Output('input-warning', 'children'),
+        Output('display-n', 'children'),
         Input('dropdown-ctype', 'value'),
         Input('input-nbar0', 'value'),
         Input('input-nbar1', 'value'),
@@ -471,28 +672,23 @@ def register_callbacks(app, default_Ts: float = 1.0):
         State('noise-enabled', 'value'),
         State('input-noise-std', 'value'),
         State('input-noise-tau', 'value'),
+        # State, not Input: this callback fires on ctype and the feature limits,
+        # none of which move the grid. _resolve_grid's fallback is only there to
+        # cover the initial paint, before commit_grid has written the store.
+        State('grid-store', 'data'),
         prevent_initial_call=False,
     )
     def update_figures_full(ctype, nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
                             Kp_log, Ki_log, Kd_log, tau_str, K_val, L_val,
-                            noise_enabled, noise_std_raw, noise_tau_raw):
-        tau = _parse_tau(tau_str)
-        K   = _f(K_val, 1.0)
-        L   = _deadtime(L_val)
-        Nbar0, Nbar1, Nbar2 = _f(nbar0_raw, 0.5), _f(nbar1_raw, 0.75), _f(nbar2_raw, 1.0)
-        eps, delta = _f(eps_raw, 0.1), _f(delta_raw, 0.02)
-        Kp, Ki, Kd = _gain(Kp_log), _gain(Ki_log), _gain(Kd_log)
-
-        cfg = _load_cfg()
-        dist_a, dist_b = _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, default_Ts)
-        feats, sigs = _simulate(
-            tau, K, L, default_Ts, Kp, Ki, Kd, ctype,
-            Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b)
+                            noise_enabled, noise_std_raw, noise_tau_raw, grid_store):
+        p = _read_inputs(n_points, grid_store, ctype, tau_str, K_val, L_val,
+                         Kp_log, Ki_log, Kd_log,
+                         nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
+                         noise_enabled, noise_std_raw, noise_tau_raw)
+        feats, sigs = _simulate(*p.sim_args)
 
         figs_f = [_build_feature_fig(feats[i], i) for i in range(3)]
-        fig_t = _build_time_fig(sigs)
-        warning = _build_warning(tau_str, K_val, L_val, nbar0_raw, nbar1_raw, nbar2_raw)
-        return figs_f[0], figs_f[1], figs_f[2], fig_t, warning
+        return (*figs_f, _build_time_fig(sigs), p.warning, str(len(sigs['t'])))
 
     # ── 1b. Patch update on slider move ────────────────────────────────────
     # Only trace data changes — no figure rebuild, very fast.
@@ -502,6 +698,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Output('graph-f3', 'figure', allow_duplicate=True),
         Output('graph-time', 'figure', allow_duplicate=True),
         Output('input-warning', 'children', allow_duplicate=True),
+        Output('display-n', 'children', allow_duplicate=True),
         Input('slider-kp', 'value'),
         Input('slider-ki', 'value'),
         Input('slider-kd', 'value'),
@@ -511,32 +708,45 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Input('noise-enabled', 'value'),
         Input('input-noise-std', 'value'),
         Input('input-noise-tau', 'value'),
+        Input('grid-store', 'data'),
         State('dropdown-ctype', 'value'),
         State('input-nbar0', 'value'),
         State('input-nbar1', 'value'),
         State('input-nbar2', 'value'),
         State('input-eps', 'value'),
         State('input-delta', 'value'),
+        State('tuning-active', 'data'),
         prevent_initial_call=True,
     )
     def update_figures_patch(Kp_log, Ki_log, Kd_log, tau_str, K_val, L_val,
-                             noise_enabled, noise_std_raw, noise_tau_raw,
-                             ctype, nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw):
-        tau = _parse_tau(tau_str)
-        K   = _f(K_val, 1.0)
-        L   = _deadtime(L_val)
-        Nbar0, Nbar1, Nbar2 = _f(nbar0_raw, 0.5), _f(nbar1_raw, 0.75), _f(nbar2_raw, 1.0)
-        eps, delta = _f(eps_raw, 0.1), _f(delta_raw, 0.02)
-        Kp, Ki, Kd = _gain(Kp_log), _gain(Ki_log), _gain(Kd_log)
+                             noise_enabled, noise_std_raw, noise_tau_raw, grid_store,
+                             ctype, nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
+                             tuning_active):
+        # A Tune run streams slider values back through set_progress, and those
+        # sliders are Inputs here. Without this gate every progress push would
+        # trigger a full simulation in this process whose figure output then
+        # races the patch the tuner is streaming to the same four graphs.
+        if tuning_active:
+            return (no_update,) * 6
 
-        cfg = _load_cfg()
-        dist_a, dist_b = _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, default_Ts)
-        p_f1, p_f2, p_f3, p_time = _patch_figures(
-            tau, K, L, default_Ts, Kp, Ki, Kd, ctype,
-            Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b)
+        # tau/L are Inputs here and also drive propose_grid -> commit_grid, so a
+        # tau edit reaches this callback one pass before the grid derived from
+        # it does. Drawing that pass would put the new plant on the old time
+        # base — exactly what the x-with-y note in _patches_from warns about.
+        # The store lands a beat later and re-triggers us with the two
+        # consistent, so skipping here costs a frame, not a redraw. `is not
+        # None` keeps the very first patch renderable if the store hasn't
+        # arrived at all.
+        if grid_store is not None and not _grid_matches(
+                grid_store, parse_tau(tau_str)[0], _deadtime(L_val)):
+            return (no_update,) * 6
 
-        warning = _build_warning(tau_str, K_val, L_val, nbar0_raw, nbar1_raw, nbar2_raw)
-        return p_f1, p_f2, p_f3, p_time, warning
+        p = _read_inputs(n_points, grid_store, ctype, tau_str, K_val, L_val,
+                         Kp_log, Ki_log, Kd_log,
+                         nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
+                         noise_enabled, noise_std_raw, noise_tau_raw)
+        sigs_n = int(round(p.Tsim / p.Ts)) + 1
+        return (*_patch_figures(*p.sim_args), p.warning, str(sigs_n))
 
     # ── 2. Controller-type gain-slider visibility ──────────────────────────
     @app.callback(
@@ -560,7 +770,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
         prevent_initial_call=False,
     )
     def reset_niter_default(ctype):
-        return N_ITER_BY_CTYPE.get(ctype, 200)
+        return N_ITER_BY_CTYPE.get(ctype, N_ITER_BY_CTYPE['PID'])
 
     # ── 2c. Snap K/L display to two decimals ──────────────────────────────
     # Runs once at load (formatting the CLI-supplied default) and again after
@@ -630,6 +840,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
         State('input-beta', 'value'),
         State('input-kmin', 'value'),
         State('input-kmax', 'value'),
+        State('grid-store', 'data'),
         background=True,
         progress=[
             Output('slider-kp', 'value', allow_duplicate=True),
@@ -644,6 +855,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
         ],
         running=[
             (Output('btn-tune', 'disabled'), True, False),
+            (Output('tuning-active', 'data'), True, False),
         ],
         interval=150,
         prevent_initial_call=True,
@@ -651,11 +863,8 @@ def register_callbacks(app, default_Ts: float = 1.0):
     def run_tune(set_progress, n_clicks, Kp_log, Ki_log, Kd_log,
                  tau_str, K_val, L_val, noise_enabled, noise_std_raw, noise_tau_raw,
                  ctype, Nbar0, Nbar1, Nbar2, niter_val, eps_val, delta_val, beta_val,
-                 kmin_val, kmax_val):
-        if not n_clicks:
-            return no_update, no_update, no_update, no_update, no_update
-
-        tau = _parse_tau(tau_str)
+                 kmin_val, kmax_val, grid_store):
+        tau, tau_notes = parse_tau(tau_str)
         K   = _f(K_val, 1.0)
         L   = _deadtime(L_val)
         Nbar0, Nbar1, Nbar2 = _f(Nbar0, 0.5), _f(Nbar1, 0.75), _f(Nbar2, 1.0)
@@ -667,10 +876,13 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Kp_base = 0.0 if ctype == 'I' else Kp
         Kd_base = 0.0 if ctype in ('I', 'PI') else Kd
 
-        T_sim = min_sim_time(tau, L)
+        # The grid the user is looking at, so a tuning run scores the same
+        # response the plots show rather than a second, independent one.
+        grid = _resolve_grid(grid_store, tau, L, n_points)
+        Tsim, Ts = grid['Tsim'], grid['Ts']
         cfg = _load_cfg()
-        dist_a, dist_b = _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, default_Ts)
-        n_iter     = int(_f(niter_val, N_ITER_BY_CTYPE.get(ctype, 200)))
+        dist_a, dist_b = _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, Ts)
+        n_iter     = int(_f(niter_val, N_ITER_BY_CTYPE.get(ctype, N_ITER_BY_CTYPE['PID'])))
         n_iter     = max(10, min(n_iter, 2000))
         eps_tune   = _f(eps_val, 0.1)
         delta_tune = _f(delta_val, 0.02)
@@ -684,7 +896,7 @@ def register_callbacks(app, default_Ts: float = 1.0):
         MIN_PUSH_INTERVAL = 0.08  # seconds; well under interval=150ms poll above
         hist_iter, hist_kp, hist_ki, hist_kd = [], [], [], []
 
-        def on_iteration(i, n_iter, Fp_cur, Fi_cur, Fd_cur, row):
+        def on_iteration(i, n_iter, Fp_cur, Fi_cur, Fd_cur, row, feats, sigs):
             now = time.monotonic()
             if i < n_iter and (now - last_push[0]) < MIN_PUSH_INTERVAL:
                 return
@@ -696,24 +908,29 @@ def register_callbacks(app, default_Ts: float = 1.0):
             p_Ki = float(np.clip(Fi_cur * Ki, Kmin, Kmax))
             p_Kd = float(np.clip(Fd_cur * Kd_base, Kmin, Kmax))
 
-            p_f1, p_f2, p_f3, p_time = _patch_figures(
-                tau, K, L, default_Ts, p_Kp, p_Ki, p_Kd, ctype,
-                Nbar0, Nbar1, Nbar2, delta_tune, eps_tune, cfg, dist_a, dist_b)
+            # Render what the tuner just scored rather than re-simulating it —
+            # one simulation per iteration instead of two, and the plots are
+            # guaranteed to be the record the decision was actually made on.
+            p_f1, p_f2, p_f3, p_time = _patches_from(feats, sigs)
 
             hist_iter.append(i)
             hist_kp.append(p_Kp)
             hist_ki.append(p_Ki)
             hist_kd.append(p_Kd)
-            p_gains_hist = _build_gains_history_fig(hist_kp, hist_ki, hist_kd, it=hist_iter)
+            p_gains_hist = _build_gains_history_fig(
+                hist_kp if Kp_base > 0 else None,
+                hist_ki,
+                hist_kd if Kd_base > 0 else None,
+                it=hist_iter)
 
             set_progress((_log_gain(p_Kp), _log_gain(p_Ki), _log_gain(p_Kd),
                           f'Tuning… iter {i}/{n_iter} — {MANUAL_READING[row]}',
                           p_time, p_f1, p_f2, p_f3, p_gains_hist))
 
         Fp_hist, Fi_hist, Fd_hist = pid_tuning(
-            desc, tau, K, L, default_Ts,
+            desc, tau, K, L, Ts,
             Kp_base, Ki, Kd_base,
-            dtype='y', T_sim=T_sim, n_iter=n_iter,
+            dtype='y', Tsim=Tsim, n_iter=n_iter,
             Fp_limits=(Kmin / Kp_base, Kmax / Kp_base) if Kp_base > 0 else (Kmin, Kmax),
             Fi_limits=(Kmin / Ki, Kmax / Ki),
             Fd_limits=(Kmin / Kd_base, Kmax / Kd_base) if Kd_base > 0 else (Kmin, Kmax),
@@ -730,7 +947,12 @@ def register_callbacks(app, default_Ts: float = 1.0):
         Kp_traj = np.clip(Fp_hist * Kp_base, Kmin, Kmax)
         Ki_traj = np.clip(Fi_hist * Ki, Kmin, Kmax)
         Kd_traj = np.clip(Fd_hist * Kd_base, Kmin, Kmax)
-        fig_gains_hist = _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj)
+        # A gain the structure doesn't use has base 0, which the clamp lifts to
+        # Kmin — plot nothing rather than a flat line at a value never used.
+        fig_gains_hist = _build_gains_history_fig(
+            Kp_traj if Kp_base > 0 else None,
+            Ki_traj,
+            Kd_traj if Kd_base > 0 else None)
 
         # Gains the selected controller type doesn't tune keep their prior
         # slider value instead of being overwritten.
