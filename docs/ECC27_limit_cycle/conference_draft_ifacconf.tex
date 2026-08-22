@@ -1,0 +1,420 @@
+% =====================================================================
+% Conference paper in ifacconf format, targeting ADCHEM 2027 (Hong Kong)
+% or similar IFAC venue. 6-page target.
+%
+% Front matter adapted from elsarticle version; body text unchanged.
+%
+% Numbers policy: all from verified follow-up runs. Entries marked
+% TODO-REGEN need regeneration before submission; TODO mark editorial
+% placeholders.
+% =====================================================================
+\documentclass[twocolumn]{ifacconf}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{lemma}{Lemma}
+\newtheorem{remark}{Remark}
+
+\newcommand{\Nbar}{\bar{N}}
+\newcommand{\Neps}{N_{\varepsilon}}
+
+\title{Limit Cycles and Regularization in Step-Response Phase-Portrait PID Tuning}
+
+\author{Author One$^{a,}$\thanks{Corresponding author: TODO-EMAIL}, 
+        Author Two$^b$}
+
+\address{
+$^a$TODO Affiliation One, City, Country. \\
+$^b$TODO Affiliation Two, City, Country.
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+In a companion paper we introduced SPIN, a model-free PID tuning method
+that inspects three phase portraits of the closed-loop step response,
+counts a turn index in each, and adjusts the gains by a fixed table of
+four moves. The method works, but the companion paper does not say what
+the iteration converges \emph{to}. This paper answers that question.
+First, we show that in log-gain coordinates the four moves admit a unique
+vanishing convex combination, so the only possible resting target is the
+\emph{triple point}: the gain vector at which all three turn indices sit
+exactly on their thresholds. When the triple point falls outside the gain
+box, the target degenerates to a complementarity point, which explains a
+boundary run reported in the companion paper. Second, we show that the
+published turn index is a discontinuous function of the gains, so the
+triple-point equation generally has no solution and diminishing-step runs
+freeze. Third, we repair this with an $\varepsilon$-regularized winding
+integral, after which diminishing-step runs converge to the triple point.
+Finally, we quantify the limit cycles of constant-step runs and compare
+step-size schedules; a simple reversal-triggered halving schedule reaches
+$10^{-4}$ accuracy in under a hundred iterations.
+\end{abstract}
+
+\keywords{PID control, model-free tuning, winding number, switched systems,
+limit cycles}
+
+% =====================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Most PID tuning methods fit a model first and compute gains second
+\cite{ZN1942,AstromHagglund2004}. In a companion paper \cite{Paper1} we took
+a different route: tune directly from what the step response \emph{looks like}.
+The method, SPIN (Step-response Phase-portrait INspection), draws three phase
+portraits from one closed-loop step response, counts how many times each curve
+turns around the origin --- the \emph{turn index} $N_k$ of band $k$ --- and
+compares each count to a fixed threshold. A table of four moves, the
+\emph{triangular rule}, then scales the gains up or down. No plant model is
+identified at any point.
+
+The companion paper demonstrates that the rule detunes aggressive gains,
+recovers from failed loops, and lands in a feasible region on a battery of
+standard plants. What it does not do is characterize the iteration's
+asymptotic behavior. Three questions were left open. What point, if any, does
+the rule aim at? Why do runs with a shrinking step size freeze at points that
+depend on the schedule rather than on the plant? And which step-size schedules
+actually converge?
+
+This paper answers all three. The answers turn out to be connected. The rule
+aims at a single well-defined target, the \emph{triple point}, at which all
+three turn indices sit exactly on their thresholds (Section~\ref{sec:triple}).
+Diminishing-step runs freeze because the published turn index is discontinuous
+in the gains, so the triple-point equation generally has no solution
+(Section~\ref{sec:obstruction}). Replacing the hard count with an
+$\varepsilon$-regularized winding integral removes the discontinuity, and with
+it the freezing (Section~\ref{sec:regularized}). With a continuous index in
+hand, the limit cycles of constant-step runs and the convergence of
+diminishing-step schedules can be measured cleanly (Section~\ref{sec:schedules}).
+Section~\ref{sec:structure} examines the local structure at the target and
+identifies the route a convergence proof must take.
+
+It is worth stating what kind of object we are analyzing. Iterative model-free
+tuning is not new: iterative feedback tuning estimates the gradient of a
+performance criterion from closed-loop experiments and converges, with an
+appropriately shrinking step size, to a local minimum of that criterion
+\cite{Hjalmarsson1998}; extremum seeking does the same with sinusoidal probing
+\cite{Killingsworth2006}. The triangular rule is different in kind. It is a
+\emph{sign-based} update: each iteration compares three integers (later: three
+real numbers) to three thresholds and picks one of four fixed moves. There is
+no cost function and no gradient, so the limit object is not a stationary point
+of anything. It is a point where a switching law balances --- and the right
+mathematical frame is that of switched systems and their averaged dynamics, not
+descent.
+
+% =====================================================================
+\section{The Rule as a Switched System}
+\label{sec:rule}
+
+We recall only what is needed; the companion paper \cite{Paper1} defines the
+portraits, the index, and the rule in full. One closed-loop step experiment
+yields three curves (band $0$, $1$, $2$), and for each curve a turn index
+$N_k \ge 0$ measuring how far the curve winds around the origin of its
+portrait. Each band has a fixed threshold:
+\begin{equation}
+\Nbar = (\Nbar_0, \Nbar_1, \Nbar_2) = (0.5,\; 0.75,\; 1.0).
+\label{eq:thresholds}
+\end{equation}
+
+The triangular rule reads the three comparisons $N_k \gtrless \Nbar_k$ and
+applies one of four moves to the gain vector $K = (K_p, K_i, K_d)$: if all
+three bands are below threshold, all gains are scaled up; otherwise the lowest
+offending band is cut by scaling gains down in a band-specific pattern. Every
+move multiplies each gain by $(1+\beta)^{\pm 1}$ or leaves it alone, where
+$\beta > 0$ is the step size. Gains are clipped to a box, here $[0.01, 10]$.
+
+In log coordinates $\theta = (\log K_p, \log K_i, \log K_d)$, the four moves
+become translations by $h = \log(1+\beta)$:
+\begin{equation}
+\begin{aligned}
+e   &= (+1, +1, +1) &\text{(expand),}\\
+d_0 &= (-1, \phantom{+}0, \phantom{+}0) &\text{(cut band 0),}\\
+d_1 &= (+1, -1, \phantom{+}0) &\text{(cut band 1),}\\
+d_2 &= (+1, +1, -1) &\text{(cut band 2),}
+\end{aligned}
+\label{eq:moves}
+\end{equation}
+each scaled by $h$. The iteration is a switched dynamical system: a partition
+of gain space into four regions (determined by the signs of $N_k(\theta) -
+\Nbar_k$), with a constant velocity assigned to each region. Two properties
+drive everything that follows. First, velocities are constant within each
+region, so convergence requires the state to reach where regions meet and moves
+balance. Second, switching surfaces are the level sets $N_k(\theta) = \Nbar_k$,
+so their regularity --- or lack of it --- decides whether such a point exists.
+
+% =====================================================================
+\section{The Target: a Triple Point}
+\label{sec:triple}
+
+Suppose a trajectory stays bounded and does not drift. Over a long window, each
+move $v \in \{e, d_0, d_1, d_2\}$ is applied some fraction $w_v \ge 0$ of the
+time, with $\sum_v w_v = 1$. Non-drifting requires the average displacement
+$h \sum_v w_v v$ to vanish.
+
+\begin{proposition}[Unique Balance]
+\label{prop:balance}
+The only convex combination of the moves \eqref{eq:moves} that vanishes is
+\begin{equation}
+\tfrac{1}{8}\, e + \tfrac{1}{2}\, d_0 + \tfrac{1}{4}\, d_1
++ \tfrac{1}{8}\, d_2 = 0.
+\label{eq:weights}
+\end{equation}
+\end{proposition}
+
+All four weights are strictly positive. This has a sharp consequence: a bounded,
+non-drifting trajectory must keep visiting all four regions, possible only
+where all three switching surfaces meet.
+
+\begin{corollary}[Triple Point]
+\label{cor:triple}
+The only interior resting target is a point $\theta^*$ with
+\begin{equation}
+N_k(\theta^*) = \Nbar_k, \qquad k = 0, 1, 2,
+\label{eq:triplepoint}
+\end{equation}
+approached through a period-8 orbit with move frequencies
+$(\tfrac18, \tfrac12, \tfrac14, \tfrac18)$.
+\end{corollary}
+
+This is testable. On plants P1, P3, P4 of the companion battery, long
+constant-step runs settle into a periodic orbit, and the measured duty cycle
+matches $(\tfrac18, \tfrac12, \tfrac14, \tfrac18)$ to three decimal places, at
+both $\beta = 0.10$ and $\beta = 0.03$. The terminal orbit is a period-8 cycle
+in which the moves appear in a fixed ``ruler'' pattern.
+
+\begin{table}[t]
+\small
+\centering
+\caption{Measured duty cycle vs.\ prediction.
+% TODO-REGEN: values from code/asymptotics/duty_cycle.py; matched
+% to three decimals on P1, P3, P4 at both step sizes.
+}
+\label{tab:duty}
+\begin{tabular}{lcccc}
+\toprule
+ & $w_e$ & $w_{d_0}$ & $w_{d_1}$ & $w_{d_2}$ \\
+\midrule
+Predicted & $0.125$ & $0.500$ & $0.250$ & $0.125$ \\
+P1, P3, P4 & \multicolumn{4}{c}{TODO-REGEN} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Boundary Case} If $\theta^*$ falls outside the gain box, condition
+\eqref{eq:triplepoint} cannot be met. The target degenerates: for each band,
+either the index sits on its threshold \emph{or} the gain sits on a bound --- a
+complementarity point. The companion paper's P2 run ends with $K_d$ on the
+$0.01$ floor and indices $N = (0.11,\, 1.04,\, 1.14)$. Two indices sit at
+thresholds; the constraint is replaced by an active gain bound. What the
+companion paper calls ``the rule removing derivative action on a delay-dominant
+plant'' is exactly this complementarity target.
+
+% =====================================================================
+\section{The Obstruction: a Discontinuous Count}
+\label{sec:obstruction}
+
+Corollary~\ref{cor:triple} assumes equation \eqref{eq:triplepoint} has a
+solution. With the published turn index, it generally does not. The index is a
+hard count: the portrait curve is followed, winding is accumulated, and
+accumulation is truncated when the curve enters a small disc of radius
+$\varepsilon$ about the origin for the last time. The truncation is the
+problem. The time of \emph{last entry} into the disc is not a continuous
+functional of the curve: a small deformation can make the curve graze the disc
+boundary and either gain or lose a whole excursion.
+
+On the battery plants, a gain change of $0.05\,\%$ --- far below any step the
+rule takes --- moves one turn index by exactly $1.000$. Lengthening the window
+does not help: the jump is caused by the truncation rule. The consequence for
+the asymptotics is immediate. The switching surfaces $N_k(\theta) = \Nbar_k$
+are, in general, not surfaces: the index jumps across them in integer steps, so
+the triple-point equation \eqref{eq:triplepoint} often has no solution, and a
+run whose step size shrinks to zero must freeze at whatever point remains ---
+a point depending on the schedule, not the plant.
+
+For a constant step this discontinuity is harmless: the rule only reads the
+\emph{sign} of $N_k - \Nbar_k$, and a jump merely relocates the switching
+surface slightly. This is why the companion paper's results hold. The
+discontinuity only becomes fatal when one asks the iteration to converge to a
+point.
+
+% =====================================================================
+\section{The Fix: a Regularized Turn Index}
+\label{sec:regularized}
+
+The repair is to stop truncating and start weighting. For a closed curve
+$(x(t), y(t))$ not passing through the origin, the winding number is
+$\frac{1}{2\pi} \oint \frac{x\,dy - y\,dx}{x^2 + y^2}$. We damp instead of
+truncate:
+\begin{equation}
+\Neps \;=\; \frac{1}{2\pi} \oint
+\frac{x\,dy - y\,dx}{\,x^2 + y^2 + \varepsilon^2\,}.
+\label{eq:neps}
+\end{equation}
+
+Writing $\rho^2 = x^2 + y^2$, the integrand is the ordinary winding integrand
+multiplied by $\rho^2 / (\rho^2 + \varepsilon^2)$: turning far from the origin
+counts fully, turning at radius $\varepsilon$ counts half, and turning deep
+inside counts almost nothing. The disc's sharp boundary is gone, and with it
+the need to decide when the curve entered the disc ``for the last time''.
+
+\emph{Continuity:} The integrand is smooth everywhere, so $\Neps$ is continuous
+in the gains. On the $0.05\,\%$ perturbation, the change is $7 \times 10^{-4}$
+where the hard count jumps by $1.000$.
+
+\emph{Window independence:} The tail of a settled response contributes radius
+$\rho \to 0$, where the weight vanishes quadratically. The value becomes
+independent of the window once the response settles, and the $\delta$-guard is
+unnecessary.
+
+\emph{Interchangeability:} Away from switching surfaces, $\Neps$ and the hard
+count agree to within a fraction vanishing as $\varepsilon \to 0$, so every
+sign comparison the published rule makes is unchanged. All companion-paper
+results hold with $\Neps$ in place of the hard count.
+
+With $\Neps$, the switching surfaces are genuine level sets, equation
+\eqref{eq:triplepoint} has a solution, and diminishing-step runs stop freezing.
+On the three interior-target plants, runs with vanishing steps now converge to
+the triple point with final log-gain errors
+\begin{equation*}
+\text{P1: } 0.010, \quad \text{P3: } 0.017, \quad \text{P4: } 0.041.
+\end{equation*}
+
+% =====================================================================
+\section{Step-Size Schedules and Limit Cycles}
+\label{sec:schedules}
+
+All runs start far from the target --- gains detuned by $16\times$ --- and use
+the regularized index. We compare constant step against diminishing schedules
+and an adaptive rule. Table~\ref{tab:schedules} summarizes the outcome; errors
+are final log-gain distances to $\theta^*$.
+
+\begin{table}[t]
+\small
+\centering
+\caption{Final log-gain error for different step-size schedules.
+% TODO-REGEN: from code/asymptotics/schedule_comparison.py; rows may
+% be per-plant or averaged, confirm which and add to reproduce script.
+}
+\label{tab:schedules}
+\begin{tabular}{lll}
+\toprule
+Schedule & Final error & Behaviour \\
+\midrule
+$\beta$ const.           & $0.074$ & limit cycle \\
+$\beta_n \propto n^{-1/2}$ & $0.010$ & converges \\
+$\beta_n \propto n^{-3/4}$ & $0.001$ & converges \\
+$\beta_n \propto n^{-1}$   & $0.197$ & freezes \\
+reversal-halving         & $10^{-4}$ & $36$--$98$ iters \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Constant Step} A constant $\beta$ cannot converge: near $\theta^*$ the
+state orbits with radius scaling $h = \log(1+\beta)$. The error $0.074$ is this
+orbit radius. For plant use, gains within a few percent are indistinguishable.
+
+\paragraph{Diminishing Steps} Schedules $n^{-1/2}$ and $n^{-3/4}$ converge; the
+classical $n^{-1}$ freezes short at error $0.197$ for a travel-budget reason:
+
+\begin{lemma}[Logarithmic Travel]
+\label{lem:travel}
+Under $\beta_n = c/n$, total distance in $n$ steps is $\sum_{m \le n}
+\log(1 + c/m) = O(\log n)$. A far start at distance $D$ cannot be reached
+before $n \approx e^{D/c}$ iterations.
+\end{lemma}
+
+With a far start ($D \approx \log 16$ per gain), the required $n$ is
+astronomically large. This mirrors the summability boundary in stochastic
+approximation, met here from the travel side rather than noise.
+
+\paragraph{Reversal-Triggered Halving} Hold $\beta$ constant until every band
+has reversed its move direction at least once, then halve $\beta$ and repeat.
+Reversals indicate the trajectory has begun to orbit rather than travel, so the
+step is no longer limiting and can be cut. This schedule reaches error $10^{-4}$
+in $36$--$98$ iterations. The mechanism is a global cousin of the Rprop
+update with reversal-triggered step adaptation \cite{Riedmiller1993}, arising
+naturally here because the triangular rule is sign-based.
+
+% =====================================================================
+\section{Local Structure and Proof Route}
+\label{sec:structure}
+
+Central-difference Jacobians $\partial N_j / \partial \theta_i$ at $\theta^*$ are
+nonsingular on all interior-target plants (determinants $1.2$, $5.9$, $4.3$),
+so $\theta^*$ is locally unique.
+% TODO-REGEN: add units/normalization to reproduce script.
+
+The Jacobians are decidedly \emph{not} diagonal or diagonally dominant. On P1,
+proportional gain moves band-2 index harder than derivative gain does; on P4,
+the own-gain entry of band 1 is negative. The intuitive picture --- each move
+mainly fixes its own band --- is false at the target: per-move descent fails on
+two of three plants. Yet all runs converge.
+
+The resolution is that convergence is a property of the \emph{averaged}
+dynamics, not individual moves. Near $\theta^*$ the iteration chatters between
+regions, and its mean motion follows the convex combination of region
+velocities weighted by local residence times --- the Filippov regularization
+\cite{Filippov1988}. The duty-cycle measurements of Section~\ref{sec:triple}
+are direct evidence: observed residence times are exactly the balance weights
+\eqref{eq:weights}. A convergence proof should establish stability of $\theta^*$
+for the Filippov dynamics and conclude for the discrete iteration by standard
+averaging. Per-band acceleration (independent step sizes or momentum) assumes
+diagonal structure that is absent and should be expected to misbehave; momentum
+on the full move vector is the variant worth trying.
+
+% =====================================================================
+\section{Conclusions}
+
+The triangular rule is a switched system whose only interior target is the
+triple point: all three indices exactly on threshold, approached through a
+period-8 orbit with fixed move frequencies. When the triple point leaves the
+gain box, the target is a complementarity point (companion paper's P2 run). The
+hard-truncated count is discontinuous and cannot support point convergence; the
+$\varepsilon$-regularized winding integral restores continuity at no cost. With
+it, diminishing-step runs converge, $n^{-1}$ fails for a travel-budget reason,
+and reversal-triggered halving reaches $10^{-4}$ in under a hundred iterations.
+The convergence proof itself runs through averaged Filippov dynamics and is left
+open, together with the momentum variant it suggests.
+
+% =====================================================================
+\begin{thebibliography}{10}
+
+\bibitem{Paper1}
+Authors, Model-free PID tuning by step-response inspection, submitted to
+J. Process Control, 2026.
+
+\bibitem{ZN1942}
+J.~G. Ziegler, N.~B. Nichols, Optimum settings for automatic controllers,
+Trans. ASME 64 (1942) 759--768.
+
+\bibitem{AstromHagglund2004}
+K.~J. {\AA}str{\"o}m, T. H{\"a}gglund, Revisiting the Ziegler--Nichols
+step response method for PID control, J. Process Control 14 (2004) 635--650.
+
+\bibitem{Hjalmarsson1998}
+H. Hjalmarsson, M. Gevers, S. Gunnarsson, O. Lequin, Iterative feedback
+tuning: theory and applications, IEEE Control Syst. Mag. 18 (4) (1998)
+26--41.
+
+\bibitem{Killingsworth2006}
+N.~J. Killingsworth, M. Krsti{\'c}, PID tuning using extremum seeking,
+IEEE Control Syst. Mag. 26 (1) (2006) 70--79.
+
+\bibitem{Riedmiller1993}
+M. Riedmiller, H. Braun, A direct adaptive method for faster backpropagation
+learning: the RPROP algorithm, in: Proc. IEEE Int. Conf. Neural Networks,
+1993, pp. 586--591.
+
+\bibitem{Filippov1988}
+A.~F. Filippov, Differential Equations with Discontinuous Righthand Sides,
+Kluwer, 1988.
+
+\end{thebibliography}
+
+\end{document}

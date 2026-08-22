@@ -1,0 +1,492 @@
+\documentclass[final,3p,times,twocolumn]{elsarticle}
+
+\usepackage[utf8]{inputenc}
+\usepackage{xspace}
+\newcommand{\spin}{SPIN\xspace}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\setlist[itemize]{itemsep=3pt, topsep=3pt, parsep=0pt, partopsep=0pt, leftmargin=*}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+
+\journal{Journal of Process Control}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Reading the Sensitivity Peak of a PI Loop\\
+from a Single Step Response}
+
+\begin{abstract}
+The sensitivity peak $M_s$ tells an engineer how robust a loop is.
+Measuring it normally needs a plant model or a frequency sweep, and most
+installed loops have neither. This paper shows that a single ordinary
+setpoint step already contains the answer, and gives a simple law for
+reading it.
+
+\begin{itemize}
+\item \emph{Why is $M_s$ in the record?} For a unit setpoint step the
+error transform is $E(s)=S(s)/s$. The difference of the record is
+therefore the impulse response of the sensitivity function itself. No
+second experiment is needed.
+
+\item \emph{How is it read?} Count how many times the error curls around
+its settling point. Call the count $N$. We derive the law
+$M_s=N/(c\sqrt{n_m^2+n^2})$, where $c=\ln(1/\varepsilon)/2\pi$ is fixed
+by the counting rule and $n,n_m$ are the loop's phase and magnitude
+slopes where the phase passes $-180^\circ$. The distance to instability
+cancels out of the derivation, which is what makes the reading possible
+without a model.
+
+\item \emph{Why does dead time not disturb it?} Because a dead time
+contributes the same amount to phase and to phase slope. When the
+integral time cancels the dominant lag, the crossover condition pins the
+dead time's phase share, and therefore its slope share, at exactly
+$\pi/2$---whatever the dead time is. We compute $n=\pi/2$ for relative
+dead times from $0.1$ to $0.9$, to three digits.
+
+\item \emph{Why does it fail for PID?} Derivative action supplies phase
+lead, so the dead time no longer has to supply the whole $-\pi/2$. Its
+share, and hence $n$, then depends on how much dead time there is. The
+invariance is lost by construction, not by accident.
+\end{itemize}
+
+\noindent
+Measurement confirms each prediction with no fitted constant. The
+dimensionless ratio the law predicts to be unity is measured at $1.256$,
+$1.131$ and $1.074$ at $M_s\approx3.5$, $6.5$ and $8.5$---converging as
+the theory requires, with interquartile ranges a percent or two wide,
+and agreeing across plant orders one to three. The map moves by at most
+$0.064$ across relative dead times $0.3$ to $0.9$ for PI, against
+$2.58$ for PID at $\tau=0.3$; and readings on fixed classical tunings
+have median error $+5\%$, with $22$ of $24$ within $\pm25\%$. A validity
+condition read from the same record---does the error change sign---
+rejects every reading that would have been wrong.
+\end{abstract}
+
+\end{frontmatter}
+
+\section{Introduction}
+
+The sensitivity peak $M_s=\max_\omega|S(j\omega)|$, with $S=1/(1+CG)$,
+is the standard measure of how robust a control loop is. A value near
+$1.4$ is comfortable, a value near $2.0$ is marginal, and the design
+window $M_s\in[1.2,2.0]$ is long established
+\cite{AstromHagglund2004,Skogestad2003}.
+
+Getting the number is the problem. It is defined in the frequency
+domain, so it needs the loop transfer function: either a model, which
+someone must identify, or a frequency sweep, which someone must
+commission. Of the eleven thousand loops surveyed by Desborough and
+Miller \cite{Desborough2002}, almost none have either, and the survey's
+main finding is that many of them run badly.
+
+What those loops do produce is setpoint steps. This paper shows that one
+such step is enough. The argument is short:
+
+\begin{enumerate}[label=(\roman*)]
+\item The step record \emph{is} the sensitivity function, because
+$E(s)=S(s)/s$.
+\item Near the point where a loop becomes marginal, one pole pair
+dominates. Its damping sets the height of the peak.
+\item Counting how many times the error curls around its settling point
+measures that damping.
+\end{enumerate}
+
+Putting these together gives a linear law relating the count to $M_s$
+(Section~\ref{sec:law}). The law has one free constant, the loop's phase
+slope at crossover. Section~\ref{sec:delay} shows why that constant is
+fixed at $\pi/2$ for a PI loop no matter how much dead time the plant
+has, which is the reason the method needs no plant knowledge.
+Section~\ref{sec:pid} shows why the same argument fails once derivative
+action is added. Sections~\ref{sec:valid} and~\ref{sec:measure} give the
+validity condition and the measurements.
+
+We restrict attention to PI control. This is where the result is clean,
+and it is also where the loops are: derivative action is switched off in
+most industrial installations \cite{AstromHagglund2001}.
+
+The counting device is the turn index of \cite{SPIN}, used there as a
+damping diagnostic with limits fixed by calibration. Giving it a
+frequency-domain meaning turns it into a measurement and, as a
+by-product, replaces that calibration by a specification
+(Section~\ref{sec:spin}).
+
+\section{The law}
+\label{sec:law}
+
+\subsection{The record is the sensitivity function}
+
+For a unit setpoint step,
+\begin{equation}
+E(s)=\frac{S(s)}{s}.
+\label{eq:ES}
+\end{equation}
+The recorded error carries all of $S$, and its first difference is the
+impulse response of $S$. This is why one ordinary step suffices and no
+dedicated experiment is required.
+
+\subsection{Counting the curls}
+
+Plot the error against its own difference and watch the trajectory spiral
+into the point where the loop settles. Let $N$ be the number of turns it
+makes, counted after normalizing each axis and stopping when the curve
+enters a small disc of radius $\varepsilon$ about that point
+\cite[Def.~1]{SPIN}.
+
+A loop that is well damped barely completes a quarter turn. A loop close
+to instability winds many times. For a mode $e^{-\alpha t}\cos\omega t$
+the spiral is logarithmic, and the count is
+\begin{equation}
+N=c\,\frac{\omega}{\alpha},\qquad c=\frac{\ln(1/\varepsilon)}{2\pi},
+\label{eq:count}
+\end{equation}
+which is \cite[Prop.~3]{SPIN}. With the default $\varepsilon=0.1$,
+$c=0.3665$. The count is a pure number: it does not change if the step
+is made larger or the clock runs faster.
+
+\subsection{From count to peak}
+
+Near the stability boundary the loop loses stability through a single
+complex pole pair \cite[Prop.~2]{SPIN}, at the frequency
+$\omega_{180}$ where the phase passes $-\pi$. Let
+$m=1-|L(j\omega_{180})|$ say how close the loop is to that boundary,
+and let
+\begin{equation}
+n=-\frac{d\arg L}{d\ln\omega},\qquad
+n_m=-\frac{d\ln|L|}{d\ln\omega}
+\label{eq:slopes}
+\end{equation}
+be the phase and magnitude slopes there, both dimensionless. Writing
+$u=\ln(\omega/\omega_{180})$ and expanding in logarithmic coordinates,
+\begin{equation}
+L(j\omega)\approx-(1-m)\,e^{-n_mu}e^{-jnu},
+\label{eq:expand}
+\end{equation}
+so that to first order $1+L\approx m+n_mu+jnu$. Minimising over $u$
+gives the distance from the locus to the critical point, and hence
+\begin{equation}
+M_s=\frac{\sqrt{n_m^2+n^2}}{m\,n}.
+\label{eq:Ms}
+\end{equation}
+
+The same expansion locates the pole. Solving $1+L=0$ near
+$j\omega_{180}$ gives a pair with frequency $\omega\approx\omega_{180}$
+and decay rate $\alpha=m\,\omega_{180}n/(n^2+n_m^2)$, so
+\begin{equation}
+\frac{\omega}{\alpha}=\frac{n^2+n_m^2}{m\,n}.
+\label{eq:woa}
+\end{equation}
+
+Dividing \eqref{eq:woa} by \eqref{eq:Ms} eliminates $m$---the distance
+to the boundary, which the record cannot report---and leaves, with
+\eqref{eq:count},
+\begin{equation}
+\boxed{\;M_s=\frac{\omega/\alpha}{\sqrt{n_m^2+n^2}}
+=\frac{N}{c\sqrt{n_m^2+n^2}}\;}
+\label{eq:law}
+\end{equation}
+
+Three things are worth stating plainly. The relation is \emph{linear} in
+the count. The only plant-dependent quantity in it is the slope pair at
+one frequency: plant order, lag structure and dead time enter nowhere
+else. And $m$ has cancelled, so no knowledge of the gain margin is
+needed---which is what makes the reading possible from a record alone.
+
+Equation~\eqref{eq:law} is a first-order result in $m$, hence exact in
+the limit of a marginal loop. For a comfortable loop $|S|$ does not fall
+below one far from resonance, and the baseline adds a correction that
+decays as $M_s$ grows. Section~\ref{sec:measure} measures how fast.
+
+\section{Why dead time does not matter}
+\label{sec:delay}
+
+Equation~\eqref{eq:law} would be of little use if $n$ varied from plant
+to plant, since $n$ is not measurable from the step record. For PI
+control it does not vary, and the reason is elementary.
+
+A dead time $L_d$ contributes phase $-L_d\omega$ and phase slope
+$-d(-L_d\omega)/d\ln\omega=L_d\omega$. \emph{Its slope contribution
+equals its phase contribution.} A first-order lag does not share this
+property: it contributes phase $-\arctan(T\omega)$, approaching $\pi/2$,
+while its slope $T\omega/(1+T^2\omega^2)$ falls back to zero.
+
+Now take a PI controller whose integral time cancels the dominant lag,
+$T_i=T$, which is the IMC and SIMC choice \cite{Skogestad2003}. The loop
+phase is then
+\begin{equation}
+\arg L(j\omega)=-\frac{\pi}{2}-L_d\omega ,
+\label{eq:argL}
+\end{equation}
+the $-\pi/2$ coming from the integrator. The crossover condition
+$\arg L=-\pi$ therefore forces
+\begin{equation}
+L_d\omega_{180}=\frac{\pi}{2},
+\label{eq:pin}
+\end{equation}
+and since the dead time's slope equals its phase,
+\begin{equation}
+n=L_d\omega_{180}=\frac{\pi}{2}\quad\text{exactly, for every }L_d .
+\label{eq:npi2}
+\end{equation}
+
+A longer dead time simply moves the crossover to a lower frequency. The
+product $L_d\omega_{180}$, which is what $n$ depends on, does not move.
+This is the whole reason the reading needs no plant knowledge.
+
+Table~\ref{tab:nphi} confirms \eqref{eq:npi2} numerically, and gives
+$n_m$, which sits at unity because the cancelled lag leaves the
+integrator's single $-1$ slope.
+
+\begin{table}[t]
+\centering
+\caption{Phase and magnitude slope at crossover, PI with $T_i=T$, and
+the slope of the law \eqref{eq:law} they predict. $\tau=L_d/(L_d+T)$.}
+\label{tab:nphi}
+\begin{tabular}{lccccc}
+\toprule
+$\tau$ & 0.1 & 0.3 & 0.5 & 0.7 & 0.9 \\
+\midrule
+$n$   & 1.57 & 1.57 & 1.57 & 1.57 & 1.57 \\
+$n_m$ & 1.00 & 1.00 & 1.00 & 1.00 & 1.00 \\
+$\omega_{180}$ & 14.14 & 3.67 & 1.57 & 0.67 & 0.18 \\
+predicted slope & 1.47 & 1.47 & 1.47 & 1.47 & 1.47 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{remark}[Scope]
+\label{rem:scope}
+Equation~\eqref{eq:npi2} rests on the cancellation $T_i=T$. Away from
+it the arctangents no longer cancel and $n$ drifts: over
+$T_i/T\in[0.5,8]$ and $\tau\in[0.1,0.9]$ it ranges from $1.14$ to
+$2.62$, so the slope of \eqref{eq:law} varies by a factor of about two
+in the worst case. The law itself is unaffected---only its constant is.
+Section~\ref{sec:measure} measures what this costs in practice, which is
+less than the range suggests, because tunings in use cluster near
+cancellation.
+\end{remark}
+
+\section{Why derivative action breaks it}
+\label{sec:pid}
+
+The argument of Section~\ref{sec:delay} used one fact: the integrator
+supplies $-\pi/2$ of phase, the lag is cancelled, and so the dead time
+must supply the remaining $-\pi/2$. Its slope share is then pinned
+because slope and phase coincide for a dead time.
+
+Derivative action breaks the first step. It supplies phase \emph{lead},
+so the dead time no longer has to supply $-\pi/2$; it supplies less, and
+how much less depends on where the crossover falls, which depends on how
+much dead time there is. The pinning argument therefore fails, and $n$
+becomes a function of $\tau$:
+
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+$\tau$ & 0.1 & 0.3 & 0.5 & 0.7 & 0.9 \\
+\midrule
+$n$, PI ($T_d=0$)   & 1.57 & 1.57 & 1.57 & 1.57 & 1.57 \\
+$n$, PID ($T_d/T_i=0.25$) & 2.82 & 2.28 & 1.47 & 1.48 & 1.57 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Across $\tau\in[0.3,0.9]$ the PID phase slope spreads by $48\%$, against
+$0\%$ for PI. The failure is not a numerical accident: it follows
+directly from removing the condition that pinned $n$.
+
+The theory also says where PID should still work. At large $\tau$ the
+plant's dead time dominates the derivative's lead, and the spread falls
+to $6\%$ over $\tau\in[0.5,0.9]$. Measurement agrees: recalibrating the
+map with $T_d/T_i=0.25$ shifts it by $0.254$ at $\tau=0.9$ and $0.314$
+at $\tau=0.7$---tolerable---but by $2.583$ at $\tau=0.3$. A PID reading
+is therefore usable on delay-dominant loops and not on balanced ones,
+exactly as \eqref{eq:npi2} predicts.
+
+Strong derivative action fails for a second reason: the controller zeros
+capture the critical pole pair, so the single-dominant-pair picture
+behind \eqref{eq:expand} no longer holds. This is the mechanism already
+noted in \cite[Rem.~3]{SPIN}, and it is why the map degrades sharply
+past $T_d/T_i=0.25$.
+
+\section{When the reading is valid}
+\label{sec:valid}
+
+The expansion \eqref{eq:expand} assumes the dominant pair is visible in
+the record. Sometimes it is not. If integral action is very slow, the record
+is dominated by a slow, non-oscillating decay, and the resonant mode
+rides on it as ripple that never crosses zero. The trajectory then stays
+on one side of the settling point and cannot wind, whatever the true
+$M_s$ is.
+
+Because the count is essentially half the number of times the error
+crosses zero, the condition for a valid reading is as simple as it could
+be:
+
+\begin{quote}
+\emph{The reading is valid when the error record changes sign.}
+\end{quote}
+
+No threshold, no parameter, no model. When the record is one-signed the
+instrument returns nothing rather than something wrong.
+
+Two facts make this workable. Probing with a load step instead does not
+help---under the same conditions it gives $N=(0.13,0.00,0.00)$, less
+informative still. And over $497$ runs on four process-typical plants,
+one-signed records never produced a count anywhere near the limits of
+\cite{SPIN}: their maximum was $0.32$ of the limit while true $M_s$
+ranged from $1.2$ to $6.0$. The reading is one-sided. It can say the
+peak is at least so high; it cannot say the peak is low.
+
+\section{Measurements}
+\label{sec:measure}
+
+Every number here tests a prediction made above. Nothing is fitted.
+
+\paragraph{The identity, with no adjustable constant.}
+Equation~\eqref{eq:law} says the dimensionless ratio
+\begin{equation}
+R=\frac{M_s\,c\sqrt{n_m^2+n^2}}{N}
+\label{eq:ratio}
+\end{equation}
+equals one for a marginal loop, and approaches one as $M_s$ grows.
+Sweeping lag chains of order one to four with dead time, integral times
+$T_i/T\in\{0.5,1,2\}$ and the gain swept:
+
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+$M_s$ & 1--2 & 2--3 & 3--4 & 6--7 & 8--9 \\
+\midrule
+$R$ (median) & 1.754 & 1.562 & 1.256 & 1.131 & 1.074 \\
+interquartile & 1.74--1.78 & 1.32--1.75 & 1.24--1.27 & 1.12--1.13 & 1.07--1.08 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+$R$ falls monotonically towards one, reaching $1.074$ at $M_s\approx8.5$
+and still decreasing. This is the behaviour \eqref{eq:law} predicts: the
+identity is exact for a marginal loop, and the excess at moderate $M_s$
+is the baseline correction noted above. The interquartile ranges are a
+percent or two wide, so the agreement is not an average over scatter.
+
+\paragraph{Only the slopes matter.}
+Equation~\eqref{eq:law} claims the plant enters through $n$ and $n_m$
+alone. Breaking the same sweep out by plant order tests it directly:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+$M_s$ range & order 1 & order 2 & order 3 \\
+\midrule
+2--3 & 1.549 & 1.502 & 1.384 \\
+3--5 & 1.185 & 1.189 & 1.284 \\
+5--8 & ---   & 1.106 & 1.154 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+At each level the three orders agree to within a few percent, and the
+residual spread is smaller than the drift with $M_s$. Pooling all orders
+at $M_s\ge5$ gives $R=1.104$ over a range $1.036$ to $1.176$.
+
+\paragraph{Dead time is invisible, as \eqref{eq:npi2} says.}
+Recalibrating the map at each $\tau$ separately and comparing over
+$N\in[0.3,1.5]$, the largest shift against the $\tau=0.5$ reference is
+$0.041$ at $\tau=0.3$, $0.041$ at $\tau=0.7$ and $0.064$ at $\tau=0.9$.
+One calibration serves the range, which is \eqref{eq:npi2} restated as a
+measurement.
+
+\paragraph{Readings on fixed tunings.}
+Four process-typical plants \cite{SPIN}, PI controllers with
+$T_i/L_d\in\{1.5,2,3,4,6\}$ and four gain levels, one setpoint step
+each, compared against exact $M_s$. On valid records: $n=24$, median
+error $+5\%$, interquartile range $-7\%$ to $+8\%$, and $22$ of $24$
+within $\pm25\%$. This is the practical cost of
+Remark~\ref{rem:scope}---the working loop is not marginal, and its $T_i$
+does not exactly cancel---and it is modest.
+
+\paragraph{The validity condition catches the failures.}
+In a matched test over five classical tuning rules, every gross error
+---$-51\%$, $-47\%$, $-37\%$, $-31\%$---fell on a record the condition
+rejects, while accepted readings stayed within $-10\%$ to $+14\%$.
+
+\section{An application: specifying a tuning rule}
+\label{sec:spin}
+
+The \spin rule \cite{SPIN} lowers the gain of the lowest band whose
+count exceeds a limit, with limits $\bar N=(0.5,0.75,1.0)$ fixed by
+calibration. Reading them through the law gives peaks of
+\begin{equation}
+(1.71,\;1.92,\;2.29),
+\label{eq:spinlimits}
+\end{equation}
+a graded ladder: two inside the classical design window and the third
+just above it. The calibration landed there without being aimed there.
+
+The limits may therefore be \emph{stated} instead of chosen: pick the
+admissible peak, invert the law, obtain $\bar N$. The specification is
+also finer than usual, since it is per band rather than one global
+number.
+
+\section{Conclusion}
+
+A setpoint step already contains the sensitivity function, because
+$E(s)=S(s)/s$. Counting how many times the error curls around its
+settling point measures the damping of the dominant pole pair, and the
+peak follows by a linear law whose only plant-dependent constant is the
+phase slope at crossover.
+
+For a PI loop with the lag cancelled, that constant is $\pi/2$ exactly,
+whatever the dead time, because a dead time contributes equally to phase
+and to phase slope and the crossover condition pins its share. This is
+the reason the reading needs no model. Adding derivative action removes
+the pinning, and with it the invariance---which is why this paper is
+about PI loops.
+
+Two limitations bound the result. The analysis is noise-free, and noise
+enters the differenced coordinates directly. And the reading is
+one-sided: it is valid when the error changes sign and silent otherwise.
+Both are stated conditions rather than hidden ones, and the second is
+decided from the same record it qualifies.
+
+\section*{Data availability}
+
+Scripts reproducing every number are included with the \spin reference
+implementation
+(\url{https://github.com/ottapav/roboPID-simulator}).
+
+\begin{thebibliography}{00}
+
+\bibitem{SPIN} D.~Pachner, P.~Otta, J.~Dost\'al, V.~Havlena, Model-free
+PID tuning by step-response inspection, submitted.
+
+\bibitem{AstromHagglund2001} K.J.~\r{A}str\"om, T.~H\"agglund, The future
+of PID control, Control Eng.\ Pract.\ 9~(11) (2001) 1163--1175.
+
+\bibitem{AstromHagglund2004} K.J.~\r{A}str\"om, T.~H\"agglund,
+Revisiting the Ziegler--Nichols step response method for PID control,
+J.~Process Control 14~(6) (2004) 635--650.
+
+\bibitem{Skogestad2003} S.~Skogestad, Simple analytic rules for model
+reduction and PID controller tuning, J.~Process Control 13~(4) (2003)
+291--309.
+
+\bibitem{Desborough2002} L.~Desborough, R.~Miller, Increasing customer
+value of industrial control performance monitoring---Honeywell's
+experience, in: Chemical Process Control VI, AIChE Symposium Series
+No.~326, Vol.~98, 2002, pp.~169--188.
+
+\bibitem{AstromHagglundBook2006} K.J.~\r{A}str\"om, T.~H\"agglund,
+Advanced PID Control, ISA, Research Triangle Park, NC, 2006.
+
+\end{thebibliography}
+
+\end{document}

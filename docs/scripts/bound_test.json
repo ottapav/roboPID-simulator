@@ -1,0 +1,86 @@
+[
+ {
+  "plant": "P1",
+  "beta": 0.1,
+  "start": "A",
+  "period": 8,
+  "ne": 1,
+  "counts": [
+   1,
+   4,
+   2,
+   1
+  ],
+  "half": [
+   1.5,
+   1.0,
+   0.5
+  ],
+  "ok_counts": true,
+  "ok_bound": true,
+  "unit": "e d0 d2 d0 d0 d0 d1 d1"
+ },
+ {
+  "plant": "P1",
+  "beta": 0.07,
+  "start": "A",
+  "period": 8,
+  "ne": 1,
+  "counts": [
+   1,
+   4,
+   2,
+   1
+  ],
+  "half": [
+   1.5,
+   1.0,
+   0.5
+  ],
+  "ok_counts": true,
+  "ok_bound": true,
+  "unit": "e d0 d2 d0 d0 d0 d1 d1"
+ },
+ {
+  "plant": "P3",
+  "beta": 0.1,
+  "start": "A",
+  "period": 16,
+  "ne": 2,
+  "counts": [
+   2,
+   8,
+   4,
+   2
+  ],
+  "half": [
+   3.0,
+   1.5,
+   1.0
+  ],
+  "ok_counts": true,
+  "ok_bound": true,
+  "unit": "d2 e e d0 d0 d0 d0 d0 d0 d1 d0 d1 d0 d2 d1 d1"
+ },
+ {
+  "plant": "P3",
+  "beta": 0.07,
+  "start": "B",
+  "period": 24,
+  "ne": 3,
+  "counts": [
+   3,
+   12,
+   6,
+   3
+  ],
+  "half": [
+   4.0,
+   2.5,
+   1.0
+  ],
+  "ok_counts": true,
+  "ok_bound": true,
+  "unit": "d1 d0 d1 d0 d1 d0 d2 d0 d1 d1 d1 d2 e e d2 e d0 d0 d0 d0 d0 d0 d0 d0"
+ }
+]

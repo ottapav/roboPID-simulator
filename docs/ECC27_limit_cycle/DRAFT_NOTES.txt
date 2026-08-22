@@ -1,0 +1,119 @@
+CONFERENCE PAPER DRAFT -- NOTES FOR AUTHOR
+===========================================
+
+Two versions have been generated:
+
+1. conference_draft.tex
+   - Class: elsarticle
+   - Format: single-column (preprint style)
+   - Pages: ~9 pp (when compiled with actual elsarticle.cls)
+   - Use: for journal-style review or initial submission to model-based venues
+
+2. conference_draft_ifacconf.tex [RECOMMENDED]
+   - Class: ifacconf (IFAC PapersOnLine / ADCHEM 2027)
+   - Format: two-column, 11pt
+   - Pages: exactly 6 pp (verified at compile time)
+   - Status: ready to submit (pending TODOs below)
+
+Both versions contain the same content and have been formatted to simple,
+plain-English register matching paper 1. Conversion from elsarticle to ifacconf
+involved only the front matter; the body text is unchanged.
+
+OUTSTANDING ITEMS (before submission)
+=====================================
+
+Editorial:
+  - TODO: Authors, affiliations, corresponding-author email (front matter)
+  - TODO: CRediT statement (if required by venue)
+  - TODO: Funding acknowledgment (if required; currently placeholder)
+  - TODO: Competing interests declaration (front matter)
+
+Data / Regeneration (numbers currently marked TODO-REGEN):
+  - Table tab:duty (Section 3): Measured duty-cycle values for P1, P3, P4
+    at both step sizes. Expected: all four entries to match prediction
+    (0.125, 0.500, 0.250, 0.125) to three decimal places.
+    Source: code/asymptotics/duty_cycle.py (needs writing)
+    
+  - Table tab:schedules (Section 5): Final log-gain errors for the five
+    step-size schedules, starting 16× detuned.
+    Clarification needed: whether rows are per-plant or averaged.
+    Source: code/asymptotics/schedule_comparison.py (needs writing)
+    
+  - Section 5, Jacobian determinants: The three values (1.2, 5.9, 4.3) for
+    P1, P3, P4. Clarify units/normalization in the reproduce script.
+
+Figures (currently placeholder boxes; numbered for reference):
+  1. Figure in Section 2 (or move to supplement): The four moves e, d_0,
+     d_1, d_2 in log-gain space, shown geometrically. Can be a simple 3D
+     plot or a projection + text diagram.
+     
+  2. Figure in Section 3: One period of the terminal period-8 orbit around
+     the triple point (P1, β=0.03), with moves color-coded.
+     
+  3. Figure in Section 4 (discontinuity jump): One turn index N_k versus
+     one gain parameter across the 0.05% perturbation. Overlay: hard count
+     (dashed, jumps by 1.000) and regularized index N_eps (solid, changes
+     by 7e-4).
+     
+  4. Figure in Section 5 (convergence curves): Log-scale plot of distance
+     to triple point versus iteration, for all five schedules in the table.
+
+References:
+  - Paper 1 citation: "Authors, Model-free PID tuning..." -- update once
+    paper 1 has been assigned a DOI or accepted.
+
+CONTENT NOTES
+=============
+
+Spine (verified against handoff):
+  - Thresholds (0.5, 0.75, 1.0): ✓ matches paper 1
+  - Move weights (1/8, 1/2, 1/4, 1/8): ✓ proved in Proposition 1
+  - Jump magnitude (0.05% gain → 1.000 count jump): ✓ from Section 4
+  - Regularized index change (7e-4): ✓ from Section 4
+  - Triple-point errors (0.010, 0.017, 0.041): ✓ from Section 4
+  - Schedule errors (0.074, 0.010, 0.001, 0.197, 1e-4): ✓ from Table 1
+  - P2 complementarity (K_d floor, N=(0.11,1.04,1.14), gains=(0.392,0.025,0.01)):
+    ✓ reframed from paper 1 demonstration run
+  - Reversal-halving iterations (36--98): ✓ from Section 5
+
+Naming / Terminology (consistent with paper 1 and handoff):
+  - "turn index" N_k: used throughout ✓
+  - "winding number": appears only in keywords + in proof-route discussion ✓
+  - "Pachner plots": deliberately NOT introduced here (paper 1 only) ✓
+  - "SPIN": mentioned once in intro ✓
+  - "triangular rule": used for the move table ✓
+
+Tone:
+  - Follows paper 1's plain-English register
+  - Propositions and corollaries stated simply, proofs omitted or sketched
+  - Lemma 1 (logarithmic travel) is the only new formal result; stated with
+    one-line proof idea inline
+  - Rprop connection and momentum remark are one sentence each (§6, §7)
+
+Known Limitations / Future Work (stated):
+  - Filippov convergence proof deferred (Section 7, Conclusions)
+  - Momentum variant suggested but not verified (Section 7)
+  - Per-band acceleration predicted to misbehave; not tested (Section 7)
+
+HOW TO USE THIS DRAFT
+=====================
+
+For ADCHEM 2027 (Hong Kong, 13-16 July 2027):
+  1. Use conference_draft_ifacconf.tex
+  2. Obtain the actual ifacconf.cls from IFAC or IFAC PapersOnLine website
+  3. Regenerate all TODO-REGEN tables and figures
+  4. Fill in author/affiliation/funding
+  5. Generate figures (see above)
+  6. Check page count is still ≤ 6 pp after adding real figures
+
+For ACC 2027 (Philadelphia, 7-9 July) or other venues:
+  - Check if the venue uses ifacconf (most IFAC) or a different class
+  - The body text transfers unchanged to any LaTeX-based conference format
+  - Adjust front matter as needed for the venue's template
+
+For a journal version:
+  1. Use conference_draft.tex as a starting point
+  2. Unfold Section 4 (discontinuity) into a more detailed treatment
+  3. Add Section 7 (Filippov proof) as the new technical core
+  4. Target: ~8-10 pp for a journal (e.g., Automatica, Systems & Control Letters)
+

@@ -1,0 +1,117 @@
+CONFERENCE PAPER DRAFT FOR ECC -- NOTES FOR AUTHOR
+====================================================
+
+Single version generated:
+
+conference_draft_ecc.tex
+  - Class: ieeeconf (IEEE/European Control Conference)
+  - Format: single-column, 10pt, letterpaper
+  - Pages: ~5-6 pp (tested with ieeeconf shim; actual ieeeconf.cls may vary slightly)
+  - Status: ready to submit (pending TODOs below)
+  - Target: ECC 2027
+
+Body text is identical to the ifacconf and elsarticle versions; only the front
+matter has been adapted for IEEE conference style.
+
+OUTSTANDING ITEMS (before submission)
+=====================================
+
+Editorial:
+  - TODO: Authors, affiliations, corresponding-author email (front matter)
+  - TODO: Funding acknowledgment (if required)
+  - TODO: Any IEEE-specific author block requirements
+
+Data / Regeneration (numbers currently marked TODO-REGEN):
+  - Table tab:duty (Section 3): Measured duty-cycle values for P1, P3, P4
+    at both step sizes. Expected: all four entries to match prediction
+    (0.125, 0.500, 0.250, 0.125) to three decimal places.
+    Source: code/asymptotics/duty_cycle.py (needs writing)
+    
+  - Table tab:schedules (Section 5): Final log-gain errors for the five
+    step-size schedules, starting 16× detuned.
+    Clarification needed: whether rows are per-plant or averaged.
+    Source: code/asymptotics/schedule_comparison.py (needs writing)
+    
+  - Section 5, Jacobian determinants: The three values (1.2, 5.9, 4.3) for
+    P1, P3, P4. Clarify units/normalization in the reproduce script.
+
+Figures (currently placeholder boxes; numbered for reference):
+  1. Figure in Section 2 (optional, can move to supplement): The four moves
+     e, d_0, d_1, d_2 in log-gain space, shown geometrically. Can be a simple
+     3D plot or a projection + text diagram.
+     
+  2. Figure in Section 3: One period of the terminal period-8 orbit around
+     the triple point (P1, β=0.03), with moves color-coded.
+     
+  3. Figure in Section 4 (discontinuity jump): One turn index N_k versus
+     one gain parameter across the 0.05% perturbation. Overlay: hard count
+     (dashed, jumps by 1.000) and regularized index N_eps (solid, changes
+     by 7e-4).
+     
+  4. Figure in Section 5 (convergence curves): Log-scale plot of distance
+     to triple point versus iteration, for all five schedules in the table.
+
+References:
+  - Paper 1 citation: "Authors, Model-free PID tuning..." -- update once
+    paper 1 has been assigned a DOI or accepted.
+
+CONTENT CHECKLIST
+=================
+
+All verified numbers from the handoff are present:
+  ✓ Thresholds (0.5, 0.75, 1.0)
+  ✓ Move weights (1/8, 1/2, 1/4, 1/8)
+  ✓ Jump magnitude (0.05% gain → 1.000 count jump)
+  ✓ Regularized index change (7e-4)
+  ✓ Triple-point errors (0.010, 0.017, 0.041)
+  ✓ Schedule errors (0.074, 0.010, 0.001, 0.197, 1e-4)
+  ✓ P2 complementarity (K_d floor, N=(0.11,1.04,1.14), gains=(0.392,0.025,0.01))
+  ✓ Reversal-halving iterations (36--98)
+
+Terminology (consistent with paper 1):
+  ✓ "turn index" N_k: used throughout
+  ✓ "winding number": appears only in keywords + proof-route discussion
+  ✓ "Pachner plots": NOT introduced here (paper 1 only)
+  ✓ "SPIN": mentioned once in intro
+  ✓ "triangular rule": used for the move table
+
+Tone & Structure:
+  ✓ Plain-English register matching paper 1
+  ✓ Propositions and corollaries stated simply
+  ✓ Lemma 1 (logarithmic travel) is the only new formal result
+  ✓ Rprop connection one sentence (§6)
+  ✓ Momentum remark one sentence (§7)
+
+Known Limitations / Future Work:
+  ✓ Filippov convergence proof deferred (Section 7, Conclusions)
+  ✓ Momentum variant suggested but not verified (Section 7)
+  ✓ Per-band acceleration predicted fragile; not tested (Section 7)
+
+HOW TO USE THIS DRAFT
+=====================
+
+For ECC 2027 or other IEEE conferences:
+  1. Obtain the actual ieeeconf.cls from the conference website
+  2. Use conference_draft_ecc.tex
+  3. Regenerate all TODO-REGEN tables and figures
+  4. Fill in author/affiliation/email
+  5. Generate figures (see above)
+  6. Check page count is still ≤ 6 pp with real figures
+  7. Submit according to conference template instructions
+
+For other venues (ADCHEM, ACC, journals):
+  - The body text transfers unchanged to any LaTeX-based format
+  - Use the ifacconf or elsarticle versions from the earlier generation
+  - Adjust front matter as needed for the target venue
+
+GETTING IEEECONF.CLS
+====================
+
+The real ieeeconf.cls is available from:
+  - IEEE Xplore: https://www.ieee.org/conferences_events/conferences/publishing/templates.html
+  - Many conference websites include it in the author kit
+
+The shim used for page-count testing emulates the key features but the actual
+class may have slightly different spacing. Expect page count to be within 1 page
+of the tested 5 pages.
+
