@@ -17,7 +17,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 GOLDEN_DIR = pathlib.Path(__file__).resolve().parent / 'goldens'
 
-# RoboPID_JPC_paper/main.tex, Section "Validation on a plant battery".
+# docs/JPC26_basic/main.tex, Section "Validation on a plant battery".
 BATTERY: dict[str, tuple[list[float], float, float]] = {
     'P1': ([10.0, 1.0, 1.0, 1.0], 1.0, 1.0),      # lag-dominant
     'P2': ([5.0, 5.0, 5.0, 5.0], 1.25, 8.0),      # balanced

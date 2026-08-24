@@ -1,6 +1,6 @@
 """
 Encirclement-based phase-plane features: the three "Pachner plots" of
-RoboPID_JPC_paper/main.tex (Gamma0, Gamma1, Gamma2 in eq. "plots"). Each
+docs/JPC26_basic/main.tex (Gamma0, Gamma1, Gamma2 in eq. "plots"). Each
 trajectory's winding number about the origin (Definition 1) is a
 dimensionless, scale-free, band-selective damping diagnostic — N0 indicts
 Ki, N1 indicts Kp, N2 indicts Kd (Section "The encirclement features").
@@ -102,7 +102,7 @@ def encirc(x: np.ndarray, y: np.ndarray, eps: float = EPSILON) -> float:
     """
     Compute the signed encirclement count of the trajectory around the origin.
 
-    Implements Definition 1 (Encirclement count) of RoboPID_JPC_paper/main.tex:
+    Implements Definition 1 (Encirclement count) of docs/JPC26_basic/main.tex:
     per-axis peak normalization, truncation at the last entry into the
     epsilon-disc, then winding number as the endpoint angle difference
     corrected by signed crossings of the negative horizontal semi-axis.

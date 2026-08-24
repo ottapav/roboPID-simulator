@@ -27,10 +27,15 @@ def _rule(feats, unstable, cur=(1.0, 1.0, 1.0), gamma=1.0 / 0.9):
                            LIMITS['Fd_min'], LIMITS['Fd_max'])
 
 
-def test_rule_unstable_halves_every_gain():
+def test_rule_unstable_backs_off_hardest_at_the_top_band():
+    """The unstable row cuts every gain, but not by the same factor: Ki /2,
+    Kp /4, Kd /8. The cut deepens with the band's frequency, so a runaway --
+    which the fast bands drive -- is pulled out of by the derivative channel
+    first, while the reset that sets the settling time is disturbed least."""
     Fp, Fi, Fd, row = _rule(_feats(0, 0, 0), unstable=True)
     assert row == 'unstable'
-    assert (Fp, Fi, Fd) == (0.5, 0.5, 0.5)
+    assert (Fp, Fi, Fd) == (0.25, 0.5, 0.125)
+    assert Fd < Fp < Fi < 1.0
 
 
 def test_rule_N0_cuts_reset_only():
@@ -185,10 +190,10 @@ def test_tuner_backs_out_of_divergence_instead_of_climbing_further():
 
     assert not np.isfinite(rows[0][2]), 'setup must actually diverge to be a regression'
     assert rows[0][1] == 'unstable', f'diverged run scored {rows[0][1]!r}'
-    assert MANUAL_READING[rows[0][1]] == 'runaway: halve all'
+    assert MANUAL_READING[rows[0][1]] == 'runaway: back off hard'
     assert rows[1][0] < rows[0][0], 'gain must come down off a diverged run'
 
-    # And it must not sit there: within a few halvings the record is finite again.
+    # And it must not sit there: within a few backoffs the record is finite again.
     assert any(np.isfinite(pk) for _, _, pk in rows[:4])
 
 

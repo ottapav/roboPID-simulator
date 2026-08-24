@@ -2,7 +2,7 @@
 RoboPID — Dash web app entry point.
 
 Local usage:
-    python app.py [--tau "5,5,5,5"] [--K 1.25] [--L 8] [--Ts 1] [--ctype PID]
+    python app.py [--tau "5,5,5,5"] [--K 1.25] [--L 8] [--ctype PID]
 
 Then open http://localhost:8050 in your browser.
 
@@ -21,7 +21,7 @@ import dash_bootstrap_components as dbc
 import diskcache
 from dash import DiskcacheManager
 
-from core.params import N_POINTS, parse_tau
+from core.params import N_POINTS, fmt2, parse_tau
 from core.signals import auto_grid
 from layout import make_layout
 from callbacks import register_callbacks
@@ -33,8 +33,6 @@ def parse_args():
                    help='Time constants, e.g. "[5,5,5,5]" or "10"')
     p.add_argument('--K', type=float, default=1.25, help='Plant gain')
     p.add_argument('--L', type=float, default=8.0, help='Dead time')
-    p.add_argument('--N', type=int, default=N_POINTS,
-                   help='Samples per simulation (the auto-grid proposal)')
     p.add_argument('--ctype', default='PID', choices=['I', 'PI', 'PID'],
                    help='Controller type')
     p.add_argument('--port', type=int, default=8050, help='Port')
@@ -91,7 +89,7 @@ server = app.server
 _default_tau = parse_tau(args.tau)[0]
 # Seed the header's grid fields with the same proposal propose_grid would make,
 # so the first paint is already consistent with what any τ/L edit produces.
-_default_tsim, _default_ts = auto_grid(_default_tau, args.L, args.N)
+_default_tsim, _default_ts = auto_grid(_default_tau, args.L)
 
 app.layout = make_layout(
     default_tau=args.tau,
@@ -99,11 +97,11 @@ app.layout = make_layout(
     default_L=str(args.L),
     default_noise_tau=0.1 * float(np.mean(_default_tau)),
     default_tsim=f'{_default_tsim:.4g}',
-    default_ts=f'{_default_ts:.4g}',
+    default_ts=fmt2(_default_ts),
     default_ctype=args.ctype,
 )
 
-register_callbacks(app, n_points=args.N)
+register_callbacks(app)
 
 
 def main():
@@ -113,7 +111,10 @@ def main():
 
     print(f'\n  RoboPID running at http://localhost:{port}')
     print(f'  Plant: tau={args.tau}, K={args.K}, L={args.L}')
-    print(f'  Grid: N={args.N}, Tsim={_default_tsim:.4g}, Ts={_default_ts:.4g}')
+    # Same rendering as the header fields, so the banner and the GUI never
+    # disagree about the grid the app started on. N is the fixed sample count
+    # every simulation runs on; the GUI doesn't show it because it never moves.
+    print(f'  Grid: N={N_POINTS}, Tsim={_default_tsim:.4g}, Ts={fmt2(_default_ts)}')
     print(f'  Controller: {args.ctype}\n')
 
     app.run(debug=args.debug, host='0.0.0.0', port=port, threaded=True)

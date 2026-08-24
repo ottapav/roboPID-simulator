@@ -2,7 +2,7 @@
 Signal utilities: assembling loop signals dict, scaling, and derivative augmentation.
 
 `settling_index` implements the settling-anchored window guard of
-RoboPID_JPC_paper/main.tex (Definition 4, the delta guard restoring window
+docs/JPC26_basic/main.tex (Definition 4, the delta guard restoring window
 independence of the encirclement counts). `find_index` implements the
 maximum-likelihood stability screen from the same paper.
 """
@@ -15,29 +15,30 @@ from .params import HORIZON_SPANS, K1_PADDING, K2_PADDING, N_POINTS
 from .pid import pid_response_linear, pid_response_awup, action_components
 
 
-def auto_grid(tau, L: float, N: int = N_POINTS) -> tuple[float, float]:
+def auto_grid(tau, L: float) -> tuple[float, float]:
     """
     Simulation horizon and sampling period, proposed together from the plant.
 
     Under a fixed sample count the two are not two decisions but one. The
     horizon is set by the plant's own timescale and the period simply follows,
-    so every simulation costs the same N samples and the transient occupies the
-    same fraction of the record whether the plant settles in 2 s or 2000 s:
+    so every simulation costs the same N_POINTS samples and the transient
+    occupies the same fraction of the record whether the plant settles in 2 s or
+    2000 s:
 
       span = sum(tau) + L
-      Tsim = HORIZON_SPANS * span     long enough for the response to settle, so
-                                      settling_index has something to anchor to
-      Ts   = Tsim / (N - 1)           = span / 49.9 at the default N
+      Tsim = HORIZON_SPANS * span      long enough for the response to settle, so
+                                       settling_index has something to anchor to
+      Ts   = Tsim / (N_POINTS - 1)     = span / 49.9
 
-    Both halves are load-bearing, and the GUI lets the user override either, so
-    it is worth being explicit about what each one buys:
+    Both halves are load-bearing, and the GUI lets the user override the
+    horizon, so it is worth being explicit about what each one buys:
 
     *The horizon* must outlive the transient. Truncating it ends the record
     before the response settles, which pins settling_index's k_delta onto k2 and
     degenerates Definition 4's guard into exactly the unguarded raw-window count
     it exists to replace (test_settling_guard_active_on_a_full_record pins this).
-    That is why callbacks._clamp_grid answers an unreasonable hand-entered pair
-    by moving Ts and never Tsim.
+    That is why callbacks._clamp_grid answers an unreadable horizon with this
+    proposal rather than with anything shorter.
 
     *The period* must resolve the transient past the fixed analysis padding: at
     Ts = span, a tau=1 plant settles in about as many samples as K1_PADDING +
@@ -51,7 +52,7 @@ def auto_grid(tau, L: float, N: int = N_POINTS) -> tuple[float, float]:
     tau = np.atleast_1d(np.asarray(tau, dtype=float))
     span = float(np.sum(tau)) + L
     Tsim = HORIZON_SPANS * span
-    return Tsim, Tsim / (N - 1)
+    return Tsim, Tsim / (N_POINTS - 1)
 
 
 def loop_signals(tau, K, L, Ts, Kp, Ki, Kd, dtype: str = 'y',
@@ -190,7 +191,7 @@ def find_index(m: int, n: int, M: np.ndarray) -> tuple[int, bool]:
     exceeds the early segment's — the signal is getting noisier/more active
     over time rather than settling.
 
-    Implements the stability screen of RoboPID_JPC_paper/main.tex (Section
+    Implements the stability screen of docs/JPC26_basic/main.tex (Section
     "A stability screen"): a settling response front-loads its energy, a
     diverging one back-loads it, and the verdict is scale- and time-invariant
     since both mean squares scale identically.

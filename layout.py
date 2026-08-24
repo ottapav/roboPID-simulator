@@ -8,7 +8,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from core.params import (
-    BETA, DELTA, EPS, GAIN_BOX, NBAR, N_ITER_BY_CTYPE, gain_slider_marks,
+    BETA, DELTA, EPS, GAIN_BOX, NBAR, N_ITER_BY_CTYPE, fmt2, gain_slider_marks,
 )
 
 # The gain sliders are log-scale over the gain box, so their range and marks
@@ -97,10 +97,11 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau,
     return dbc.Card([
         # The simulation grid describes how the plant is *observed*, not what it
         # is, so it sits in the header alongside the card title rather than in
-        # the body among the τ/K/L fields that define the plant itself. Both
-        # values are proposed automatically from τ and L (see auto_grid) and
-        # rewritten whenever those change, but stay editable — hence ↺ to get
-        # the proposal back. N is derived from the pair and read-only.
+        # the body among the τ/K/L fields that define the plant itself. The
+        # sample count is a constant (params.N_POINTS) and is not shown at all,
+        # which leaves Tsim as the one editable grid value: it is proposed from
+        # τ and L (see auto_grid), rewritten whenever those change — hence ↺ to
+        # get the proposal back — and Ts follows as Tsim/499, read-only.
         #
         # The Row needs w-100 because CARD_HEADER_STYLE makes the header a flex
         # container — without it the Row won't span and ms-auto can't push the
@@ -112,13 +113,11 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau,
                 _grid_field('Tsim', 'input-tsim', default_tsim,
                             'Simulation horizon — proposed as 10 plant spans '
                             '(sum τ + L), editable', cls='ms-auto'),
-                _grid_field('Ts', 'input-ts', default_ts,
-                            'Sampling period — proposed as Tsim / 499, editable'),
                 dbc.Col(html.Small(
-                    ['N ', html.Span(id='display-n',
-                                     style={'fontWeight': 'bold', 'color': '#333'})],
+                    ['Ts ', html.Span(id='display-ts', children=default_ts,
+                                      style={'fontWeight': 'bold', 'color': '#333'})],
                     style={'color': '#777', 'whiteSpace': 'nowrap'},
-                    title='Samples evaluated — 500 unless Tsim or Ts is overridden'),
+                    title='Sampling period — Tsim / 499, shown to two decimals'),
                     width='auto', className='align-self-center'),
                 dbc.Col(html.Button(
                     '↺', id='btn-grid-auto', n_clicks=0,
@@ -138,11 +137,11 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau,
                 placeholder='e.g. [5,5,5,5] or 10',
             )),
             _row('K (static gain)', dcc.Input(
-                id='input-K', type='text', value=f'{float(default_K):.2f}',
+                id='input-K', type='text', value=fmt2(default_K),
                 debounce=True, style={'width': '100%'},
             )),
             _row('L (dead time)', dcc.Input(
-                id='input-L', type='text', value=f'{float(default_L):.2f}',
+                id='input-L', type='text', value=fmt2(default_L),
                 debounce=True, style={'width': '100%'},
             )),
             html.Hr(style={'borderColor': '#e0e0e0', 'margin': '10px 0'}),
@@ -157,11 +156,11 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau,
             ], className='mb-2'),
             noise_formula,
             _row('σ (noise std, %)', dcc.Input(
-                id='input-noise-std', type='text', value=f'{1.0:.2f}',
+                id='input-noise-std', type='text', value=fmt2(1.0),
                 debounce=True, disabled=True, style={'width': '100%'},
             )),
             _row('τ (noise filter)', dcc.Input(
-                id='input-noise-tau', type='text', value=f'{float(default_noise_tau):.2f}',
+                id='input-noise-tau', type='text', value=fmt2(default_noise_tau),
                 debounce=True, disabled=True, style={'width': '100%'},
             )),
         ]),
@@ -358,14 +357,37 @@ _BIBTEX = """@misc{pachner2026robopid,
 }"""
 
 
+def _tune_error_modal() -> dbc.Modal:
+    """Where a rejected Tune click explains itself.
+
+    A blocking finding means the tuning problem has no answer for this plant,
+    which is more than the one-line `tune-status` slot can carry and more than
+    the warning line -- which the next slider drag overwrites -- should be
+    trusted to hold. It is the only modal in the app; everything advisory still
+    goes to `input-warning`.
+
+    size='lg' because the phase message runs to three paragraphs plus a
+    three-item fix list, and the point of it is that it is readable.
+    """
+    return dbc.Modal([
+        dbc.ModalHeader(dbc.ModalTitle('Plant outside the tunable class'),
+                        close_button=True),
+        dbc.ModalBody(id='tune-error-body'),
+        dbc.ModalFooter(dbc.Button('Close', id='btn-tune-error-close',
+                                   className='ms-auto', n_clicks=0)),
+    ], id='tune-error-modal', is_open=False, centered=True, size='lg',
+        scrollable=True)
+
+
 def _footer() -> html.Div:
     return html.Div([
         html.Hr(style={'borderColor': '#e0e0e0', 'margin': '18px 0 10px'}),
         html.P([
             'If roboPID is useful in your research, please consider citing '
-            'the paper it implements: D. Pachner, P. Otta, J. Dostál, '
-            'V. Havlena, “Model-Free PID Tuning by Step-Response '
-            'Inspection,” submitted to Journal of Process Control.',
+            'the paper it implements: ',
+            html.Strong('D. Pachner, P. Otta, J. Dostál, '
+                        'V. Havlena, “Model-Free PID Tuning by Step-Response '
+                        'Inspection,” submitted to Journal of Process Control.'),
         ], style={'fontSize': '12px', 'color': '#777', 'marginBottom': '6px'}),
         html.Pre(_BIBTEX, style={
             'fontSize': '11px', 'color': '#555', 'backgroundColor': '#f8f9fa',
@@ -444,6 +466,21 @@ def make_layout(default_tau: str = '[5,5,5,5]',
             id='input-warning',
             style={'fontSize': '12px', 'color': '#b45309', 'minHeight': '16px'},
         ), width=12), className='mb-1'),
+
+        # ── Advisory findings from the last Tune run ─────────────────────────
+        # A separate surface from input-warning, and deliberately so: run_tune's
+        # final return moves the sliders, which re-triggers update_figures_patch
+        # as soon as `tuning-active` clears -- and that callback owns
+        # input-warning, so anything the tuner wrote there would be overwritten
+        # the moment it finished. This Div has exactly one writer.
+        dbc.Row(dbc.Col(html.Div(
+            id='tune-findings',
+            style={'fontSize': '12px', 'color': '#b45309'},
+        ), width=12), className='mb-1'),
+
+        # Opened by run_tune when a gate rejects the click; see
+        # core.admissibility.
+        _tune_error_modal(),
 
         # ── Step Response ──────────────────────────────────────────────────
         dbc.Row(dbc.Col(_step_response_card(), width=12), className='mb-1'),

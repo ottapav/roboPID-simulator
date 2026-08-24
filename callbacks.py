@@ -24,14 +24,15 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
-from dash import Input, Output, State, Patch, no_update, ctx
+from dash import Input, Output, State, Patch, html, no_update, ctx
 import plotly.graph_objects as go
 
+from core.admissibility import check_plant, diagnose_run
 from core.config import read_config, build_noise_model
 from core.features import standard_pid_features, loop_response_features
 from core.params import (
-    BETA, DELTA, EPS, GAIN_BOX, NBAR, N_ITER_BY_CTYPE, N_MAX, N_MIN, N_POINTS,
-    gain_slider_marks, parse_tau,
+    BETA, DELTA, EPS, GAIN_BOX, NBAR, N_ITER_BY_CTYPE, N_POINTS,
+    fmt2, gain_slider_marks, parse_tau,
 )
 from core.signals import auto_grid
 from core.tuning import pid_tuning, MANUAL_READING
@@ -46,7 +47,7 @@ _C = {
     'y': 'red', 'r': 'rgba(200,0,0,0.4)', 'u': 'royalblue',
 }
 
-# Battery plants from RoboPID_JPC_paper/main.tex, Section "Validation on a
+# Battery plants from docs/JPC26_basic/main.tex, Section "Validation on a
 # plant battery": (tau string for input-tau, K, L). Keyed by button id.
 BATTERY_PRESETS = {
     'btn-p1': ('[10, 1, 1, 1]', 1.0, 1.0),        # lag-dominant
@@ -111,6 +112,36 @@ def _build_warning(tau_notes, grid_notes, K_val, L_val, Nbar0, Nbar1, Nbar2) -> 
     return f'⚠ {" · ".join(msgs)}' if msgs else ''
 
 
+def _render_findings(findings, prefix: str = '⚠ '):
+    """Render core.admissibility Findings for either display surface.
+
+    The modal and the warning line share this so a message cannot be worded
+    twice and drift; the Finding carries title/detail/fixes precisely so the
+    same object can be shown at either density. Returns '' for an empty list,
+    which is what both targets want as their cleared state.
+    """
+    findings = list(findings)
+    if not findings:
+        return ''
+
+    blocks = []
+    for f in findings:
+        parts = [html.Div(f'{prefix}{f.title}',
+                          style={'fontWeight': 'bold', 'marginBottom': '3px'})]
+        parts += [html.Div(p, style={'marginBottom': '3px'}) for p in f.detail]
+        if f.fixes:
+            parts.append(html.Ul([html.Li(x) for x in f.fixes],
+                                 style={'marginBottom': 0, 'paddingLeft': '18px'}))
+        blocks.append(html.Div(parts, style={'marginBottom': '8px'}))
+    return html.Div(blocks)
+
+
+def _status_suffix(findings) -> str:
+    """The terse form, for the one-line status slot next to the TUNE button."""
+    tags = [f.status for f in findings if f.status]
+    return f' {tags[0]}' if tags else ''
+
+
 _cfg_cache: dict = {}
 
 
@@ -141,8 +172,10 @@ def _noise_coeffs(enabled, std_raw, tau_raw, Ts: float) -> tuple[float, float]:
 
 # ── Simulation grid ───────────────────────────────────────────────────────────
 # The grid has two possible sources -- auto_grid's proposal, or whatever the
-# user typed into the Tsim/Ts fields -- and three consumers (update_figures_full,
+# user typed into the Tsim field -- and three consumers (update_figures_full,
 # update_figures_patch, run_tune). The arbitration lives here so all three agree.
+# N is fixed at params.N_POINTS throughout, so Ts is never a source of its own:
+# it is Tsim/(N_POINTS - 1) whichever branch the horizon came from.
 
 def _grid_sig(tau, L) -> list:
     """The plant identity a proposed grid belongs to.
@@ -157,8 +190,8 @@ def _grid_sig(tau, L) -> list:
     return [float(np.sum(tau)), float(L)]
 
 
-def _propose_grid(tau, L, n_points: int) -> dict:
-    Tsim, Ts = auto_grid(tau, L, n_points)
+def _propose_grid(tau, L) -> dict:
+    Tsim, Ts = auto_grid(tau, L)
     return {'sig': _grid_sig(tau, L), 'Tsim': Tsim, 'Ts': Ts, 'notes': []}
 
 
@@ -166,24 +199,26 @@ def _grid_matches(store, tau, L) -> bool:
     return isinstance(store, dict) and store.get('sig') == _grid_sig(tau, L)
 
 
-def _resolve_grid(store, tau, L, n_points: int) -> dict:
+def _resolve_grid(store, tau, L) -> dict:
     """The grid to simulate on: the store's when it belongs to this plant, the
     auto proposal otherwise (first paint, or a tau/L edit commit_grid has not
     answered yet)."""
-    return store if _grid_matches(store, tau, L) else _propose_grid(tau, L, n_points)
+    return store if _grid_matches(store, tau, L) else _propose_grid(tau, L)
 
 
-def _clamp_grid(tsim_raw, ts_raw, fallback: dict) -> dict:
-    """Validate a hand-entered (Tsim, Ts) pair against the last good grid.
+def _clamp_grid(tsim_raw, fallback: dict) -> dict:
+    """Validate a hand-entered horizon against the last good grid.
 
-    Every correction lands on Ts and never on Tsim, for the reason auto_grid's
-    docstring gives: a truncated horizon ends the record before the response
-    settles, which pins settling_index's k_delta onto k2 and degenerates
-    Definition 4's guard. A coarser Ts only costs resolution the window can
-    spare.
+    Tsim is the only grid value the user can type: N is the constant N_POINTS,
+    so Ts is a consequence of the horizon rather than a second decision. An
+    unusable horizon therefore has nothing to correct against except the grid
+    that was already standing, which is what `fallback` is -- shortening it
+    instead would end the record before the response settles, pinning
+    settling_index's k_delta onto k2 and degenerating Definition 4's guard (see
+    auto_grid).
 
     Corrections are reported through the warning line rather than written back
-    into the fields -- a callback cannot write a component property it also
+    into the field -- a callback cannot write a component property it also
     reads, and this matches how a bad K is already handled: the box keeps what
     was typed, the warning says what was simulated.
     """
@@ -194,23 +229,8 @@ def _clamp_grid(tsim_raw, ts_raw, fallback: dict) -> dict:
         Tsim = fallback['Tsim']
         notes.append(f'Tsim: not a positive number — using {Tsim:.4g}')
 
-    Ts = _f(ts_raw, float('nan'))
-    if not np.isfinite(Ts) or Ts <= 0:
-        Ts = Tsim / (N_POINTS - 1)
-        notes.append(f'Ts: not a positive number — using {Ts:.4g}')
-    elif Ts >= Tsim:
-        Ts = Tsim / (N_POINTS - 1)
-        notes.append(f'Ts: must be shorter than Tsim — using {Ts:.4g}')
-
-    N = int(round(Tsim / Ts)) + 1
-    if N > N_MAX:
-        Ts = Tsim / (N_MAX - 1)
-        notes.append(f'grid: N capped at {N_MAX} — simulating at Ts = {Ts:.4g}')
-    elif N < N_MIN:
-        Ts = Tsim / (N_MIN - 1)
-        notes.append(f'grid: N floored at {N_MIN} — simulating at Ts = {Ts:.4g}')
-
-    return {'sig': fallback.get('sig'), 'Tsim': Tsim, 'Ts': Ts, 'notes': notes}
+    return {'sig': fallback.get('sig'), 'Tsim': Tsim,
+            'Ts': Tsim / (N_POINTS - 1), 'notes': notes}
 
 
 @dataclass(frozen=True)
@@ -246,7 +266,7 @@ class SimParams:
                 self.delta, self.eps, self.cfg, self.dist_a, self.dist_b)
 
 
-def _read_inputs(n_points, grid_store, ctype, tau_str, K_val, L_val,
+def _read_inputs(grid_store, ctype, tau_str, K_val, L_val,
                  Kp_log, Ki_log, Kd_log,
                  nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
                  noise_enabled, noise_std_raw, noise_tau_raw) -> SimParams:
@@ -254,7 +274,7 @@ def _read_inputs(n_points, grid_store, ctype, tau_str, K_val, L_val,
     K = _f(K_val, 1.0)
     L = _deadtime(L_val)
     Nbar = (_f(nbar0_raw, NBAR[0]), _f(nbar1_raw, NBAR[1]), _f(nbar2_raw, NBAR[2]))
-    grid = _resolve_grid(grid_store, tau, L, n_points)
+    grid = _resolve_grid(grid_store, tau, L)
     Ts = grid['Ts']
     return SimParams(
         tau=tau, K=K, L=L, Tsim=grid['Tsim'], Ts=Ts,
@@ -290,6 +310,12 @@ def _simulate(tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
     return feats, sigs
 
 
+def _feature_title(feat: dict, idx: int) -> str:
+    """The Γ-plot heading. Shared by the full rebuild and the patch path so the
+    two can't drift into rendering the same count differently."""
+    return f'Γ{idx}: N={fmt2(feat["N"])} (limit {fmt2(feat["Nbar"])})'
+
+
 def _patches_from(feats, sigs):
     """Build the four figure patches from an already-computed simulation.
 
@@ -302,8 +328,7 @@ def _patches_from(feats, sigs):
         p = Patch()
         p['data'][0]['x'] = feat['xdata'].tolist()
         p['data'][0]['y'] = feat['ydata'].tolist()
-        p['layout']['title']['text'] = (
-            f'Γ{i}: N={feat["N"]:.2f} (limit {feat["Nbar"]})')
+        p['layout']['title']['text'] = _feature_title(feat, i)
         patches_f.append(p)
 
     # x must be patched together with y: tau/K/L and the Tsim/Ts fields are all
@@ -376,7 +401,7 @@ def _style_axes(fig: go.Figure, zeroline: bool = True,
 
 
 def _build_feature_fig(feat: dict, idx: int) -> go.Figure:
-    title = f'Γ{idx}: N={feat["N"]:.2f} (limit {feat["Nbar"]})'
+    title = _feature_title(feat, idx)
     fig = go.Figure(data=[
         go.Scatter(x=feat['xdata'].tolist(), y=feat['ydata'].tolist(),
                    mode='lines', line={'color': 'steelblue', 'width': 1.5},
@@ -468,10 +493,10 @@ def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
 
 # ── Callbacks registration ────────────────────────────────────────────────────
 
-def register_callbacks(app, n_points: int = N_POINTS):
+def register_callbacks(app):
 
     # ── 0a. Battery preset buttons ───────────────────────────────────────
-    # Fills tau/K/L from RoboPID_JPC_paper/main.tex's P1-P4 battery; the
+    # Fills tau/K/L from docs/JPC26_basic/main.tex's P1-P4 battery; the
     # existing tau/K/L Inputs on update_figures_patch pick up the change and
     # redraw automatically. Controller gains/type/limits are left alone.
     @app.callback(
@@ -489,24 +514,24 @@ def register_callbacks(app, n_points: int = N_POINTS):
         if preset is None:
             return no_update, no_update, no_update
         tau_str, K, L = preset
-        return tau_str, f'{K:.2f}', f'{L:.2f}'
+        return tau_str, fmt2(K), fmt2(L)
 
     # ── 0a2. Simulation grid: propose, then commit ───────────────────────
     # Two callbacks rather than one because Dash forbids a callback from both
-    # reading and writing the same component property, and the grid fields are
+    # reading and writing the same component property, and the Tsim field is
     # written by the app and read from the user. The split turns out to be the
     # right shape anyway: neither half has to work out which of the two it is
     # looking at.
     #
-    #   propose_grid   τ/L/↺        → the two fields          (the proposal)
-    #   commit_grid    the fields   → grid-store              (the verdict)
+    #   propose_grid   τ/L/↺        → the Tsim field          (the proposal)
+    #   commit_grid    the field    → grid-store              (the verdict)
+    #   show_ts        grid-store   → the Ts readout          (the consequence)
     #
     # So a τ edit reaches the store the long way round, one callback behind the
     # figure callbacks that also watch τ. update_figures_patch's staleness guard
     # is what keeps that from drawing the new plant on the old time base.
     @app.callback(
         Output('input-tsim', 'value'),
-        Output('input-ts', 'value'),
         Input('input-tau', 'value'),
         Input('input-L', 'value'),
         Input('btn-grid-auto', 'n_clicks'),
@@ -514,25 +539,37 @@ def register_callbacks(app, n_points: int = N_POINTS):
     )
     def propose_grid(tau_str, L_val, _n_auto):
         tau, _ = parse_tau(tau_str)
-        grid = _propose_grid(tau, _deadtime(L_val), n_points)
-        return f'{grid["Tsim"]:.4g}', f'{grid["Ts"]:.4g}'
+        grid = _propose_grid(tau, _deadtime(L_val))
+        return f'{grid["Tsim"]:.4g}'
 
     @app.callback(
         Output('grid-store', 'data'),
         Input('input-tsim', 'value'),
-        Input('input-ts', 'value'),
         State('input-tau', 'value'),
         State('input-L', 'value'),
         State('grid-store', 'data'),
         prevent_initial_call=False,
     )
-    def commit_grid(tsim_raw, ts_raw, tau_str, L_val, store):
+    def commit_grid(tsim_raw, tau_str, L_val, store):
         tau, _ = parse_tau(tau_str)
         L = _deadtime(L_val)
-        fallback = _resolve_grid(store, tau, L, n_points)
-        grid = _clamp_grid(tsim_raw, ts_raw, fallback)
+        fallback = _resolve_grid(store, tau, L)
+        grid = _clamp_grid(tsim_raw, fallback)
         grid['sig'] = _grid_sig(tau, L)
         return grid
+
+    # Ts is read out of the committed grid rather than computed alongside the
+    # proposal, so what the header shows is the period actually simulated --
+    # including when _clamp_grid answered a bad horizon with the old one.
+    @app.callback(
+        Output('display-ts', 'children'),
+        Input('grid-store', 'data'),
+        prevent_initial_call=False,
+    )
+    def show_ts(store):
+        if not isinstance(store, dict) or 'Ts' not in store:
+            return no_update
+        return fmt2(store['Ts'])
 
     # ── 0b. Guard mode toggle ────────────────────────────────────────────
     # Checked (Guarded): delta stays whatever the field holds (Definition 4).
@@ -629,8 +666,8 @@ def register_callbacks(app, n_points: int = N_POINTS):
         prevent_initial_call=True,
     )
     def update_gain_slider_range(kmin_raw, kmax_raw, kp_log, ki_log, kd_log):
-        kmin = max(_f(kmin_raw, 0.01), 1e-6)
-        kmax = _f(kmax_raw, 10.0)
+        kmin = max(_f(kmin_raw, GAIN_BOX[0]), 1e-6)
+        kmax = _f(kmax_raw, GAIN_BOX[1])
         if kmax <= kmin:
             return (no_update,) * 12
 
@@ -656,7 +693,6 @@ def register_callbacks(app, n_points: int = N_POINTS):
         Output('graph-f3', 'figure'),
         Output('graph-time', 'figure'),
         Output('input-warning', 'children'),
-        Output('display-n', 'children'),
         Input('dropdown-ctype', 'value'),
         Input('input-nbar0', 'value'),
         Input('input-nbar1', 'value'),
@@ -681,14 +717,14 @@ def register_callbacks(app, n_points: int = N_POINTS):
     def update_figures_full(ctype, nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
                             Kp_log, Ki_log, Kd_log, tau_str, K_val, L_val,
                             noise_enabled, noise_std_raw, noise_tau_raw, grid_store):
-        p = _read_inputs(n_points, grid_store, ctype, tau_str, K_val, L_val,
+        p = _read_inputs(grid_store, ctype, tau_str, K_val, L_val,
                          Kp_log, Ki_log, Kd_log,
                          nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
                          noise_enabled, noise_std_raw, noise_tau_raw)
         feats, sigs = _simulate(*p.sim_args)
 
         figs_f = [_build_feature_fig(feats[i], i) for i in range(3)]
-        return (*figs_f, _build_time_fig(sigs), p.warning, str(len(sigs['t'])))
+        return (*figs_f, _build_time_fig(sigs), p.warning)
 
     # ── 1b. Patch update on slider move ────────────────────────────────────
     # Only trace data changes — no figure rebuild, very fast.
@@ -698,7 +734,6 @@ def register_callbacks(app, n_points: int = N_POINTS):
         Output('graph-f3', 'figure', allow_duplicate=True),
         Output('graph-time', 'figure', allow_duplicate=True),
         Output('input-warning', 'children', allow_duplicate=True),
-        Output('display-n', 'children', allow_duplicate=True),
         Input('slider-kp', 'value'),
         Input('slider-ki', 'value'),
         Input('slider-kd', 'value'),
@@ -727,7 +762,7 @@ def register_callbacks(app, n_points: int = N_POINTS):
         # trigger a full simulation in this process whose figure output then
         # races the patch the tuner is streaming to the same four graphs.
         if tuning_active:
-            return (no_update,) * 6
+            return (no_update,) * 5
 
         # tau/L are Inputs here and also drive propose_grid -> commit_grid, so a
         # tau edit reaches this callback one pass before the grid derived from
@@ -739,14 +774,13 @@ def register_callbacks(app, n_points: int = N_POINTS):
         # arrived at all.
         if grid_store is not None and not _grid_matches(
                 grid_store, parse_tau(tau_str)[0], _deadtime(L_val)):
-            return (no_update,) * 6
+            return (no_update,) * 5
 
-        p = _read_inputs(n_points, grid_store, ctype, tau_str, K_val, L_val,
+        p = _read_inputs(grid_store, ctype, tau_str, K_val, L_val,
                          Kp_log, Ki_log, Kd_log,
                          nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
                          noise_enabled, noise_std_raw, noise_tau_raw)
-        sigs_n = int(round(p.Tsim / p.Ts)) + 1
-        return (*_patch_figures(*p.sim_args), p.warning, str(sigs_n))
+        return (*_patch_figures(*p.sim_args), p.warning)
 
     # ── 2. Controller-type gain-slider visibility ──────────────────────────
     @app.callback(
@@ -782,7 +816,7 @@ def register_callbacks(app, n_points: int = N_POINTS):
             v = _f(val, default)
             if minimum is not None:
                 v = max(v, minimum)
-            formatted = f'{v:.2f}'
+            formatted = fmt2(v)
             return no_update if formatted == str(val) else formatted
         return _round2
 
@@ -810,6 +844,18 @@ def register_callbacks(app, n_points: int = N_POINTS):
         prevent_initial_call=False,
     )(_make_round2(0.5, minimum=0.01))
 
+    # ── 2d. Dismiss the admissibility modal ───────────────────────────────
+    # The header × and the backdrop close it client-side; the footer button
+    # needs this. allow_duplicate because run_tune owns is_open as a primary
+    # output.
+    @app.callback(
+        Output('tune-error-modal', 'is_open', allow_duplicate=True),
+        Input('btn-tune-error-close', 'n_clicks'),
+        prevent_initial_call=True,
+    )
+    def close_tune_error(_n_clicks):
+        return False
+
     # ── 3. Tune button ────────────────────────────────────────────────────
     # Background callback: runs pid_tuning() in a worker process (DiskcacheManager)
     # and streams live progress (sliders, status text, and the same figure patches
@@ -820,6 +866,9 @@ def register_callbacks(app, n_points: int = N_POINTS):
         Output('slider-kd', 'value'),
         Output('tune-status', 'children'),
         Output('graph-gains-history', 'figure'),
+        Output('tune-error-modal', 'is_open'),
+        Output('tune-error-body', 'children'),
+        Output('tune-findings', 'children'),
         Input('btn-tune', 'n_clicks'),
         State('slider-kp', 'value'),
         State('slider-ki', 'value'),
@@ -852,6 +901,7 @@ def register_callbacks(app, n_points: int = N_POINTS):
             Output('graph-f2', 'figure', allow_duplicate=True),
             Output('graph-f3', 'figure', allow_duplicate=True),
             Output('graph-gains-history', 'figure', allow_duplicate=True),
+            Output('tune-findings', 'children', allow_duplicate=True),
         ],
         running=[
             (Output('btn-tune', 'disabled'), True, False),
@@ -865,7 +915,11 @@ def register_callbacks(app, n_points: int = N_POINTS):
                  ctype, Nbar0, Nbar1, Nbar2, niter_val, eps_val, delta_val, beta_val,
                  kmin_val, kmax_val, grid_store):
         tau, tau_notes = parse_tau(tau_str)
-        K   = _f(K_val, 1.0)
+        # nan, not 1.0, as the fallback: an unreadable K is a thing to refuse,
+        # not to substitute for. The figure callbacks can afford to draw
+        # *something*; a tuning run that silently searched against K = 1 would
+        # hand back gains for a plant nobody asked about.
+        K   = _f(K_val, float('nan'))
         L   = _deadtime(L_val)
         Nbar0, Nbar1, Nbar2 = _f(Nbar0, 0.5), _f(Nbar1, 0.75), _f(Nbar2, 1.0)
 
@@ -876,9 +930,33 @@ def register_callbacks(app, n_points: int = N_POINTS):
         Kp_base = 0.0 if ctype == 'I' else Kp
         Kd_base = 0.0 if ctype in ('I', 'PI') else Kd
 
+        Kmin       = _f(kmin_val, GAIN_BOX[0])
+        Kmax       = _f(kmax_val, GAIN_BOX[1])
+
+        # Admissibility, before anything is simulated. A blocking finding means
+        # the search has no answer to converge to, so the run is refused and
+        # explained in the modal rather than spending n_iter iterations walking
+        # to a bound and reporting "Tuned".
+        verdict = check_plant(tau, K, L, ctype,
+                              {'Kp': Kp_base, 'Ki': Ki, 'Kd': Kd_base},
+                              gain_box=(Kmin, Kmax), K_raw=K_val)
+        if not verdict.ok:
+            # The findings line is cleared rather than left alone: whatever the
+            # previous run advised is about gains this click did not produce.
+            return (no_update, no_update, no_update,
+                    _status_suffix(verdict.blocking).strip() or '⚠ Not tunable',
+                    no_update, True, _render_findings(verdict.blocking, prefix=''),
+                    '')
+
+        # Advisory findings ride along with the run: shown from the first
+        # progress push, then re-emitted alongside whatever the run itself
+        # turned out to say.
+        gate_warnings = list(verdict.warnings)
+        warn_children = _render_findings(gate_warnings)
+
         # The grid the user is looking at, so a tuning run scores the same
         # response the plots show rather than a second, independent one.
-        grid = _resolve_grid(grid_store, tau, L, n_points)
+        grid = _resolve_grid(grid_store, tau, L)
         Tsim, Ts = grid['Tsim'], grid['Ts']
         cfg = _load_cfg()
         dist_a, dist_b = _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, Ts)
@@ -887,16 +965,22 @@ def register_callbacks(app, n_points: int = N_POINTS):
         eps_tune   = _f(eps_val, 0.1)
         delta_tune = _f(delta_val, 0.02)
         beta_tune  = _f(beta_val, 0.1)
-        Kmin       = _f(kmin_val, 0.01)
-        Kmax       = _f(kmax_val, 10.0)
 
         desc = standard_pid_features(Nbar=(Nbar0, Nbar1, Nbar2))
 
         last_push = [0.0]
         MIN_PUSH_INTERVAL = 0.08  # seconds; well under interval=150ms poll above
         hist_iter, hist_kp, hist_ki, hist_kd = [], [], [], []
+        last_feats = [None]
 
         def on_iteration(i, n_iter, Fp_cur, Fi_cur, Fd_cur, row, feats, sigs):
+            # Captured above the throttle, so the counts the run-diagnosis reads
+            # are the last ones actually scored rather than the last ones that
+            # happened to be drawn. pid_tuning's post-loop call is never
+            # throttled (i == n_iter), so this always ends up holding the final
+            # iteration's features.
+            last_feats[0] = feats
+
             now = time.monotonic()
             if i < n_iter and (now - last_push[0]) < MIN_PUSH_INTERVAL:
                 return
@@ -925,15 +1009,24 @@ def register_callbacks(app, n_points: int = N_POINTS):
 
             set_progress((_log_gain(p_Kp), _log_gain(p_Ki), _log_gain(p_Kd),
                           f'Tuning… iter {i}/{n_iter} — {MANUAL_READING[row]}',
-                          p_time, p_f1, p_f2, p_f3, p_gains_hist))
+                          p_time, p_f1, p_f2, p_f3, p_gains_hist,
+                          warn_children))
+
+        # The multiplier box, kept in one place: pid_tuning searches it and
+        # diagnose_run reads which of its bounds the run ended on.
+        limits = {
+            'Kp': (Kmin / Kp_base, Kmax / Kp_base) if Kp_base > 0 else (Kmin, Kmax),
+            'Ki': (Kmin / Ki, Kmax / Ki),
+            'Kd': (Kmin / Kd_base, Kmax / Kd_base) if Kd_base > 0 else (Kmin, Kmax),
+        }
 
         Fp_hist, Fi_hist, Fd_hist = pid_tuning(
             desc, tau, K, L, Ts,
             Kp_base, Ki, Kd_base,
             dtype='y', Tsim=Tsim, n_iter=n_iter,
-            Fp_limits=(Kmin / Kp_base, Kmax / Kp_base) if Kp_base > 0 else (Kmin, Kmax),
-            Fi_limits=(Kmin / Ki, Kmax / Ki),
-            Fd_limits=(Kmin / Kd_base, Kmax / Kd_base) if Kd_base > 0 else (Kmin, Kmax),
+            Fp_limits=limits['Kp'],
+            Fi_limits=limits['Ki'],
+            Fd_limits=limits['Kd'],
             Nbar=(Nbar0, Nbar1, Nbar2),
             beta=beta_tune,
             simtype=int(cfg.get('simtype', 0)),
@@ -959,4 +1052,21 @@ def register_callbacks(app, n_points: int = N_POINTS):
         out_Kp_log = _log_gain(Kp_traj[-1]) if ctype != 'I' else Kp_log
         out_Kd_log = _log_gain(Kd_traj[-1]) if ctype == 'PID' else Kd_log
 
-        return out_Kp_log, _log_gain(Ki_traj[-1]), out_Kd_log, f'Tuned ({n_iter} iter)', fig_gains_hist
+        # What the run itself turned out to say. A multiplier that finished on a
+        # bound is the difference between "converged" and "ran out of box", and
+        # the status line has claimed the former unconditionally until now.
+        run_findings = diagnose_run(
+            ctype,
+            {'Kp': float(Fp_hist[-1]), 'Ki': float(Fi_hist[-1]),
+             'Kd': float(Fd_hist[-1])},
+            limits,
+            {'Kp': float(Kp_traj[-1]), 'Ki': float(Ki_traj[-1]),
+             'Kd': float(Kd_traj[-1])},
+            last_feats[0] or [],
+            gain_box=(Kmin, Kmax),
+        )
+        status = f'Tuned ({n_iter} iter)' + _status_suffix(run_findings)
+
+        return (out_Kp_log, _log_gain(Ki_traj[-1]), out_Kd_log, status,
+                fig_gains_hist, False, no_update,
+                _render_findings(gate_warnings + run_findings))

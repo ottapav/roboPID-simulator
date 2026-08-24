@@ -1,14 +1,15 @@
 """
 Iterative PID gain tuning via the triangular rule of
-RoboPID_JPC_paper/main.tex (Table "the tuning rule at a glance", eq.
+docs/JPC26_basic/main.tex (Table "the tuning rule at a glance", eq.
 "triangular"):
 - Fp, Fi, Fd are multipliers applied on top of the base gains
 - Each iteration evaluates the stability screen and the three Gamma
   encirclement counts and nudges gains by one gamma = 1/(1-beta) notch
-- An unstable record halves every gain (a coarser cut than the gamma
-  notch used by the count-based rows); otherwise the lowest violated
-  band is cut and every band below it is raised; if none is violated, all
-  bands are raised
+- An unstable record cuts every gain at once, far more coarsely than the
+  gamma notch the count-based rows use, and deepening with the band's
+  frequency (Ki /2, Kp /4, Kd /8); otherwise the lowest violated band is
+  cut and every band below it is raised; if none is violated, all bands
+  are raised
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from .signals import find_index, StabilityScreen
 
 # Table 2's rightmost column, keyed by which row fired this iteration.
 MANUAL_READING = {
-    'unstable': 'runaway: halve all',
+    'unstable': 'runaway: back off hard',
     'N0': 'slow cycling: less reset',
     'N1': 'ringing: less gain',
     'N2': 'buzzing: less rate',
@@ -66,15 +67,21 @@ def triangular_rule(
     Fp_new, Fi_new, Fd_new = Fp_cur, Fi_cur, Fd_cur
 
     if unstable:
-        # Record grows rather than decays: coarse halving (Table 2,
-        # unstable row: "Downarrow" = divide by 2), deliberately
-        # cruder than the gamma notch used by the count-based rows
-        # below -- "instability is a state to be exited quickly, not
-        # corrected delicately."
+        # Record grows rather than decays. Every gain comes down at once, and
+        # far more coarsely than the gamma notch the count-based rows below
+        # use -- "instability is a state to be exited quickly, not corrected
+        # delicately."
+        #
+        # The cut deepens with the band's frequency: Ki /2, Kp /4, Kd /8. A
+        # runaway is driven by the fast bands, so the derivative channel is
+        # pulled back hardest and the reset -- which sets the settling time
+        # the user is actually after -- is disturbed least. This is the one
+        # row that fires without a usable count to attribute the trouble to,
+        # so the attribution is made a priori by band instead.
         row = 'unstable'
-        Fp_new = max(Fp_cur * 0.5, Fp_min)
         Fi_new = max(Fi_cur * 0.5, Fi_min)
-        Fd_new = max(Fd_cur * 0.5, Fd_min)
+        Fp_new = max(Fp_cur * 0.25, Fp_min)
+        Fd_new = max(Fd_cur * 0.125, Fd_min)
 
     elif feats[0]['N'] > Nbar[0]:
         row = 'N0'
@@ -82,14 +89,14 @@ def triangular_rule(
 
     elif feats[1]['N'] > Nbar[1]:
         row = 'N1'
-        Fp_new = max(Fp_cur / gamma, Fp_min)
         Fi_new = min(Fi_cur * gamma, Fi_max)
+        Fp_new = max(Fp_cur / gamma, Fp_min)
 
     elif feats[2]['N'] > Nbar[2]:
         row = 'N2'
-        Fd_new = max(Fd_cur / gamma, Fd_min)
-        Fp_new = min(Fp_cur * gamma, Fp_max)
         Fi_new = min(Fi_cur * gamma, Fi_max)
+        Fp_new = min(Fp_cur * gamma, Fp_max)
+        Fd_new = max(Fd_cur / gamma, Fd_min)
 
     else:
         # All features within limits: raise all bands.

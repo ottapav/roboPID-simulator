@@ -7,7 +7,7 @@ Two modes mirror MATLAB pidtool:
   - Anti-windup discrete (simtype=1): sample-by-sample loop with saturation
 
 Gains are physical, i.e. continuous-time: Kp is dimensionless, Ki is in 1/s and
-Kd in s, so the Ts factors of RoboPID_JPC_paper/main.tex's difference equation
+Kd in s, so the Ts factors of docs/JPC26_basic/main.tex's difference equation
 
     du_k = Kp*(e_k - e_{k-1}) + Ki*Ts*e_k + (Kd/Ts)*(e_k - 2e_{k-1} + e_{k-2})
 

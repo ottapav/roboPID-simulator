@@ -9,7 +9,7 @@ import pytest
 
 from core.params import (
     DEFAULT_TAU, GAIN_BOX, N_ITER_BY_CTYPE, NBAR, TAU_MIN,
-    gain_slider_marks, parse_tau,
+    fmt2, gain_slider_marks, parse_tau,
 )
 from core.plant import plant_tf
 
@@ -62,17 +62,38 @@ def test_parsed_tau_always_builds_a_usable_plant(text):
     assert np.max(np.abs(np.roots(den))) <= 1.0 + 1e-9, 'no poles outside the unit circle'
 
 
+@pytest.mark.parametrize('value,expected', [
+    (1.0, '1.00'), (0.5, '0.50'), (280.0, '280.00'), (1.25, '1.25'),
+    (0.5611222, '0.56'), (0.0, '0.00'), (-8.0, '-8.00'),
+    (0.005, '0.01'),            # the boundary rounds, it does not escape
+    (0.0001, '1.00e-04'),       # Kmin's floor, which .2f would show as 0.00
+    (0.001, '1.00e-03'),        # TAU_MIN, likewise
+])
+def test_fmt2_always_shows_two_digits_after_the_point(value, expected):
+    """Every number the GUI prints goes through here, so the contract is two
+    decimals — and, for magnitudes that would round away entirely, two decimals
+    in the exponential form rather than a false zero."""
+    assert fmt2(value) == expected
+
+
+def test_fmt2_output_parses_back_to_what_it_rendered():
+    """The header's Tsim/Ts fields are read back from what fmt2 wrote into them,
+    so the rendering has to survive a float() round trip."""
+    for value in (280.0, 0.5611, 2e-4, 1e-6):
+        assert float(fmt2(value)) == pytest.approx(value, rel=0.01)
+
+
 def test_gain_slider_marks_span_the_box():
     marks = gain_slider_marks(*GAIN_BOX)
     lo, hi = math.log10(GAIN_BOX[0]), math.log10(GAIN_BOX[1])
-    assert marks[lo] == f'{GAIN_BOX[0]:g}' and marks[hi] == f'{GAIN_BOX[1]:g}'
+    assert marks[lo] == fmt2(GAIN_BOX[0]) and marks[hi] == fmt2(GAIN_BOX[1])
     assert all(lo <= float(k) <= hi for k in marks)
 
 
 def test_gain_slider_marks_on_a_partial_decade():
     marks = gain_slider_marks(0.03, 3.0)
-    assert marks[math.log10(0.03)] == '0.03' and marks[math.log10(3.0)] == '3'
-    assert marks[-1] == '0.1' and marks[0] == '1'
+    assert marks[math.log10(0.03)] == '0.03' and marks[math.log10(3.0)] == '3.00'
+    assert marks[-1] == '0.10' and marks[0] == '1.00'
 
 
 def test_shared_defaults_are_self_consistent():
