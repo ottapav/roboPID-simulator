@@ -204,9 +204,13 @@ serve it directly. The bundled `Procfile` is what Render runs:
 web: gunicorn app:server --workers 2 --threads 4
 ```
 
-Each worker imports the module separately and gets its own background-callback
-cache directory under `.cache/` — `app._make_cache` explains why a shared one
-would let a recycled worker wipe another's in-flight tuning job.
+All workers share one background-callback cache in `.cache/jobs/`, because the
+worker that starts a Tune job is usually not the one that serves the browser's
+follow-up progress polls — with a per-process cache those polls find nothing
+and the button looks dead. The cache is cleared once per launch rather than
+once per process (keyed on systemd's `INVOCATION_ID`, under a startup lock), so
+a worker respawned by max-requests or a timeout can't wipe another worker's
+in-flight job. `app._make_cache` has the details.
 
 ## Configuration
 
