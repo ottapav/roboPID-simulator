@@ -19,6 +19,7 @@ Split into two figure-update callbacks for performance:
 """
 
 from __future__ import annotations
+import functools
 import os
 import time
 from dataclasses import dataclass
@@ -28,23 +29,34 @@ from dash import Input, Output, State, Patch, html, no_update, ctx
 import plotly.graph_objects as go
 
 from core.admissibility import check_plant, diagnose_run
+from core.amigo import amigo_gains, foptd_fit
 from core.config import read_config, build_noise_model
 from core.features import standard_pid_features, loop_response_features
 from core.params import (
     BETA, DELTA, EPS, GAIN_BOX, NBAR, N_ITER_BY_CTYPE, N_POINTS,
     fmt2, gain_slider_marks, parse_tau,
 )
+from core.pid import pid_response_awup, pid_response_linear
 from core.signals import auto_grid
 from core.tuning import pid_tuning, MANUAL_READING
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'robopid.config')
 
 # Trace indices in the time-domain figure
-_T_Y, _T_R, _T_U = 0, 1, 2
+# (trace order is legend order).
+_T_R, _T_Y, _T_U, _T_YA, _T_UA = 0, 1, 2, 3, 4
 
-# Colors
+# Colors: one per signal, shared by every loop that draws it, so each curve
+# still reads against its tinted axis.
 _C = {
-    'y': 'red', 'r': 'rgba(200,0,0,0.4)', 'u': 'royalblue',
+    'y': 'red', 'r': 'black', 'u': 'royalblue',
+}
+
+# Line styles: one per source. Color says which signal, dash says whose loop.
+_LINE = {
+    'ref':   {'dash': 'dash', 'width': 3},
+    'spin':  {'width': 2},
+    'amigo': {'dash': 'dot', 'width': 2},
 }
 
 # Battery plants from docs/JPC26_basic/main.tex, Section "Validation on a
@@ -316,12 +328,73 @@ def _feature_title(feat: dict, idx: int) -> str:
     return f'Γ{idx}: N={fmt2(feat["N"])} (limit {fmt2(feat["Nbar"])})'
 
 
-def _patches_from(feats, sigs):
+# ── AMIGO reference ───────────────────────────────────────────────────────────
+
+def _amigo_reference(tau, K, L, Tsim, Ts, ctype, cfg) -> dict | None:
+    """The AMIGO-tuned loop on this plant, for the Step Response overlay.
+
+    A fixed baseline: it depends on the plant, the grid, the controller
+    structure and the simulation mode, never on the gain sliders, so the cache
+    behind it makes a slider drag cost nothing extra. Noise-free, since a
+    reference that jittered on every redraw would be no reference at all.
+
+    Returns {'t', 'y', 'u', 'label'}, or None when there is nothing meaningful
+    to draw (a non-positive K, which Gate 0 refuses to tune anyway).
+    """
+    if not (np.isfinite(K) and K > 0):
+        return None
+    return _amigo_cached(
+        tuple(float(x) for x in np.atleast_1d(tau)), float(K), float(L),
+        float(Tsim), float(Ts), 'PID' if ctype == 'PID' else 'PI',
+        int(cfg.get('simtype', 0)),
+        float(cfg.get('minu', -1.0)), float(cfg.get('maxu', 1.0)))
+
+
+@functools.lru_cache(maxsize=32)
+def _amigo_cached(tau, K, L, Tsim, Ts, structure, simtype, minu, maxu):
+    T, L_app = foptd_fit(tau, L)
+    # A lag-only plant fits to L_app = 0, where both rules divide by zero; see
+    # amigo_gains for why Ts is the floor.
+    Kp, Ki, Kd = amigo_gains(K, T, max(L_app, Ts), structure)
+    if not np.all(np.isfinite((Kp, Ki, Kd))):
+        return None
+
+    if simtype == 0:
+        y, u, t, *_ = pid_response_linear(tau, K, L, Kp, Ki, Kd, Tsim, Ts, dtype='y')
+    else:
+        y, u, t, *_ = pid_response_awup(tau, K, L, Kp, Ki, Kd, Tsim, Ts, dtype='y',
+                                        minu=minu, maxu=maxu)
+
+    gains = f'Kp={fmt2(Kp)} Ki={fmt2(Ki)}'
+    if structure == 'PID':
+        gains += f' Kd={fmt2(Kd)}'
+    return {'t': t, 'y': y, 'u': u, 'label': f'AMIGO {structure}: {gains}'}
+
+
+def _time_title(ref) -> str:
+    return f'Step Response · {ref["label"]}' if ref else 'Step Response'
+
+
+def _ref_traces(ref) -> tuple[list, list, list]:
+    """(t, y, u) of the reference as plain lists; empty when there is none, so
+    the AMIGO traces keep their indices and simply draw nothing."""
+    if ref is None:
+        return [], [], []
+    return ref['t'].tolist(), ref['y'].tolist(), ref['u'].tolist()
+
+
+# Sentinel for _patches_from: "leave the AMIGO overlay alone", as distinct from
+# None, which means "there is no reference -- clear it".
+_KEEP_REF = object()
+
+
+def _patches_from(feats, sigs, ref=_KEEP_REF):
     """Build the four figure patches from an already-computed simulation.
 
     Kept separate from _patch_figures so the tuner's progress stream can render
     the features and signals pid_tuning already produced for that iteration,
-    rather than simulating the same gains a second time to draw them.
+    rather than simulating the same gains a second time to draw them. The tuner
+    passes no ref: a run cannot change the plant, so the overlay stays as drawn.
     """
     patches_f = []
     for i, feat in enumerate(feats):
@@ -341,15 +414,24 @@ def _patches_from(feats, sigs):
         pt['data'][idx]['x'] = t
         pt['data'][idx]['y'] = np.asarray(arr).tolist()
 
+    if ref is not _KEEP_REF:
+        t_ref, y_ref, u_ref = _ref_traces(ref)
+        for idx, arr in ((_T_YA, y_ref), (_T_UA, u_ref)):
+            pt['data'][idx]['x'] = t_ref
+            pt['data'][idx]['y'] = arr
+        pt['layout']['title']['text'] = _time_title(ref)
+
     return patches_f[0], patches_f[1], patches_f[2], pt
 
 
 def _patch_figures(tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
                    delta, eps, cfg, dist_a, dist_b):
     """Simulate once and return (patch_f1, patch_f2, patch_f3, patch_time)."""
-    return _patches_from(*_simulate(
+    feats, sigs = _simulate(
         tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype,
-        Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b))
+        Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b)
+    return _patches_from(feats, sigs,
+                         _amigo_reference(tau, K, L, Tsim, Ts, ctype, cfg))
 
 
 # ── Full-figure builders ──────────────────────────────────────────────────────
@@ -421,7 +503,7 @@ def _build_feature_fig(feat: dict, idx: int) -> go.Figure:
     return _style_axes(fig, zeroline=False)
 
 
-def _build_time_fig(sigs: dict) -> go.Figure:
+def _build_time_fig(sigs: dict, ref: dict | None = None) -> go.Figure:
     """Step response: y and r on the left axis, u on its own axis at the right.
 
     u shares nothing with y dimensionally — it is whatever the actuator takes,
@@ -429,20 +511,32 @@ def _build_time_fig(sigs: dict) -> go.Figure:
     shared scale either flattens the response or pushes the action off the top.
     Each axis is tinted to its traces, since a two-scale plot is unreadable
     without knowing which curve to read against which side.
+
+    ref is the AMIGO baseline from _amigo_reference, drawn on the same two axes.
+    Its traces exist even when ref is None, so the patch indices never shift.
     """
     t = sigs['t']
+    t_ref, y_ref, u_ref = _ref_traces(ref)
     fig = go.Figure(data=[
-        go.Scatter(x=t.tolist(), y=sigs['y'].tolist(), mode='lines',
-                   name='y (output)', line={'color': _C['y'], 'width': 2}),
         go.Scatter(x=t.tolist(), y=np.ones(len(t)).tolist(), mode='lines',
-                   name='r (setpoint)', line={'color': _C['r'], 'dash': 'dash'}),
+                   name='r', line={'color': _C['r'], **_LINE['ref']}),
+        go.Scatter(x=t.tolist(), y=sigs['y'].tolist(), mode='lines',
+                   name='y SPIN', line={'color': _C['y'], **_LINE['spin']}),
         go.Scatter(x=t.tolist(), y=sigs['u'].tolist(), mode='lines',
-                   name='u (action)', line={'color': _C['u']}, yaxis='y2'),
+                   name='u SPIN', line={'color': _C['u'], **_LINE['spin']},
+                   yaxis='y2'),
+        go.Scatter(x=t_ref, y=y_ref, mode='lines', name='y AMIGO',
+                   line={'color': _C['y'], **_LINE['amigo']}),
+        go.Scatter(x=t_ref, y=u_ref, mode='lines', name='u AMIGO',
+                   line={'color': _C['u'], **_LINE['amigo']}, yaxis='y2'),
     ])
     fig.update_layout(
-        title={'text': 'Step Response', 'font': {'size': 11}},
+        title={'text': _time_title(ref), 'font': {'size': 11}},
         xaxis_title='time',
-        yaxis_title={'text': 'y, r', 'font': {'color': _C['y']}},
+        # A single font.color would tint the whole "y, r" string; each letter
+        # gets its own span so the label matches its trace's color exactly.
+        yaxis_title={'text': (f'<span style="color:{_C["y"]}">y</span>, '
+                              f'<span style="color:{_C["r"]}">r</span>')},
         # Right margin has to make room for the tick labels and title that used
         # to have nowhere to go.
         margin={'l': 40, 'r': 44, 't': 38, 'b': 50},
@@ -724,7 +818,8 @@ def register_callbacks(app):
         feats, sigs = _simulate(*p.sim_args)
 
         figs_f = [_build_feature_fig(feats[i], i) for i in range(3)]
-        return (*figs_f, _build_time_fig(sigs), p.warning)
+        ref = _amigo_reference(p.tau, p.K, p.L, p.Tsim, p.Ts, p.ctype, p.cfg)
+        return (*figs_f, _build_time_fig(sigs, ref), p.warning)
 
     # ── 1b. Patch update on slider move ────────────────────────────────────
     # Only trace data changes — no figure rebuild, very fast.
