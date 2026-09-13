@@ -26,6 +26,9 @@ GRAPH_CONFIG = {
         'zoom2d', 'pan2d', 'select2d', 'lasso2d',
         'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d',
     ],
+    # Format must stay 'png': assets/save_figure.js finds the button by its
+    # "Download plot as a png" title. Scale applies to the no-picker fallback.
+    'toImageButtonOptions': {'format': 'png', 'scale': 4},
 }
 BTN = 'btn btn-sm'
 CARD_HEADER_STYLE = {
