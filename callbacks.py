@@ -29,7 +29,7 @@ from dash import Input, Output, State, Patch, html, no_update, ctx
 import plotly.graph_objects as go
 
 from core.admissibility import check_plant, diagnose_run
-from core.amigo import amigo_gains, foptd_fit
+from core.amigo import amigo_design
 from core.config import read_config, build_noise_model
 from core.features import standard_pid_features, loop_response_features
 from core.params import (
@@ -328,6 +328,18 @@ def _feature_title(feat: dict, idx: int) -> str:
     return f'Γ{idx}: N={fmt2(feat["N"])} (limit {fmt2(feat["Nbar"])})'
 
 
+def _gains_label(prefix: str, ctype: str, Kp: float, Ki: float, Kd: float) -> str:
+    """'{prefix} {ctype}: Ki=.. Kp=.. Kd=..', omitting whichever gains ctype
+    doesn't use -- the same zeroing _simulate applies, so the label never
+    quotes a gain that wasn't actually simulated."""
+    parts = [f'Ki={fmt2(Ki)}']
+    if ctype != 'I':
+        parts.append(f'Kp={fmt2(Kp)}')
+    if ctype not in ('I', 'PI'):
+        parts.append(f'Kd={fmt2(Kd)}')
+    return f'{prefix} {ctype}: ' + ' '.join(parts)
+
+
 # ── AMIGO reference ───────────────────────────────────────────────────────────
 
 def _amigo_reference(tau, K, L, Tsim, Ts, ctype, cfg) -> dict | None:
@@ -352,12 +364,12 @@ def _amigo_reference(tau, K, L, Tsim, Ts, ctype, cfg) -> dict | None:
 
 @functools.lru_cache(maxsize=32)
 def _amigo_cached(tau, K, L, Tsim, Ts, structure, simtype, minu, maxu):
-    T, L_app = foptd_fit(tau, L)
     # A lag-only plant fits to L_app = 0, where both rules divide by zero; see
     # amigo_gains for why Ts is the floor.
-    Kp, Ki, Kd = amigo_gains(K, T, max(L_app, Ts), structure)
-    if not np.all(np.isfinite((Kp, Ki, Kd))):
+    design = amigo_design(tau, K, L, structure, L_min=Ts)
+    if design is None:
         return None
+    Kp, Ki, Kd = design.Kp, design.Ki, design.Kd
 
     if simtype == 0:
         y, u, t, *_ = pid_response_linear(tau, K, L, Kp, Ki, Kd, Tsim, Ts, dtype='y')
@@ -365,14 +377,16 @@ def _amigo_cached(tau, K, L, Tsim, Ts, structure, simtype, minu, maxu):
         y, u, t, *_ = pid_response_awup(tau, K, L, Kp, Ki, Kd, Tsim, Ts, dtype='y',
                                         minu=minu, maxu=maxu)
 
-    gains = f'Kp={fmt2(Kp)} Ki={fmt2(Ki)}'
-    if structure == 'PID':
-        gains += f' Kd={fmt2(Kd)}'
-    return {'t': t, 'y': y, 'u': u, 'label': f'AMIGO {structure}: {gains}'}
+    label = _gains_label('AMIGO', structure, Kp, Ki, Kd)
+    return {'t': t, 'y': y, 'u': u, 'label': label}
 
 
-def _time_title(ref) -> str:
-    return f'Step Response · {ref["label"]}' if ref else 'Step Response'
+def _time_title(spin_label: str | None, ref: dict | None) -> str:
+    """'Step Response · SPIN ... · AMIGO ...', dropping whichever half is
+    missing -- ref is None when K <= 0, spin_label is None only in tests that
+    don't care about the title."""
+    parts = [p for p in (spin_label, ref['label'] if ref else None) if p]
+    return 'Step Response' + (f' · {" · ".join(parts)}' if parts else '')
 
 
 def _ref_traces(ref) -> tuple[list, list, list]:
@@ -383,18 +397,15 @@ def _ref_traces(ref) -> tuple[list, list, list]:
     return ref['t'].tolist(), ref['y'].tolist(), ref['u'].tolist()
 
 
-# Sentinel for _patches_from: "leave the AMIGO overlay alone", as distinct from
-# None, which means "there is no reference -- clear it".
-_KEEP_REF = object()
-
-
-def _patches_from(feats, sigs, ref=_KEEP_REF):
+def _patches_from(feats, sigs, ref=None, spin_label=None):
     """Build the four figure patches from an already-computed simulation.
 
     Kept separate from _patch_figures so the tuner's progress stream can render
     the features and signals pid_tuning already produced for that iteration,
-    rather than simulating the same gains a second time to draw them. The tuner
-    passes no ref: a run cannot change the plant, so the overlay stays as drawn.
+    rather than simulating the same gains a second time to draw them. ref is
+    still worth recomputing every call there: a tuning run cannot move the
+    plant, so it hits _amigo_cached's cache every time; spin_label is what
+    actually changes iteration to iteration.
     """
     patches_f = []
     for i, feat in enumerate(feats):
@@ -414,12 +425,11 @@ def _patches_from(feats, sigs, ref=_KEEP_REF):
         pt['data'][idx]['x'] = t
         pt['data'][idx]['y'] = np.asarray(arr).tolist()
 
-    if ref is not _KEEP_REF:
-        t_ref, y_ref, u_ref = _ref_traces(ref)
-        for idx, arr in ((_T_YA, y_ref), (_T_UA, u_ref)):
-            pt['data'][idx]['x'] = t_ref
-            pt['data'][idx]['y'] = arr
-        pt['layout']['title']['text'] = _time_title(ref)
+    t_ref, y_ref, u_ref = _ref_traces(ref)
+    for idx, arr in ((_T_YA, y_ref), (_T_UA, u_ref)):
+        pt['data'][idx]['x'] = t_ref
+        pt['data'][idx]['y'] = arr
+    pt['layout']['title']['text'] = _time_title(spin_label, ref)
 
     return patches_f[0], patches_f[1], patches_f[2], pt
 
@@ -430,8 +440,9 @@ def _patch_figures(tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
     feats, sigs = _simulate(
         tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype,
         Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b)
-    return _patches_from(feats, sigs,
-                         _amigo_reference(tau, K, L, Tsim, Ts, ctype, cfg))
+    ref = _amigo_reference(tau, K, L, Tsim, Ts, ctype, cfg)
+    spin_label = _gains_label('SPIN', ctype, Kp, Ki, Kd)
+    return _patches_from(feats, sigs, ref, spin_label)
 
 
 # ── Full-figure builders ──────────────────────────────────────────────────────
@@ -503,7 +514,8 @@ def _build_feature_fig(feat: dict, idx: int) -> go.Figure:
     return _style_axes(fig, zeroline=False)
 
 
-def _build_time_fig(sigs: dict, ref: dict | None = None) -> go.Figure:
+def _build_time_fig(sigs: dict, ref: dict | None = None,
+                    spin_label: str | None = None) -> go.Figure:
     """Step response: y and r on the left axis, u on its own axis at the right.
 
     u shares nothing with y dimensionally — it is whatever the actuator takes,
@@ -514,6 +526,7 @@ def _build_time_fig(sigs: dict, ref: dict | None = None) -> go.Figure:
 
     ref is the AMIGO baseline from _amigo_reference, drawn on the same two axes.
     Its traces exist even when ref is None, so the patch indices never shift.
+    spin_label and ref['label'] both go into the title, via _time_title.
     """
     t = sigs['t']
     t_ref, y_ref, u_ref = _ref_traces(ref)
@@ -531,7 +544,7 @@ def _build_time_fig(sigs: dict, ref: dict | None = None) -> go.Figure:
                    line={'color': _C['u'], **_LINE['amigo']}, yaxis='y2'),
     ])
     fig.update_layout(
-        title={'text': _time_title(ref), 'font': {'size': 11}},
+        title={'text': _time_title(spin_label, ref), 'font': {'size': 11}},
         xaxis_title='time',
         # A single font.color would tint the whole "y, r" string; each letter
         # gets its own span so the label matches its trace's color exactly.
@@ -819,7 +832,8 @@ def register_callbacks(app):
 
         figs_f = [_build_feature_fig(feats[i], i) for i in range(3)]
         ref = _amigo_reference(p.tau, p.K, p.L, p.Tsim, p.Ts, p.ctype, p.cfg)
-        return (*figs_f, _build_time_fig(sigs, ref), p.warning)
+        spin_label = _gains_label('SPIN', p.ctype, p.Kp, p.Ki, p.Kd)
+        return (*figs_f, _build_time_fig(sigs, ref, spin_label), p.warning)
 
     # ── 1b. Patch update on slider move ────────────────────────────────────
     # Only trace data changes — no figure rebuild, very fast.
@@ -1090,7 +1104,12 @@ def register_callbacks(app):
             # Render what the tuner just scored rather than re-simulating it —
             # one simulation per iteration instead of two, and the plots are
             # guaranteed to be the record the decision was actually made on.
-            p_f1, p_f2, p_f3, p_time = _patches_from(feats, sigs)
+            # The AMIGO reference itself never moves during a run (the plant
+            # is fixed), so this just hits _amigo_cached; the SPIN label does
+            # move, tracking the gains this iteration actually scored.
+            ref = _amigo_reference(tau, K, L, Tsim, Ts, ctype, cfg)
+            spin_label = _gains_label('SPIN', ctype, p_Kp, p_Ki, p_Kd)
+            p_f1, p_f2, p_f3, p_time = _patches_from(feats, sigs, ref, spin_label)
 
             hist_iter.append(i)
             hist_kp.append(p_Kp)

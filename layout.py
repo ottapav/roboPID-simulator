@@ -259,8 +259,8 @@ def _controller_card(default_ctype, default_limits, default_niter,
             controller_header_row,
             # Sliders
             dbc.Row([
-                _slider('slider-kp', 'Kp', col_id='col-kp'),
                 _slider('slider-ki', 'Ki', col_id='col-ki'),
+                _slider('slider-kp', 'Kp', col_id='col-kp'),
                 _slider('slider-kd', 'Kd', col_id='col-kd'),
             ], className='mb-3'),
 

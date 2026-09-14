@@ -12,6 +12,8 @@ Kd = Kp*Td in s.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 from scipy.signal import lfilter
 
@@ -77,3 +79,42 @@ def amigo_gains(K: float, T: float, L: float, ctype: str) -> tuple[float, float,
     Kp = (0.15 + (0.35 - L * T / (L + T) ** 2) * T / L) / K
     Ti = 0.35 * L + 13.0 * L * T ** 2 / (T ** 2 + 12.0 * L * T + 7.0 * L ** 2)
     return Kp, Kp / Ti, 0.0
+
+
+@dataclass(frozen=True)
+class AmigoDesign:
+    """An AMIGO tuning together with the FOPTD model it was computed on."""
+    structure: str      # 'PI' or 'PID'
+    K: float
+    T: float
+    L: float            # apparent dead time the rule was applied with
+    Kp: float
+    Ki: float
+    Kd: float
+
+
+def amigo_design(tau, K: float, L: float, ctype: str,
+                 L_min: float = 0.0) -> AmigoDesign | None:
+    """
+    The AMIGO tuning of this plant: foptd_fit, then amigo_gains.
+
+    The one place the app turns a plant into AMIGO gains, so the admissibility
+    target and the plotted reference cannot drift apart. ctype selects the rule
+    as amigo_gains does, with unfiltered PID treated as PID.
+
+    L_min floors the apparent dead time (see amigo_gains). Returns None where
+    the rule is undefined: K not a positive finite number, or no positive dead
+    time left after the floor.
+    """
+    if not (np.isfinite(K) and K > 0):
+        return None
+    structure = 'PID' if ctype in ('PID', 'PID_UNFILTERED') else 'PI'
+    T, L_app = foptd_fit(tau, L)
+    L_eff = max(L_app, L_min)
+    if not L_eff > 0:
+        return None
+    Kp, Ki, Kd = amigo_gains(K, T, L_eff, structure)
+    if not np.all(np.isfinite((Kp, Ki, Kd))):
+        return None
+    return AmigoDesign(structure=structure, K=float(K), T=float(T), L=float(L_eff),
+                       Kp=float(Kp), Ki=float(Ki), Kd=float(Kd))

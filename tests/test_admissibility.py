@@ -10,9 +10,9 @@ from conftest import BATTERY
 from core import admissibility as adm
 from core.admissibility import (
     ACTIVE_GAINS, LAGS_REQUIRED, PHI_BY_CTYPE, check_bands, check_phase,
-    check_plant, check_reachability, check_sign, diagnose_run, plant_magnitude,
-    plant_phase, relative_degree, ultimate_point, zn_target,
+    check_plant, check_reachability, check_sign, diagnose_run, relative_degree,
 )
+from core.amigo import amigo_design
 
 CTYPES = ('I', 'PI', 'PID', 'PID_UNFILTERED')
 GUI_CTYPES = ('I', 'PI', 'PID')
@@ -25,7 +25,7 @@ APP_DEFAULT = ([5.0, 5.0, 5.0, 5.0], 1.25, 8.0)
 
 
 def _target(tau, K, L, ctype):
-    return zn_target(*ultimate_point(tau, K, L, PHI_BY_CTYPE[ctype]))
+    return amigo_design(tau, K, L, ctype)
 
 
 def _feats(n0, n1, n2, nbar=(0.5, 0.75, 1.0)):
@@ -115,13 +115,6 @@ def test_app_default_plant_is_admissible(ctype):
     assert check_plant(tau, K, L, ctype, UNIT, BOX).ok
 
 
-def test_phase_is_monotone_decreasing():
-    """phase_sweep is no longer Gate 1's instrument, but ultimate_point still
-    relies on it, and on this property to find the crossing without unwrapping."""
-    w, ph = adm.phase_sweep([10.0, 1.0, 1.0], 1.0)
-    assert np.all(np.diff(ph) < 0)
-
-
 def test_two_lags_delay_free_is_refused_although_it_does_tune():
     """tau=[1,2], K=1, L=0 -- the case that exposed the sweep.
 
@@ -175,50 +168,50 @@ def test_positive_K_passes_the_sign_gate(K):
     assert check_sign(K) is None
 
 
-# ── The ultimate point ────────────────────────────────────────────────────────
+# ── The AMIGO target ──────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize('name', sorted(BATTERY))
 @pytest.mark.parametrize('ctype', GUI_CTYPES)
-def test_ultimate_point_lands_on_the_crossing(name, ctype):
+def test_every_battery_plant_has_a_target(name, ctype):
     tau, K, L = BATTERY[name]
-    phi = PHI_BY_CTYPE[ctype]
-    w_u, Ku, Tu = ultimate_point(tau, K, L, phi)
-
-    assert plant_phase(tau, L, np.array([w_u]))[0] == pytest.approx(
-        -np.pi - phi, abs=1e-4)
-    assert Ku * plant_magnitude(tau, K, np.array([w_u]))[0] == pytest.approx(
-        1.0, rel=1e-12)
-    assert Tu == pytest.approx(2 * np.pi / w_u, rel=1e-12)
+    t = _target(tau, K, L, ctype)
+    assert t is not None
+    assert t.T > 0 and t.L > 0
+    assert t.structure == ('PID' if ctype == 'PID' else 'PI')
 
 
-def test_no_ultimate_point_when_the_phase_gate_fails():
-    assert ultimate_point([5.0], 1.0, 0.0, PHI_BY_CTYPE['PID']) is None
+@pytest.mark.parametrize('ctype', CTYPES)
+def test_delay_free_plants_passing_gate_1_still_get_a_target(ctype):
+    """The AMIGO rule divides by L. Gate 1 lets a delay-free plant through only
+    with at least two lags, and such a chain always fits a positive apparent
+    dead time -- so the target exists wherever check_plant asks for it."""
+    tau = [5.0] * LAGS_REQUIRED[ctype]
+    assert check_phase(tau, 0.0, ctype) is None
+    assert _target(tau, 1.0, 0.0, ctype) is not None
 
 
-def test_ultimate_gain_scales_inversely_with_plant_gain():
+def test_no_target_where_the_rule_is_undefined():
+    assert _target([5.0], 1.0, 0.0, 'PID') is None     # L_app = 0
+    assert _target([5.0], -1.0, 1.0, 'PID') is None    # K not positive
+
+
+def test_target_gains_scale_inversely_with_plant_gain():
     tau, L = [5.0, 5.0, 5.0], 1.0
-    _, Ku1, Tu1 = ultimate_point(tau, 1.0, L, 0.0)
-    _, Ku2, Tu2 = ultimate_point(tau, 4.0, L, 0.0)
-    assert Ku2 == pytest.approx(Ku1 / 4.0, rel=1e-12)
-    assert Tu2 == pytest.approx(Tu1, rel=1e-12)   # phase is gain-independent
-
-
-def test_zn_target_ratios():
-    t = zn_target(0.5, 7.0, 12.0)
-    assert t.Kp == pytest.approx(7.0 / adm.KU_OVER_KP)
-    assert t.Ti == pytest.approx(6.0) and t.Td == pytest.approx(1.5)
-    assert t.Ki == pytest.approx(t.Kp / t.Ti)
-    assert t.Kd == pytest.approx(t.Kp * t.Td)
+    t1, t4 = _target(tau, 1.0, L, 'PID'), _target(tau, 4.0, L, 'PID')
+    for name in ('Kp', 'Ki', 'Kd'):
+        assert getattr(t4, name) == pytest.approx(getattr(t1, name) / 4.0, rel=1e-12)
+    assert (t4.T, t4.L) == (t1.T, t1.L)   # the fit is gain-independent
 
 
 # ── Gate 2: reachability ──────────────────────────────────────────────────────
 
 def test_reachability_boundary_on_a_first_order_plant():
-    """Unit start gains, default box: the PID target leaves the box below
-    L/tau ~ 0.17 and sits inside it above. The binding gain is Ki -- the target
-    reset scales as 1/L and is the first to run off the top of the box."""
-    inside = check_reachability(_target([1.0], 1.0, 0.17, 'PID'), 'PID', UNIT, BOX)
-    outside = check_reachability(_target([1.0], 1.0, 0.15, 'PID'), 'PID', UNIT, BOX)
+    """Unit start gains, default box: the AMIGO PID target leaves the box below
+    L/tau ~ 0.108 (Ki = 8.5 at L = 0.12, 11.2 at L = 0.10) and sits inside it
+    above. The binding gain is Ki -- AMIGO's reset grows as L shrinks and is the
+    first to run off the top of the box."""
+    inside = check_reachability(_target([1.0], 1.0, 0.12, 'PID'), 'PID', UNIT, BOX)
+    outside = check_reachability(_target([1.0], 1.0, 0.10, 'PID'), 'PID', UNIT, BOX)
 
     assert inside == []
     assert [f.gate for f in outside] == ['reach']
@@ -248,7 +241,7 @@ def test_reachability_does_not_depend_on_where_the_slider_starts(start):
     reported = {f.title.split()[0]
                 for f in check_reachability(target, 'PID', gains, BOX)}
     expected = {n for n in ACTIVE_GAINS['PID']
-                if not BOX[0] <= target.gain(n) <= BOX[1]}
+                if not BOX[0] <= getattr(target, n) <= BOX[1]}
     assert reported == expected
 
 
@@ -260,32 +253,25 @@ def test_reachability_only_reports_gains_the_structure_uses(ctype):
     assert reported <= set(ACTIVE_GAINS[ctype])
 
 
-# ── Gates 3 and 4: band non-degeneracy ────────────────────────────────────────
+# ── Gate 3: band non-degeneracy ───────────────────────────────────────────────
 
-def test_bands_pass_at_the_shipped_constants():
-    """Both gates are structural: Ti/Td is fixed by the rule constants and nu by
-    core.params, so on a shipped build neither can fire."""
-    assert adm.TI_OVER_TU / adm.TD_OVER_TU >= adm.TI_TD_MIN
+def test_band_gate_passes_at_the_shipped_constants():
+    """Structural: band 2 spans exactly nu = DERIV_FILTER_N, so on a shipped
+    build the gate cannot fire."""
     assert adm.DERIV_FILTER_N >= adm.NU_MIN
-    assert check_bands(_target([5.0] * 4, 1.25, 8.0, 'PID'), 'PID') == []
+    assert check_bands('PID') == []
 
 
-def test_band1_gate_fires_when_Td_is_pushed_up(monkeypatch):
-    monkeypatch.setattr(adm, 'TD_OVER_TU', adm.TI_OVER_TU / 1.5)
-    findings = check_bands(zn_target(0.5, 7.0, 12.0), 'PID')
-    assert [f.gate for f in findings] == ['bands']
-
-
-def test_band2_gate_fires_when_the_roll_off_is_lowered(monkeypatch):
+def test_band_gate_fires_when_the_roll_off_is_lowered(monkeypatch):
     monkeypatch.setattr(adm, 'DERIV_FILTER_N', 2.0)
-    findings = check_bands(zn_target(0.5, 7.0, 12.0), 'PID')
+    findings = check_bands('PID')
     assert [f.gate for f in findings] == ['filter']
 
 
 @pytest.mark.parametrize('ctype', ('I', 'PI'))
-def test_band_gates_are_silent_without_a_derivative(ctype, monkeypatch):
+def test_band_gate_is_silent_without_a_derivative(ctype, monkeypatch):
     monkeypatch.setattr(adm, 'DERIV_FILTER_N', 2.0)
-    assert check_bands(zn_target(0.5, 7.0, 12.0), ctype) == []
+    assert check_bands(ctype) == []
 
 
 # ── Runtime detectors ─────────────────────────────────────────────────────────
@@ -429,7 +415,8 @@ def test_reach_message_quotes_the_target_and_its_provenance():
     finding = check_reachability(_target([1.0], 1.0, 0.05, 'PID'), 'PID',
                                  UNIT, BOX)[0]
     text = ' '.join(finding.detail)
-    assert 'Ku' in text and 'Tu' in text and 'ω_u' in text
+    assert 'AMIGO PID' in text and 'FOPTD' in text
+    assert 'T = ' in text and 'L = ' in text
     assert 'still valid' in text
     assert finding.fixes
 

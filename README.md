@@ -108,14 +108,14 @@ it holds, and what to change. Everything else `core/admissibility.py` reports
 is advisory, because a run that hits it is still a valid run that has simply
 terminated at a bound rather than at a turn-index limit. Before the run:
 
-- **the target may sit outside the gain box** `[Kmin, Kmax]` — the tuner
-  estimates where the boundary is from the plant's own ultimate point and says
-  which gain cannot reach it, and by how much;
-- **a frequency band may have collapsed** — Γ1 reads `[1/Ti, 1/Td]` and Γ2
-  reads `[1/Td, ν/Td]`, and if either narrows the corresponding row of the rule
-  stops attributing ringing to the gain it names. Under the shipped constants
-  neither can fire, so these only appear if the ratios in
-  `core/admissibility.py` or `DERIV_FILTER_N` have been edited.
+- **the target may sit outside the gain box** `[Kmin, Kmax]` — the tuner takes
+  the AMIGO tuning of the plant's FOPTD fit (`core/amigo.py`, the same design
+  drawn as the AMIGO reference in the Step Response plot) as its estimate of
+  where a good tuning sits, and says which gain cannot reach it, and by how much;
+- **the derivative band may have collapsed** — Γ2 reads `[1/Td, ν/Td]`, and if
+  it narrows, the bottom row of the rule stops attributing buzzing to Kd. With
+  `DERIV_FILTER_N` at its shipped value this cannot fire, so it only appears if
+  that constant has been edited.
 
 And after it, read off the state the run actually finished in:
 

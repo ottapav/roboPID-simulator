@@ -21,11 +21,11 @@ make that search meaningless, and they are not the same thing:
     a claim about the plant. See check_phase.
   * **The boundary is outside the box.** The answer exists but the search cannot
     reach it from the current sliders. The run is still valid; it just
-    terminates at a bound instead of at a turn-index limit. Those are Gates 2-4,
-    which warn and let the run proceed.
+    terminates at a bound instead of at a turn-index limit. Those are Gates 2
+    and 3, which warn and let the run proceed.
 
 Gate 0 (positive static gain) precedes both: it is required in its own right,
-and it is required *before* the phase sweep, since a negative K adds a further
+and it is required *before* the phase gate, since a negative K adds a further
 +-pi to arg P and would let a one-lag plant pass Gate 1 spuriously.
 
 Not re-checked here, because they are guaranteed upstream: tau >= TAU_MIN
@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .amigo import AmigoDesign, amigo_design
 from .params import DERIV_FILTER_N
 
 # ── Controller structure ──────────────────────────────────────────────────────
@@ -106,23 +107,15 @@ ACTIVE_GAINS = {
 BAND_OF_GAIN = {'Ki': 0, 'Kp': 1, 'Kd': 2}
 
 # ── Target rule ───────────────────────────────────────────────────────────────
-# The target the gates measure reachability against comes from the plant's own
-# ultimate point -- the same phase sweep Gate 1 runs -- rather than from a FOPTD
-# reduction, so it inherits Gate 1's indifference to whether the plant is a
-# chain of lags or something else with the same frequency response.
-#
-# Kp = Ku/3.5 is the measured ratio between the ultimate gain and an AMIGO
-# design across four decades of L/tau. Ti and Td are Ziegler-Nichols off Tu.
-KU_OVER_KP = 3.5
-TI_OVER_TU = 0.5
-TD_OVER_TU = 0.125
+# The target Gate 2 measures reachability against is the AMIGO tuning of the
+# plant's FOPTD fit (core.amigo.amigo_design) -- the same design the Step
+# Response plot overlays, so the warning and the reference curve cannot
+# disagree about where a good tuning sits.
 
-# Band non-degeneracy floors. Ti/Td is fixed at TI_OVER_TU/TD_OVER_TU = 4 by the
-# rule above, and nu ships at 10, so *neither* of these can fire as the
-# constants stand -- they are regression guards on the constants themselves, and
-# their messages say so. TI_TD_MIN sits below 4 deliberately: the gate is meant
-# to mean "Ti has collapsed onto Td", not to track the rule's own arithmetic.
-TI_TD_MIN = 2.0
+# Band non-degeneracy floor for Gate 3. Band 2 = [1/Td, nu/Td] spans exactly
+# nu = DERIV_FILTER_N, which ships at 10, so this cannot fire as the constant
+# stands -- it is a regression guard on the constant itself, and its message
+# says so.
 NU_MIN = 4.0
 
 # A multiplier reaches a bound through max()/min() in triangular_rule, so it
@@ -165,115 +158,11 @@ class Verdict:
         return tuple(f for f in self.findings if not f.blocking)
 
 
-@dataclass(frozen=True)
-class Target:
-    """The gain the tuner is implicitly searching for, and where it came from."""
-    wu: float
-    Ku: float
-    Tu: float
-    Kp: float
-    Ki: float
-    Kd: float
-    Ti: float
-    Td: float
-
-    def gain(self, name: str) -> float:
-        return getattr(self, name)
-
-    @property
-    def provenance(self) -> str:
-        return (f'The target comes from the plant’s ultimate point '
-                f'ω_u = {self.wu:.4g} rad/s, Ku = {self.Ku:.4g}, '
-                f'Tu = {self.Tu:.4g} s via Kp = Ku/{KU_OVER_KP:g}, '
-                f'Ti = Tu/{1 / TI_OVER_TU:g}, Td = Tu/{1 / TD_OVER_TU:g}.')
-
-
-# ── Frequency response ────────────────────────────────────────────────────────
-
-def plant_phase(tau, L: float, w: np.ndarray) -> np.ndarray:
-    """
-    arg P(jw) in radians for P(s) = K*exp(-Ls)/prod(tau_i*s + 1), K > 0.
-
-    Monotone decreasing in w, so nothing here needs unwrapping and the minimum
-    over any grid is its last sample. K is absent because a positive gain
-    contributes no phase -- which is exactly why Gate 0 has to run first.
-    """
-    tau = np.atleast_1d(np.asarray(tau, dtype=float))
-    w = np.atleast_1d(np.asarray(w, dtype=float))
-    return -L * w - np.sum(np.arctan(np.outer(w, tau)), axis=1)
-
-
-def plant_magnitude(tau, K: float, w: np.ndarray) -> np.ndarray:
-    """|P(jw)|. The dead time is all-pass and does not appear."""
-    tau = np.atleast_1d(np.asarray(tau, dtype=float))
-    w = np.atleast_1d(np.asarray(w, dtype=float))
-    return abs(K) / np.prod(np.sqrt(1.0 + np.outer(w, tau) ** 2), axis=1)
-
-
-def phase_sweep(tau, L: float, points_per_decade: int = 128
-                ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    (w, arg P(jw)) over a grid wide enough to settle the question.
-
-    The top of the range has to cover both corner sources. 1e3/min(tau) puts
-    every lag within 0.057 deg of its own 90 deg asymptote, which is far below
-    any decision margin here. The dead time needs its own term: a *small* L
-    still guarantees a crossing mathematically (the lag -L*w is unbounded) but
-    places it near pi/L, so a grid topping out at 1e3/min(tau) would miss it and
-    report a plant with L = 1e-9 as phase-starved. Dividing by min(tau_min, L)
-    covers whichever of the two is the later one to run out.
-
-    Resolution is fixed per decade rather than in total, so widening the range
-    for a tiny L does not thin out the samples near the crossing.
-    """
-    tau = np.atleast_1d(np.asarray(tau, dtype=float))
-    span = float(np.sum(tau)) + L
-    w_lo = 1e-3 / span
-    w_hi = 1e3 / (min(float(np.min(tau)), L) if L > 0 else float(np.min(tau)))
-
-    lo, hi = np.log10(w_lo), np.log10(w_hi)
-    n = max(2000, int(points_per_decade * (hi - lo)))
-    w = np.logspace(lo, hi, n)
-    return w, plant_phase(tau, L, w)
-
-
-def ultimate_point(tau, K: float, L: float, phi: float) -> tuple[float, float, float] | None:
-    """
-    (w_u, Ku, Tu) at the frequency where arg P crosses -pi - phi, or None when
-    it never does (i.e. Gate 1 fails, and there is no ultimate point to find).
-
-    The crossing is interpolated linearly in log w between the bracketing
-    samples; the phase is smooth and monotone there, so this is exact to well
-    past the precision anything downstream needs.
-    """
-    thr = -np.pi - phi
-    w, ph = phase_sweep(tau, L)
-
-    below = np.nonzero(ph < thr)[0]
-    if below.size == 0:
-        return None
-
-    i = int(below[0])
-    if i == 0:
-        w_u = float(w[0])
-    else:
-        t = (thr - ph[i - 1]) / (ph[i] - ph[i - 1])
-        w_u = float(10.0 ** (np.log10(w[i - 1])
-                             + t * (np.log10(w[i]) - np.log10(w[i - 1]))))
-
-    mag = float(plant_magnitude(tau, K, np.array([w_u]))[0])
-    if not np.isfinite(mag) or mag <= 0.0:
-        return None
-    return w_u, 1.0 / mag, 2.0 * np.pi / w_u
-
-
-def zn_target(w_u: float, Ku: float, Tu: float) -> Target:
-    """Kp = Ku/3.5 with Ziegler-Nichols Ti, Td off Tu."""
-    Kp = Ku / KU_OVER_KP
-    Ti = TI_OVER_TU * Tu
-    Td = TD_OVER_TU * Tu
-    return Target(wu=w_u, Ku=Ku, Tu=Tu,
-                  Kp=Kp, Ki=Kp / Ti, Kd=Kp * Td, Ti=Ti, Td=Td)
+def _provenance(target: AmigoDesign) -> str:
+    """Where a reachability target came from, for the Gate 2 message."""
+    return (f'The target is the AMIGO {target.structure} tuning of the plant’s '
+            f'FOPTD fit K = {target.K:.4g}, T = {target.T:.4g} s, '
+            f'L = {target.L:.4g} s (tangent method on the open-loop step).')
 
 
 # ── Gates ─────────────────────────────────────────────────────────────────────
@@ -421,7 +310,7 @@ def check_phase(tau, L: float, ctype: str) -> Finding | None:
     )
 
 
-def check_reachability(target: Target, ctype: str, start: dict,
+def check_reachability(target: AmigoDesign, ctype: str, start: dict,
                        gain_box=(0.01, 10.0)) -> list[Finding]:
     """
     Gate 2: the target must sit inside the multiplier box the tuner searches.
@@ -437,7 +326,7 @@ def check_reachability(target: Target, ctype: str, start: dict,
 
     for name in ACTIVE_GAINS[ctype]:
         g_start = float(start.get(name, 0.0))
-        g_target = target.gain(name)
+        g_target = getattr(target, name)
         if g_start <= 0.0 or not np.isfinite(g_target) or g_target <= 0.0:
             continue
 
@@ -455,7 +344,7 @@ def check_reachability(target: Target, ctype: str, start: dict,
                 f'{ratio:.3g}× the starting {name} = {g_start:.4g}, but the '
                 f'multiplier box only spans {F_min:.3g}×…{F_max:.3g}× '
                 f'(gain box [{Kmin:g}, {Kmax:g}]).',
-                target.provenance,
+                _provenance(target),
                 f'The run is still valid — it will simply terminate with {name} '
                 f'pinned at its {"lower" if low else "upper"} bound instead of '
                 f'at a turn-index limit.',
@@ -473,39 +362,18 @@ def check_reachability(target: Target, ctype: str, start: dict,
     return findings
 
 
-def check_bands(target: Target, ctype: str) -> list[Finding]:
+def check_bands(ctype: str) -> list[Finding]:
     """
-    Gates 3 and 4: the two bands the derivative-side turn indices read must not
-    have collapsed.
+    Gate 3: the band Γ2's turn index reads must not have collapsed.
 
-    Both are structural under the shipped constants -- Ti/Td is fixed at 4 by
-    TI_OVER_TU/TD_OVER_TU and nu is fixed at 10 -- so neither can fire unless
-    somebody edits those. That is the point of them, and the messages say so.
+    Band 2 = [1/Td, nu/Td] spans exactly nu = DERIV_FILTER_N whatever the plant
+    or the gains, so this is structural: it cannot fire unless somebody edits
+    that constant. That is the point of it, and the message says so.
     """
     if ctype not in ('PID', 'PID_UNFILTERED'):
         return []
 
     findings: list[Finding] = []
-
-    ratio = target.Ti / target.Td if target.Td > 0 else np.inf
-    if ratio < TI_TD_MIN:
-        findings.append(Finding(
-            gate='bands', blocking=False,
-            title='Band 1 has collapsed.',
-            detail=(
-                f'The target Ti = {target.Ti:.4g} s and Td = {target.Td:.4g} s '
-                f'differ by only {ratio:.3g}× (minimum {TI_TD_MIN:g}×).',
-                'Band 1 = [1/Ti, 1/Td] is the frequency range Γ1’s turn index '
-                'N1 is selective over. When Ti ≈ Td that range vanishes and N1 '
-                'no longer attributes ringing to Kp specifically, so the middle '
-                'row of the triangular rule stops meaning what it says.',
-                'With the shipped constants Ti/Td is fixed at '
-                f'{TI_OVER_TU / TD_OVER_TU:g}, so this can only appear if '
-                'TI_OVER_TU or TD_OVER_TU in core/admissibility.py has been '
-                'changed — check those before suspecting the plant.',
-            ),
-            status='⚠ band 1 degenerate',
-        ))
 
     if DERIV_FILTER_N < NU_MIN:
         findings.append(Finding(
@@ -534,8 +402,8 @@ def check_plant(tau, K: float, L: float, ctype: str, start: dict,
 
     `start` maps 'Kp'/'Ki'/'Kd' to the absolute gains the sliders are sitting
     on; `gain_box` is (Kmin, Kmax). Stops at the first blocking gate, because
-    neither the phase sweep nor the ultimate point means anything once an
-    earlier one has failed.
+    neither the phase gate nor the AMIGO target means anything once an earlier
+    one has failed.
     """
     sign = check_sign(K, K_raw=K_raw, gain_box=gain_box)
     if sign is not None:
@@ -545,18 +413,15 @@ def check_plant(tau, K: float, L: float, ctype: str, start: dict,
     if phase is not None:
         return Verdict((phase,))
 
-    # Passing Gate 1 puts the asymptote strictly below the threshold, and arg P
-    # approaches its asymptote from above, so the crossing the sweep looks for
-    # always exists here -- this branch stays unreachable. It is kept because
-    # "no ultimate point" is a real answer for the function itself, and the two
-    # should not silently disagree if the gate is ever relaxed.
-    point = ultimate_point(tau, K, L, PHI_BY_CTYPE[ctype])
-    if point is None:
-        return Verdict()
-
-    target = zn_target(*point)
-    return Verdict(tuple(check_reachability(target, ctype, start, gain_box)
-                         + check_bands(target, ctype)))
+    # Passing Gates 0 and 1 leaves K > 0 and either L > 0 or at least two lags,
+    # and a chain of two or more lags always fits a positive apparent dead
+    # time, so the AMIGO design exists here and the None branch stays
+    # unreachable. It is kept because "no design" is a real answer for
+    # amigo_design itself, and the two should not silently disagree if a gate is
+    # ever relaxed.
+    target = amigo_design(tau, K, L, ctype)
+    reach = [] if target is None else check_reachability(target, ctype, start, gain_box)
+    return Verdict(tuple(reach + check_bands(ctype)))
 
 
 # ── Runtime detectors ─────────────────────────────────────────────────────────
