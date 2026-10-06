@@ -57,7 +57,7 @@ b.dn{color:var(--red)} b.up{color:var(--green)}
 .gnum{display:block;width:20px;height:20px;line-height:20px;border-radius:50%;
   background:var(--navy);color:#fff;font-weight:700;font-size:11.5px;margin:0 auto 3px}
 .gstep b:first-of-type{display:block;color:var(--navy);font-size:12.5px;margin-bottom:2px}
-.bottom{display:grid;grid-template-columns:1fr 218px;gap:12px;align-items:start;margin-top:6px}
+.bottom{display:grid;grid-template-columns:1fr 280px;gap:12px;align-items:start;margin-top:6px}
 table.rule{width:100%;border-collapse:collapse;border:1px solid #c3cdd8}
 table.rule th{color:#fff;font-size:11px;padding:5px 4px;text-transform:uppercase}
 th.hc{background:var(--navy);text-align:left;padding-left:7px}
@@ -67,14 +67,16 @@ table.rule td{border:1px solid #c3cdd8;padding:3px 4px;font-size:11.5px}
 .cn{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;padding-left:7px !important}
 .a{text-align:center;width:34px;padding:1px 2px !important}
 .gl{display:block;margin:0 auto}
+.dv{display:block;text-align:center;font-size:9px;font-weight:700;color:var(--red);line-height:1;margin-top:0}
 .why{color:var(--grey);font-size:11.5px}
 tr.alarm td{background:#fdf0f0}
-.tips{border:2px solid var(--red);border-radius:5px;padding:6px 9px}
-.tips h4{margin:0 0 5px;color:var(--red);font-size:12.5px}
+tr.alarm td.a{padding-top:0 !important;padding-bottom:1px !important}
+.tips{border:2px solid var(--red);border-radius:5px;padding:8px 11px}
+.tips h4{margin:0 0 5px;color:var(--red);font-size:13.5px;font-weight:800}
 .tips ul{margin:0;padding:0}
-.tips li{list-style:none;font-size:11px;line-height:1.25;margin:0 0 2px;
-  padding-left:13px;position:relative}
-.tips li::before{content:"\2714";position:absolute;left:0;color:var(--navy);font-size:9px}
+.tips li{list-style:none;font-size:11.5px;line-height:1.3;margin:0 0 3px;
+  padding-left:15px;position:relative}
+.tips li::before{content:"\2714";position:absolute;left:0;color:var(--navy);font-size:10px}
 .foot{margin-top:6px;border-top:2px solid var(--navy);padding-top:4px;font-size:10px;
   color:var(--grey);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .foot a{color:var(--blue)}
@@ -88,12 +90,13 @@ tr.alarm td{background:#fdf0f0}
   .guide,.bottom{grid-template-columns:1fr}
   .eqwrap{flex-wrap:wrap}
 }
-@media print{body{background:#fff}.sheet{max-width:none;padding:0}}
+@media print{body{background:#fff}.sheet{max-width:none;padding:0;zoom:.9}}
 </style></head><body><div class="sheet">
 
   <h1>SPIN TUNING</h1>
   <div class="sub"><em>S</em>TEP-RESPONSE <em>P</em>HASE-PORTRAIT <em>IN</em>SPECTION</div>
-  <p class="tag">Tune a PID loop from one step response. No model, no relay test, no optimizer.</p>
+  <p class="tag">Read one closed-loop step response, move one gain, repeat.
+    No model, no relay test, no optimizer.</p>
 
   <svg class="diagram" viewBox="0 -8 640 158">
     <defs>
@@ -154,7 +157,8 @@ tr.alarm td{background:#fdf0f0}
       <b class="kp">K<sub>p</sub></b>e(t) +
       <b class="kd">K<sub>d</sub></b>de(t)/dt
       <div class="eqnote">each gain multiplies one signal &mdash; and each portrait
-        plots that same signal</div>
+        plots that same signal; derivative filtered,
+        T<sub>f</sub> = K<sub>d</sub>/&nu;, &nu; = 10</div>
     </div>
     <div class="legend">
       <b class="ki">K<sub>i</sub></b> Integral &rarr; <b class="ki">&Gamma;<sub>0</sub></b><br>
@@ -168,11 +172,9 @@ tr.alarm td{background:#fdf0f0}
     <span class="sw" style="background:var(--purple)"></span>K<sub>i</sub>
     <span class="sw" style="background:var(--amber)"></span>K<sub>p</sub>
     <span class="sw" style="background:var(--blue)"></span>K<sub>d</sub>
-    &mdash; the band, used for the outer angle arc. &nbsp;
-    <span class="sw" style="background:var(--red)"></span><b class="cr">red</b> curve = over
-    the limit, cut that gain. &nbsp;
-    <span class="sw" style="background:var(--green)"></span><b class="cg">green</b> curve =
-    within limit, safe to raise.</p>
+    = band (outer arc) &nbsp;&nbsp;
+    <span class="sw" style="background:var(--red)"></span><b class="cr">red</b> = over limit, cut &nbsp;&nbsp;
+    <span class="sw" style="background:var(--green)"></span><b class="cg">green</b> = within limit, raise</p>
   <table class="grid">
     <thead><tr><th>Portrait</th><th>Step response</th>
       <th>Pachner plots &mdash; over / within</th><th>Reading</th></tr></thead>
@@ -201,7 +203,7 @@ tr.alarm td{background:#fdf0f0}
   <line x1="130" y1="24" x2="142" y2="24" stroke="#2e9e4f" stroke-width="2.4"/>
   <text x="145" y="27" font-size="8.5" fill="#2e9e4f" font-family="Arial"
         font-weight="bold">within limit</text>
-</svg><div class="gains"><span class="gr">K = (0.35, 0.05, 0.5)</span><br><span class="gq">K = (0.2, 0.02, 0.7)</span></div><div class="stepnote">Both portraits come from these two runs.</div></td>
+</svg><div class="gains"><span class="gr">(K<sub>i</sub>,K<sub>p</sub>,K<sub>d</sub>) = (0.35, 0.05, 0.5)</span><br><span class="gq">(K<sub>i</sub>,K<sub>p</sub>,K<sub>d</sub>) = (0.2, 0.02, 0.7)</span></div><div class="stepnote">Both portraits come from these two runs.</div></td>
         <td class="plotcell"><div class="pair">
           <figure><svg viewBox="0 0 80 80" width="80" height="80">
   <line x1="13" y1="40.0" x2="67" y2="40.0" stroke="#dde3e9"/>
@@ -337,7 +339,7 @@ tr.alarm td{background:#fdf0f0}
         <th class="hi">K<sub>i</sub></th><th class="hp">K<sub>p</sub></th>
         <th class="hd">K<sub>d</sub></th><th class="hw">Reading</th></tr></thead>
       <tbody>
-<tr class=alarm><td class="cn">record grows</td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M2.5 4 L13 14 L23.5 4" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 16 L13 26 L23.5 16" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/></svg></td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M2.5 4 L13 14 L23.5 4" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 16 L13 26 L23.5 16" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/></svg></td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M2.5 4 L13 14 L23.5 4" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 16 L13 26 L23.5 16" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/></svg></td><td class="why">runaway &mdash; halve all</td></tr>
+<tr class=alarm><td class="cn">record grows</td><td class="a"><svg viewBox="0 0 26 30" width="19" height="21" class="gl"><path d="M2.5 4 L13 14 L23.5 4" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 16 L13 26 L23.5 16" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="dv">&divide;2</span></td><td class="a"><svg viewBox="0 0 26 30" width="19" height="21" class="gl"><path d="M2.5 4 L13 14 L23.5 4" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 16 L13 26 L23.5 16" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="dv">&divide;4</span></td><td class="a"><svg viewBox="0 0 26 30" width="19" height="21" class="gl"><path d="M2.5 4 L13 14 L23.5 4" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 16 L13 26 L23.5 16" fill="none" stroke="#e11b22" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="dv">&divide;8</span></td><td class="why">runaway &mdash; back off, rate hardest</td></tr>
 <tr><td class="cn">&Gamma;<sub>0</sub> loops</td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M13 28 L1 15 L7.5 15 L7.5 2 L18.5 2 L18.5 15 L25 15 Z" fill="#e11b22"/></svg></td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><circle cx="13" cy="15" r="4.2" fill="#b7c2cd"/></svg></td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><circle cx="13" cy="15" r="4.2" fill="#b7c2cd"/></svg></td><td class="why">slow cycling &mdash; less reset</td></tr>
 <tr><td class="cn">&Gamma;<sub>1</sub> loops</td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M13 2 L25 15 L18.5 15 L18.5 28 L7.5 28 L7.5 15 L1 15 Z" fill="#2e9e4f"/></svg></td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M13 28 L1 15 L7.5 15 L7.5 2 L18.5 2 L18.5 15 L25 15 Z" fill="#e11b22"/></svg></td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><circle cx="13" cy="15" r="4.2" fill="#b7c2cd"/></svg></td><td class="why">ringing &mdash; less gain</td></tr>
 <tr><td class="cn">&Gamma;<sub>2</sub> loops</td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M13 2 L25 15 L18.5 15 L18.5 28 L7.5 28 L7.5 15 L1 15 Z" fill="#2e9e4f"/></svg></td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M13 2 L25 15 L18.5 15 L18.5 28 L7.5 28 L7.5 15 L1 15 Z" fill="#2e9e4f"/></svg></td><td class="a"><svg viewBox="0 0 26 30" width="22" height="25" class="gl"><path d="M13 28 L1 15 L7.5 15 L7.5 2 L18.5 2 L18.5 15 L25 15 Z" fill="#e11b22"/></svg></td><td class="why">buzzing &mdash; less rate</td></tr>
@@ -350,22 +352,21 @@ tr.alarm td{background:#fdf0f0}
         <li>Cut only the <b>lowest</b> objecting band &mdash; higher ones may be leakage</li>
         <li>Bands below the fault were just measured safe, so raise them</li>
         <li>Counts carry no units: the same limits fit every loop</li>
-        <li>Any start works: the screen halves gains until the record settles</li>
+        <li>Any start works: the screen backs the gains off until the record settles</li>
         <li>No stopping test: stop at any iteration</li>
       </ul>
     </div>
   </div>
 
   <div class="foot">
-    <span>&uarr; &times;&gamma; &nbsp;&darr; &divide;&gamma; &nbsp;&dArr; halve
-      &nbsp;&middot; hold &nbsp;|&nbsp; &gamma; = 1/(1&minus;&beta;), &beta; = 0.1;
-      N&#772; = (0.5, 0.75, 1.0), &epsilon; = 0.1, &delta; = 0.02 &nbsp;|&nbsp;
-      solid = counted arc, grey dash = discarded tail, outer arc = the angle actually swept</span>
+    <span>&uarr; &times;&gamma; &nbsp;&darr; &divide;&gamma; &nbsp;&dArr; back off
+      &divide;2 &divide;4 &divide;8 &nbsp;&middot; hold &nbsp;|&nbsp;
+      &gamma; = 1/(1&minus;&beta;), &beta; = 0.1;
+      N&#772; = (0.5, 0.75, 1.0), &epsilon; = 0.1, &delta; = 0.02, &nu; = 10</span>
   </div>
   <div class="cite">
     Pachner, Otta, Dost&aacute;l, Havlena &mdash; &ldquo;Model-Free PID Tuning by
-    Step-Response Inspection,&rdquo; submitted to <i>Journal of Process Control</i>, 2026.
-    &nbsp;&middot;&nbsp; CTU Prague
-    &nbsp;&middot;&nbsp; <a href="https://robopid.uceeb.cvut.cz">robopid.uceeb.cvut.cz</a>
+    Step-Response Inspection,&rdquo; submitted to <i>Journal of Process Control</i>, 2026.<br>
+    CTU Prague &nbsp;&middot;&nbsp; <a href="https://robopid-simulator.uceeb.cvut.cz/">robopid-simulator.uceeb.cvut.cz</a>
   </div>
 </div></body></html>
