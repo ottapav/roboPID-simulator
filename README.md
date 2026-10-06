@@ -2,8 +2,11 @@
 
 **RoboPID** is an interactive Dash web app implementing model-free PID
 tuning by inspection of the step response, the method described in
-[*Model-Free PID Tuning by Step-Response Inspection*](docs/JPC26_basic/main.tex)
-(Pachner, Otta, Dostál, Havlena — submitted to the Journal of Process Control).
+[*Model-Free PID Tuning by Step-Response Inspection*](https://arxiv.org/abs/2609.15711)
+(Pachner, Otta, Dostál, Havlena — arXiv:2609.15711).
+
+New to the method? The [one-page poster](docs/SPIN_poster/spin_poster.pdf)
+explains the idea at a glance; the running app serves it at `/poster`.
 
 ## Overview
 
@@ -307,15 +310,17 @@ last few digits without changing behaviour.
 If roboPID is useful in your research, please cite the paper it implements:
 
 > D. Pachner, P. Otta, J. Dostál, V. Havlena, "Model-Free PID Tuning by
-> Step-Response Inspection," submitted to Journal of Process Control.
+> Step-Response Inspection," [arXiv:2609.15711](https://arxiv.org/abs/2609.15711), 2026.
 
 ```bibtex
 @misc{pachner2026robopid,
-  author = {Pachner, Daniel and Otta, Pavel and Dostál, Jiří and Havlena, Vladimír},
-  title  = {Model-Free PID Tuning by Step-Response Inspection},
-  note   = {Submitted to Journal of Process Control},
-  year   = {2026},
-  url    = {https://github.com/ottapav/roboPID-simulator}
+  author        = {Pachner, Daniel and Otta, Pavel and Dostál, Jiří and Havlena, Vladimír},
+  title         = {Model-Free PID Tuning by Step-Response Inspection},
+  year          = {2026},
+  eprint        = {2609.15711},
+  archivePrefix = {arXiv},
+  primaryClass  = {eess.SY},
+  url           = {https://arxiv.org/abs/2609.15711}
 }
 ```
 

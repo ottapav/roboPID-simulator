@@ -351,13 +351,18 @@ def _gains_history_card() -> dbc.Card:
     ])
 
 
-_BIBTEX = """@misc{pachner2026robopid,
-  author = {Pachner, Daniel and Otta, Pavel and Dostál, Jiří and Havlena, Vladimír},
-  title  = {Model-Free PID Tuning by Step-Response Inspection},
-  note   = {Submitted to Journal of Process Control},
-  year   = {2026},
-  url    = {https://github.com/ottapav/roboPID-simulator}
-}"""
+ARXIV_ID = '2609.15711'
+ARXIV_URL = f'https://arxiv.org/abs/{ARXIV_ID}'
+
+_BIBTEX = f"""@misc{{pachner2026robopid,
+  author        = {{Pachner, Daniel and Otta, Pavel and Dostál, Jiří and Havlena, Vladimír}},
+  title         = {{Model-Free PID Tuning by Step-Response Inspection}},
+  year          = {{2026}},
+  eprint        = {{{ARXIV_ID}}},
+  archivePrefix = {{arXiv}},
+  primaryClass  = {{eess.SY}},
+  url           = {{{ARXIV_URL}}}
+}}"""
 
 
 def _tune_error_modal() -> dbc.Modal:
@@ -382,6 +387,32 @@ def _tune_error_modal() -> dbc.Modal:
         scrollable=True)
 
 
+def _start_here_banner() -> html.Div:
+    """One line for a first-time visitor: the poster, then the paper.
+
+    The poster is the quickest route to the idea, so it comes first and says
+    what it contains; the paper link follows for anyone who wants the proofs.
+    Both poster links open in a new tab so the simulator keeps its state.
+    """
+    link = dict(target='_blank', rel='noopener noreferrer')
+    return html.Div([
+        html.Strong('New here? '),
+        'The one-page poster explains the whole idea at a glance: read one '
+        'step response, count the turns of three phase portraits, move one '
+        'gain. ',
+        html.A('Open the poster', href='/poster', **link),
+        ' (',
+        html.A('PDF', href='/poster.pdf', **link),
+        '). The full paper is on ',
+        html.A(f'arXiv:{ARXIV_ID}', href=ARXIV_URL, **link),
+        '.',
+    ], style={
+        'fontSize': '13px', 'color': '#333', 'backgroundColor': '#eef4fb',
+        'border': '1px solid #c9dbf0', 'borderRadius': '4px',
+        'padding': '8px 12px', 'marginBottom': '10px',
+    })
+
+
 def _footer() -> html.Div:
     return html.Div([
         html.Hr(style={'borderColor': '#e0e0e0', 'margin': '18px 0 10px'}),
@@ -390,7 +421,10 @@ def _footer() -> html.Div:
             'the paper it implements: ',
             html.Strong('D. Pachner, P. Otta, J. Dostál, '
                         'V. Havlena, “Model-Free PID Tuning by Step-Response '
-                        'Inspection,” submitted to Journal of Process Control.'),
+                        'Inspection,” '),
+            html.A(f'arXiv:{ARXIV_ID}', href=ARXIV_URL,
+                   target='_blank', rel='noopener noreferrer'),
+            '.',
         ], style={'fontSize': '12px', 'color': '#777', 'marginBottom': '6px'}),
         html.Pre(_BIBTEX, style={
             'fontSize': '11px', 'color': '#555', 'backgroundColor': '#f8f9fa',
@@ -434,11 +468,17 @@ def make_layout(default_tau: str = '[5,5,5,5]',
         # ── Title ──────────────────────────────────────────────────────────
         dbc.Row(dbc.Col(html.H4('roboPID', className='mt-2 mb-2'))),
 
+        # ── Where to start: poster + paper ────────────────────────────────
+        dbc.Row(dbc.Col(_start_here_banner(), width=12), className='mb-1'),
+
         # ── Description ───────────────────────────────────────────────────
         dbc.Row(dbc.Col(html.P([
             'roboPID is the open academic reference implementation of '
             'SPIN-based PID tuning — a browser-hosted simulator and Python '
-            'library, released alongside the paper so readers can inspect '
+            'library, released alongside the paper (',
+            html.A(f'arXiv:{ARXIV_ID}', href=ARXIV_URL,
+                   target='_blank', rel='noopener noreferrer'),
+            ') so readers can inspect '
             'and reproduce the method. It closes a loop around a simulated '
             'process, steps the setpoint, forms the three Pachner plots of '
             'the recorded error, computes each band’s turn index, and '

@@ -20,6 +20,7 @@ import dash
 import dash_bootstrap_components as dbc
 import diskcache
 from dash import DiskcacheManager
+from flask import send_from_directory
 
 from core.params import N_POINTS, fmt2, parse_tau
 from core.signals import auto_grid
@@ -180,6 +181,22 @@ app = dash.Dash(
 )
 # WSGI entry point for Gunicorn/Render: `gunicorn app:server`.
 server = app.server
+
+# The one-page SPIN poster is served from docs/SPIN_poster, where it is kept, so
+# the app links to the same file the repository ships rather than to a copy that
+# could drift. The poster is self-contained (inline SVG, no external assets).
+_POSTER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           'docs', 'SPIN_poster')
+
+
+@server.route('/poster')
+def poster_html():
+    return send_from_directory(_POSTER_DIR, 'spin_poster.html')
+
+
+@server.route('/poster.pdf')
+def poster_pdf():
+    return send_from_directory(_POSTER_DIR, 'spin_poster.pdf')
 
 _default_tau = parse_tau(args.tau)[0]
 # Seed the header's grid fields with the same proposal propose_grid would make,
