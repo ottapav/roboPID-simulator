@@ -18,7 +18,8 @@ figures and tables rebuild without rerunning SPIN.
 | paper item | command / data |
 |---|---|
 | Prop. 1, Prop. 2 (c),(d), Lemma 1, Cor. 1 on the lag-cancelled loop (Sec. V, "Result 1") | `python3 check_result1.py` |
-| Fig. 1 | `python3 fig_stair.py` |
+| Prop. 2 (counts at small delta: rightmost root W_0, slope omega/(2 pi abs(sigma)) of the counts against ln(1/delta), bounded counts for k <= 1/e) | `python3 confirm_counts_delta.py` -> `counts_delta.json` |
+| Fig. 1 | `python3 confirm_counts_delta.py`, then `python3 fig_stair.py` |
 | Published SPIN with gain box, cautious / bold start | `box_*.jsonl`, `box2_*.jsonl` (`SPIN_BOX=1 RULES_ONLY=original OUT_PREFIX=box python3 designed.py 0 2`; add `START_SCALE=2`, `OUT_PREFIX=box2`) |
 | Certified SPIN (Algorithm 2) with gain box, both starts | `cbox_0.jsonl`, `cbox2_0.jsonl` (`SPIN_BOX=1 RULES_ONLY=cert-shape OUT_PREFIX=cbox python3 designed.py 0 1`; add `START_SCALE=2`, `OUT_PREFIX=cbox2`) |
 | Without the gain box | published: `designed_*.jsonl` (rule `original`); certified: `cnob_0.jsonl`, `cnob_1.jsonl` (`RULES_ONLY=cert-shape OUT_PREFIX=cnob python3 designed.py 0 1`; `run_rest.py` ran the remaining loops on a second core) |

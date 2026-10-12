@@ -27,7 +27,7 @@ LABEL = {"delay-dominant PI": "delay\nPI", "lag-dominant PI": "lag\nPI", "lag-do
          "fast PID": "fast\nPID"}
 LABEL.update({f"P{i} {c}": f"$P_{i}$\n{c}" for i in range(1, 5) for c in ("PI", "PID")})
 
-fig = plt.figure(figsize=(7.16, 2.15))
+fig = plt.figure(figsize=(7.16, 1.95))
 gs = fig.add_gridspec(1, 3, width_ratios=[2.0, 1.25, 0.95], wspace=0.36)
 a, b, c = (fig.add_subplot(gs[i]) for i in range(3))
 
@@ -100,5 +100,5 @@ c.set_xlim(0, 1); c.set_ylim(1.4, 2.18); c.set_xticks([0, 0.25, 0.5, 0.75, 1]); 
 c.set_xlabel("dead-time share"); c.set_ylabel("$M_s$ of the accepted tuning")
 c.set_title("(c) a plant family, PID", fontsize=8, color=INK)
 c.legend(fontsize=6.3, frameon=False, loc="lower left", handletextpad=0.3)
-fig.subplots_adjust(left=0.065, right=0.99, bottom=0.2, top=0.9)
+fig.subplots_adjust(left=0.065, right=0.99, bottom=0.22, top=0.89)
 fig.savefig("fig_certified.pdf"); fig.savefig("fig_certified.png", dpi=150)

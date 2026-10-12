@@ -43,7 +43,7 @@ def panel_curve(ax, K, L, lags, Ki, Kp, dt, n, w, col):
     return float(abs(St).max())
 
 
-fig, (a, b) = plt.subplots(1, 2, figsize=(7.16, 2.0), gridspec_kw=dict(width_ratios=[1.15, 1], wspace=0.28))
+fig, (a, b) = plt.subplots(1, 2, figsize=(7.16, 1.8), gridspec_kw=dict(width_ratios=[1.15, 1], wspace=0.28))
 K, L, lags = 1.0, 4.0, [8] * 6; Ki, Kp = simc_pi(K, L, lags); Ta = L + sum(lags); dt = Ta / 1000
 m1 = panel_curve(a, K, L, lags, Ki, Kp, dt, int(15 * Ta / dt), np.logspace(-3, math.log10(0.6), 300), BLUE)
 a.text(2.2e-3, 0.3, "$P_4$, SIMC PI\n$M_s=%.2f$" % m1, color=INK, fontsize=6.8)
@@ -70,6 +70,6 @@ b.text(5.0, 1.6, "upper bound", fontsize=6.5, color=INK2); b.text(2.0, -55, "low
 b.set_xlabel("record length / plant time scale $T_a$"); b.set_ylabel("bound vs. true $M_s$ (%)")
 b.set_title("(b) the bounds close in on $M_s$ as the record grows", fontsize=8, color=INK)
 b.legend(fontsize=6.3, frameon=False, loc="lower right", handlelength=1.6, labelspacing=0.25)
-fig.subplots_adjust(left=0.075, right=0.99, bottom=0.19, top=0.89)
+fig.subplots_adjust(left=0.075, right=0.99, bottom=0.21, top=0.88)
 fig.savefig("fig_record.pdf"); fig.savefig("fig_record.png", dpi=200)
 print("P4 SIMC PI Ms_d", round(m1, 4), " slow integral Ms_d", round(m2, 4))
