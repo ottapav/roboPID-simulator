@@ -25,7 +25,7 @@ figures and tables rebuild without rerunning SPIN.
 | Lemma 2 and Theorem 1 on all 146 accepted tunings (true tail, identity, bracketing) | `python3 confirm_thm1.py` -> `thm1_points.json` |
 | Theorem 2(ii) along the uniform back-off; Prop. 3(a),(d) | `python3 confirm_thm2.py` -> `thm2_points.json` |
 | Table II, numbers of Section V, load-step IAE | `python3 analyze_cert.py` -> `summary_cert.json` |
-| Fig. 2 | `python3 fig_record.py` |
+| Fig. 2 | `python3 bounds_vs_length.py` (panel b data), then `python3 fig_record.py` |
 | Fig. 3 | `python3 fig_certified.py` |
 | Owner of the peak (Table II) | `owner_box.json` (`OWN_IN=box python3 owner_designed.py`) |
 

@@ -78,21 +78,24 @@ ip = int(np.argmax(abs(Sr))); wp = w[ip]
 g = 1 / 0.9; G1 = G0 * np.array([1 / g, 1.0, 1.0])                     # move of the integral band
 pred = abs(1 / (1 + Lr * C_d(*G1, dt, z) / C0))
 S0 = abs(1 / (1 + L_d(K, L, lags, *G0, dt, th))); S1 = abs(1 / (1 + L_d(K, L, lags, *G1, dt, th)))
-b.semilogx(w, S0, color=ORIG, lw=4, alpha=0.3, solid_capstyle="butt")
-b.semilogx(w, S1, color=CERT, lw=4, alpha=0.3, solid_capstyle="butt")
-b.semilogx(w, pred, color=CERT, lw=1.0, ls=(0, (4, 2)))
+rc = [json.loads(l) for l in open("cbox_0.jsonl") if json.loads(l)["plant"] == "P3 PID"][0]
+Gc = np.array(rc["res"]["worst"]["gains"]); dtc = min(15 * Ta / 1500, (Gc[2] / Gc[1] / 10) / 20)
+Sc = abs(1 / (1 + L_d(K, L, lags, *Gc, dtc, w * dtc)))
+b.semilogx(w, S0, color=ORIG, lw=4, alpha=0.35, solid_capstyle="butt")
+b.semilogx(w, S1, color=INK2, lw=0.9)
+b.semilogx(w, pred, color=INK, lw=1.0, ls=(0, (2, 2)))
+b.semilogx(w, Sc, color=CERT, lw=1.8)
 b.axhline(TARGET, ls=(0, (4, 3)), color=INK2, lw=0.8)
 b.plot(wp, S0[ip], "o", ms=5, mfc="white", mec=INK, mew=1.0, zorder=5)
-b.annotate(f"certified $\\overline{{M}}={ce['upper']:.2f}>M^*$\n$\\Rightarrow$ predict each band move",
-           xy=(wp, S0[ip]), xytext=(0.0115, 2.05), fontsize=6.3, color=INK, va="bottom",
-           arrowprops=dict(arrowstyle="-", color=INK2, lw=0.6))
-b.text(0.0125, TARGET - 0.03, "target $M^*$", fontsize=6.3, color=INK2, va="top")
-b.plot([], [], color=ORIG, lw=4, alpha=0.5, label="before: true")
-b.plot([], [], color=CERT, lw=4, alpha=0.5, label="after lowering $K_i$: true")
-b.plot([], [], color=CERT, lw=1.0, ls=(0, (4, 2)), label="predicted from the step")
-b.set_xlim(w[0], w[-1]); b.set_ylim(0, 2.6); b.set_xlabel("frequency $\\omega$ (rad/s)"); b.set_ylabel("$|S_d|$")
-b.set_title("(b) one band move on $P_3$ with PID", fontsize=8, color=INK)
-b.legend(fontsize=5.8, frameon=False, loc="lower right", handlelength=1.8, labelspacing=0.2)
+b.text(0.073, TARGET - 0.03, "target $M^*$", fontsize=6.3, color=INK2, va="top")
+b.plot([], [], color=ORIG, lw=4, alpha=0.5, label="published")
+b.plot([], [], color=INK2, lw=0.9, label="one move ($K_i\\downarrow$)")
+b.plot([], [], color=INK, lw=1.0, ls=(0, (2, 2)), label="its prediction")
+b.plot([], [], color=CERT, lw=1.8, label="certified")
+b.set_xlim(0.07, 0.45); b.set_ylim(0.75, 2.3)
+b.set_xticks([0.1, 0.2, 0.4]); b.set_xticklabels(['0.1', '0.2', '0.4']); b.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter()); b.set_xlabel("frequency $\\omega$ (rad/s)"); b.set_ylabel("$|S_d|$")
+b.set_title("(b) $P_3$ with PID, near the peak", fontsize=8, color=INK)
+b.legend(fontsize=5.8, frameon=False, loc="upper right", handlelength=1.6, labelspacing=0.15, borderaxespad=0.1)
 print("P3 PID: upper", round(ce["upper"], 4), "true before", round(S0.max(), 4), "pred", round(pred.max(), 5),
       "true after", round(S1.max(), 5))
 

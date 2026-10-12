@@ -537,9 +537,11 @@ the $146$ tunings accepted in the six runs (distinct within each run), we simula
 times longer to measure the true tail $\sum_{n>N}|a_n|$. It was at most
 $2.8\cdot10^{-5}$, so Assumption~\ref{ass:tail} held with
 $\tau=10^{-3}$; the identity \eqref{eq:srecord} held up to this tail and round-off; and
-every true $M_s$ lay within its bounds (Fig.~\ref{fig:record}(b); here
-$\theta_1$ is set at the level of the read peak), with
-$\overline M-M_s\le\eta+\tau+2.8\cdot10^{-5}$. % confirm_thm1.py
+every true $M_s$ lay within its bounds (here $\theta_1$ is set at the
+level of the read peak), with $\overline M-M_s\le\eta+\tau+2.8\cdot10^{-5}$.
+On short records the tail is large and the bounds are wide, yet they
+contain $M_s$ and close in as the error settles (Fig.~\ref{fig:record}(b)).
+% confirm_thm1.py, bounds_vs_length.py
 
 \begin{figure*}[t]
 \centering
@@ -547,10 +549,9 @@ $\overline M-M_s\le\eta+\tau+2.8\cdot10^{-5}$. % confirm_thm1.py
 \caption{Lemma~\ref{lem:record} and Theorem~\ref{thm:cert}. (a) $|S_d|$
 from one setpoint step (dashed) lies on the true one (thick), for $P_4$
 with SIMC PI and for the slow-integral loop whose peak the counts miss.
-(b) For every tuning accepted in the runs of Section~\ref{sec:sim}, the
-certified lower and upper bounds of \eqref{eq:bound} relative to the true
-$M_s$ of the digital loop: all lower bounds are below zero and all upper
-bounds above.}
+(b) The bounds \eqref{eq:bound} relative to the true $M_s$ against the
+record length, with $\tau$ the true tail, for three published tunings;
+the floor of the upper bound is $\eta$.}
 \label{fig:record}
 \end{figure*}
 
@@ -608,11 +609,11 @@ fast & PID & $\mathbf{1.89}$ & $\mathbf{1.98}$ & $1.66$ & $1.69$ & $\Gamma_2$ & 
 \caption{Published against certified \spin ($M^*=1.7$). (a) The loops of
 Table~\ref{tab:spin}, grouped by the band that owns the peak of the
 published tuning. Filled orange: published, cautious start; open orange:
-published, bold start; blue: certified, cautious start. (b) One band move
-on $P_3$ with PID: the record of the published tuning reads $M_s>M^*$;
-the move of the integral band is predicted from the same record
-(Proposition~\ref{prop:shape}(d)) and lies on the true sensitivity after
-the move. (c) The family $e^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$ with PID
+published, bold start; blue: certified, cautious start. (b) $P_3$ with PID near
+the peak. Published tuning ($\overline M=1.81>M^*$, $\circ$); one move
+lowering $K_i$ ($M_s=1.739$, as predicted from the same record by
+Proposition~\ref{prop:shape}(d)); the tuning certified \spin accepts
+($1.689$). (c) The family $e^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$ with PID
 against the dead-time share.}
 \label{fig:certified}
 \end{figure*}

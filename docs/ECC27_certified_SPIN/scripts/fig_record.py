@@ -2,8 +2,7 @@
 Figure 2: Lemma 2 and Theorem 1.
   (a) true |S_d| of the digital loop (thick, light) and |S_d| read from one setpoint step (dashed),
       for P4 with SIMC PI and for the slow-integral loop that no turn count detects
-  (b) certified lower and upper bounds (Theorem 1, tau = 1e-3) relative to the true M_s, for every
-      tuning accepted in the SPIN runs (thm1_points.json, made by confirm_thm1.py)
+  (b) Theorem 1 bounds against record length, tau = true tail of the truncated record (bounds_vs_length.py)
 """
 import json, math
 import numpy as np
@@ -58,18 +57,19 @@ a.set_xlim(1e-3, 4); a.set_ylim(2e-2, 5)
 a.set_xlabel("frequency $\\omega$ (rad/s)"); a.set_ylabel("$|S_d|$", labelpad=1)
 a.set_title("(a) the step gives the whole sensitivity function", fontsize=8, color=INK)
 
-P = json.load(open("thm1_points.json"))
-for grp, col in [("published SPIN", ORANGE), ("certified SPIN", BLUE)]:
-    x = np.array([p["Ms"] for p in P if p["group"] == grp])
-    lo = np.array([p["lower"] for p in P if p["group"] == grp]) - x
-    up = np.array([p["upper"] for p in P if p["group"] == grp]) - x
-    b.plot(x, 1e3 * up, "o", ms=3.6, color=col, mec="white", mew=0.5, ls="none", label=f"{grp}, upper bound")
-    b.plot(x, 1e3 * lo, "o", ms=3.6, mfc="white", mec=col, mew=0.8, ls="none", label=f"{grp}, lower bound")
-b.axhline(0, color=INK2, lw=0.7)
-b.set_xlabel("true $M_s$ of the digital loop"); b.set_ylabel("bound $-$ true $M_s$  ($10^{-3}$)")
-b.set_title("(b) the certified bounds bracket every $M_s$", fontsize=8, color=INK)
-b.legend(fontsize=5.8, frameon=False, loc="upper right", handletextpad=0.2, labelspacing=0.2)
-yl = b.get_ylim(); b.set_ylim(yl[0], yl[1] + 0.6 * (yl[1] - yl[0]))
+B = json.load(open("bounds_vs_length.json"))
+for (pl, d), col, lab in zip(B.items(), [ORANGE, BLUE, INK2], ["$P_3$, PID", "$P_4$, PID", "lag-dom. PI"]):
+    T = np.array([r[0] for r in d["rows"]]); lo = np.array([r[1] for r in d["rows"]]); up = np.array([r[2] for r in d["rows"]])
+    b.plot(T, 100 * (up / d["Ms"] - 1), color=col, lw=1.2, marker="o", ms=2.5, label=lab)
+    b.plot(T, 100 * (lo / d["Ms"] - 1), color=col, lw=1.0, ls=(0, (3, 2)), marker="o", ms=2.5, mfc="white")
+b.axhline(0, color=INK, lw=0.8)
+b.set_xscale("log"); b.set_yscale("symlog", linthresh=0.1, linscale=0.6)
+b.set_yticks([-100, -10, -1, -0.1, 0, 0.1, 1, 10]); b.set_yticklabels(["$-100$", "$-10$", "$-1$", "$-0.1$", "0", "0.1", "1", "10"])
+b.set_ylim(-110, 40); b.set_xlim(0.28, 16)
+b.text(5.0, 1.6, "upper bound", fontsize=6.5, color=INK2); b.text(2.0, -55, "lower bound", fontsize=6.5, color=INK2)
+b.set_xlabel("record length / plant time scale $T_a$"); b.set_ylabel("bound vs. true $M_s$ (%)")
+b.set_title("(b) the bounds close in on $M_s$ as the record grows", fontsize=8, color=INK)
+b.legend(fontsize=6.3, frameon=False, loc="lower right", handlelength=1.6, labelspacing=0.25)
 fig.subplots_adjust(left=0.075, right=0.99, bottom=0.19, top=0.89)
 fig.savefig("fig_record.pdf"); fig.savefig("fig_record.png", dpi=200)
 print("P4 SIMC PI Ms_d", round(m1, 4), " slow integral Ms_d", round(m2, 4))
