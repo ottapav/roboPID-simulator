@@ -48,6 +48,14 @@ for kk, col in enumerate([INK, BLUE, ORANGE]):
     a.plot(ms, N8[:, kk] / math.log(1 / SMALL), color=col, lw=0.8, zorder=3,
            label="$\\delta=10^{-8}$ ($\\Gamma_0,\\Gamma_1,\\Gamma_2$)" if kk == 0 else None)
 a.set_xlim(1.15, 3.15); a.set_ylim(0, 0.75)
+# right axis: the same dashed curve in turns at delta = 0.02; the half-integer limits fall in its gaps
+L2 = math.log(1 / DELTA)
+for h in (0.5, 1.0, 1.5, 2.0, 2.5):
+    a.axhline(h / L2, color=RULE, lw=0.6, ls=(0, (1, 2)), zorder=0)
+r = a.twinx(); r.set_ylim(0, 0.75 * L2); r.set_yticks([0.5, 1, 1.5, 2, 2.5])
+r.set_yticklabels(["½", "1", "1½", "2", "2½"], fontsize=6.5)
+r.spines["right"].set_visible(True); r.spines["top"].set_visible(False)
+r.set_ylabel(f"$N_0$ at $\\delta={DELTA:g}$ (turns)", fontsize=7, labelpad=2)
 a.set_xlabel("$M_s$ of the loop"); a.set_ylabel("$N_k/\\ln(1/\\delta)$")
 a.set_title("(a) the counts per $\\ln(1/\\delta)$ against $M_s$", fontsize=8, color=INK)
 a.legend(fontsize=6.3, frameon=False, loc="upper left", handlelength=1.8, labelspacing=0.25)
@@ -93,7 +101,7 @@ c.text(0.0, 0.93, f"count\n$N_0={Nk[0]:.2f}$", transform=c.transAxes, fontsize=6
 c.set_aspect("equal"); c.set_xlim(-1.05, 1.05); c.set_ylim(-1.05, 1.05); c.axis("off")
 c.set_title("(c) portrait $\\Gamma_0$", fontsize=8, color=INK)
 
-fig.subplots_adjust(left=0.13, right=0.97, bottom=0.115, top=0.94)
+fig.subplots_adjust(left=0.13, right=0.9, bottom=0.115, top=0.94)
 fig.savefig("fig_stair.pdf"); fig.savefig("fig_stair.png", dpi=200)
 print("crossings in (b):", len(zc))
 ang = np.unwrap(np.arctan2(Y[1], Y[0]))
