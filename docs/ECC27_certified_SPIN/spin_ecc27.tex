@@ -15,19 +15,21 @@
 \usepackage{booktabs}
 \usepackage{url}
 \usepackage[inline]{enumitem}
+\usepackage[framemethod=default]{mdframed}
 \setlist{nosep,leftmargin=*}
 
 \newtheorem{lemma}{Lemma}
 \newtheorem{proposition}{Proposition}
 \newtheorem{corollary}{Corollary}
 \newtheorem{theorem}{Theorem}
+\surroundwithmdframed[linewidth=0.6pt,innerleftmargin=4pt,innerrightmargin=4pt,innertopmargin=1pt,innerbottommargin=3pt,skipabove=3pt,skipbelow=1pt]{theorem}
 \newtheorem{assumption}{Assumption}
 \newenvironment{proof}{\noindent\textit{Proof:}\ }{\hfill$\square$\par\smallskip}
 \usepackage{xspace}
 \newcommand{\spin}{SPIN\xspace}
 
-\title{\LARGE\bf Certified Robustness for Model-Free PID Tuning\\
-by Step-Response Inspection}
+\title{\LARGE\bf Certified Robustness for\\
+Model-Free PID Tuning by Step-Response Inspection}
 
 \author{Pavel Otta$^{1}$, Daniel Pachner$^{1}$, Ji\v{r}\'{\i} Dost\'al$^{1}$
 and Vladim\'{\i}r Havlena$^{2}$%
@@ -48,18 +50,18 @@ The \spin method tunes a PID controller without a model. After each
 setpoint step, it counts how many turns the control error makes in three
 phase portraits, and it raises the gains until a count exceeds its limit.
 The limits were found by calibration, so robustness was not guaranteed.
-We prove two results. First, for any loop, the count of the integral
-portrait is within half a turn of half the number of setpoint crossings
-if the lobes of the error shrink. For loops that cancel the plant lags,
-the lobes shrink whenever $M_s<26$, the sensitivity peak $M_s$ grows strictly with the
-loop gain, and the error never crosses the setpoint if and only if
-$M_s\le1.394$. Second, for any stable digital loop with one degree of
-freedom, the increments of the error after a unit setpoint step form the
-impulse response of the sensitivity function. One finite record thus
-gives a lower and an upper bound on $M_s$ that need no model, only a
-bound on the variation of the error after the record ends. As the
-acceptance test of \spin, the upper bound certifies every accepted
-tuning, and the test never traps \spin. Simulations on $19$
+We answer three questions with three theorems. (1) What does a count
+measure? For any loop, the count of the integral portrait is within half
+a turn of half the number of setpoint crossings if the lobes of the error
+shrink; on loops that cancel the plant lags, the lobes shrink whenever
+$M_s<26$, and the error never crosses the setpoint if and only if the
+sensitivity peak satisfies $M_s\le1.394$. (2) Can the step show $M_s$?
+For any stable digital loop with one degree of freedom, the increments of
+the error after a unit setpoint step are the impulse response of the
+sensitivity function, so one finite record gives a lower and an upper
+bound on $M_s$ without a model. (3) Can \spin then guarantee robustness?
+With the upper bound as its acceptance test, \spin accepts only tunings
+with $M_s\le M^*$, and the test never traps it. Simulations on $19$
 loops confirm the theory.
 \end{abstract}
 
@@ -115,13 +117,15 @@ the reader try \spin.\footnote{\url{https://robopid-simulator.uceeb.cvut.cz}}
 \smallskip\hrule\smallskip
 \noindent One increment multiplies or divides a gain by $1/(1-\beta)$.
 Defaults: $\bar N=(0.5,0.75,1.0)$, $\delta=0.02$, $\beta=0.1$; each gain
-stays within $[0.001,10]$ times its initial value (the gain box).
+stays within $[0.001,10]$ times its initial value (the gain box). The
+result is the last accepted tuning.
 \smallskip\hrule
 \end{figure}
 
 \subsection{Contributions}
 
-The paper answers three questions, each building on the previous one.
+The paper answers three questions, each building on the previous one;
+each answer is a theorem.
 \begin{enumerate}
 \item \emph{What does a count measure?} (Section~\ref{sec:count}) A
 portrait turns by exactly half a turn between two consecutive zeros of
@@ -129,9 +133,8 @@ its first coordinate, in any linear coordinates (Lemma~\ref{lem:half}),
 so the count of $\Gamma_0$ is within half a turn of half the number of
 setpoint crossings (Corollary~\ref{cor:count}). On loops that cancel the
 plant lags, the crossings reveal $M_s$: the error never crosses the
-setpoint if and only if $M_s\le1.394$
-(Propositions~\ref{prop:exact}, \ref{prop:cross}). Elsewhere, counts and
-$M_s$ are not tied.
+setpoint if and only if $M_s\le1.394$ (Theorem~\ref{thm:counts}).
+Elsewhere, counts and $M_s$ are not tied.
 \item \emph{Can the step show $M_s$ anyway?} (Section~\ref{sec:record})
 Yes. For a digital loop, the record gives the sensitivity function
 exactly (Lemma~\ref{lem:record}), and one finite record gives certified
@@ -160,26 +163,28 @@ setpoint step certifies $M_s$ inside a model-free tuning rule.
 
 In each portrait \eqref{eq:portraits}, the second coordinate $q$ is the
 running sum of the first coordinate $p$; in continuous time, $\dot q=p$.
-The turns are counted around the end point, which we place at the
-origin. We state the results in continuous time; the sampled counts of
-\spin approximate them. For $\Gamma_0$, the zeros of $p=e$ are the
+The turn count is the net counterclockwise angle swept around the end
+point, which we place at the origin, divided by $2\pi$. We state the
+results in continuous time; the sampled counts of \spin approximate
+them. For $\Gamma_0$, the zeros of $p=e$ are the
 setpoint crossings; for $\Gamma_1$, they are the extrema of $e$.
 
 \begin{lemma}[Half turns]
 \label{lem:half}
-Let $\dot q=p$ with $p$ continuous, and let $t_1<t_2$ be consecutive zeros
-of $p$ with $q(t_1)q(t_2)<0$. Then, on $[t_1,t_2]$, the curve $(p,q)$
+Let $\dot q=p$ with $p$ continuous, let $p(t_1)=p(t_2)=0$ with
+$q(t_1)q(t_2)<0$, and let $p$ not change sign on $(t_1,t_2)$. Then, on $[t_1,t_2]$, the curve $(p,q)$
 turns counterclockwise around the origin by exactly half a turn. The same
 holds for its image under any linear map with a positive determinant,
 such as the whitening used in \cite{SPIN}.
 \end{lemma}
 
 \begin{proof}
-On $(t_1,t_2)$, $p$ keeps one sign. Hence the curve stays in one open
+On $(t_1,t_2)$, $p$ keeps one sign. Hence the curve stays in one closed
 half-plane bounded by the $q$-axis, and $q$ moves monotonically from
 $q(t_1)$ to $q(t_2)$, that is, from one ray of the $q$-axis to the
-opposite ray. Within the half-plane, the angle stays in an open interval
-of length $\pi$, so it changes by exactly $\pi$. If $p>0$, $q$
+opposite ray; the curve avoids the origin, since $q(t)=0$ only where
+$p\neq0$. The angle therefore stays in a closed interval of length $\pi$
+whose ends are the two rays, so it changes by exactly $\pi$. If $p>0$, $q$
 increases; if $p<0$, $q$ decreases; in both cases the turn is
 counterclockwise. A linear map with a positive determinant maps the
 half-plane to a half-plane and the two rays to opposite rays, and it
@@ -188,26 +193,29 @@ preserves the orientation.
 
 \begin{corollary}[Counts and crossings]
 \label{cor:count}
-Let $p$ change sign at $t_1<\dots<t_m$, $m\ge1$, before the error stays
-within $\pm\delta$. Let $q(t_j)$ alternate in sign, and let $q(t_1)$ have the sign
-of $p$ before $t_1$. Then the turn count of $(p,q)$ lies in
-$(\frac{m-1}{2},\frac{m+1}{2})$. For $\Gamma_0$, these conditions hold if
+Let $p(0)\neq0$, and let $p$ change sign at $t_1<\dots<t_m$, $m\ge0$,
+before the error stays within $\pm\delta$. Let $q(t_j)$ alternate in
+sign, and let $q(t_1)$ have the sign of $p$ before $t_1$. Then the turn
+count of $(p,q)$, and of its image under any linear map with a positive
+determinant, lies in $(\frac{m-1}{2},\frac{m+1}{2})$. For $\Gamma_0$, these conditions hold if
 the areas of the lobes of $e$ between crossings decrease strictly.
 \end{corollary}
 
 \begin{proof}
-By Lemma~\ref{lem:half}, each of the $m-1$ intervals between sign changes
-adds $\pi$. Before $t_1$ and after $t_m$, the curve stays in one open
-half-plane and starts or ends on the ray from which it turns
-counterclockwise; so each end adds an angle in $(0,\pi)$. For $\Gamma_0$,
+For $m=0$, the curve stays in one open half-plane, so its angle changes
+by less than $\pi$. For $m\ge1$, by Lemma~\ref{lem:half}, each of the
+$m-1$ intervals between sign changes adds $\pi$. Before $t_1$ and after
+$t_m$, the curve stays in one open half-plane; by the sign conditions, it
+ends (before $t_1$) or starts (after $t_m$) on the ray from which it
+turns counterclockwise, so each end adds an angle in $(0,\pi)$. For $\Gamma_0$,
 $q(t_j)=-\int_{t_j}^\infty e\,dt$ is an alternating sum of lobe areas; if
 the areas decrease, the sum has the sign of its first term.
 \end{proof}
 
 \subsection{When crossings reveal $M_s$}
 
-Lambda, IMC and SIMC tunings cancel the plant lags \cite{Skogestad2003}.
-Examples are a PI controller $K_c(1+1/(T_is))$ with $T_i=T$ on the plant
+Lambda, IMC and SIMC tunings cancel the plant lags \cite{Skogestad2003},
+e.g., a PI controller $K_c(1+1/(T_is))$ with $T_i=T$ on the plant
 $Ke^{-sL_d}/(Ts+1)$, or a series PID controller with $T_i=T_1$ and
 $T_d=T_2$ on a plant with two lags. The loop is then
 \begin{equation}
@@ -230,8 +238,9 @@ where $x=\omega_pL_d\in(0,\pi/2)$ is the normalized peak frequency.
 \end{proposition}
 
 \begin{proof}
-The phase of $L$ is $-\pi/2-x$. It reaches $-\pi$ at $x=\pi/2$, where
-$|L|=2k/\pi$. The poles solve $sL_de^{sL_d}=-k$. Let
+The phase of $L$ is $-\pi/2-x$. It first reaches $-\pi$ at $x=\pi/2$,
+where $|L|=2k/\pi<1$; since $|L|=k/x$ decreases, $|L|<1$ at every later
+crossing of $-\pi$, so the loop is stable (Nyquist). The poles solve $sL_de^{sL_d}=-k$. Let
 $h(x)=|1+L|^2=1-2k\sin x/x+k^2/x^2$. Then
 $h'(x)=2k(\varphi(x)-k)/x^3$, where $\varphi(x)=x\sin x-x^2\cos x$
 increases on $(0,\pi)$ and $\varphi(\pi/2)=\pi/2>k$. Hence, on $(0,\pi)$,
@@ -250,12 +259,12 @@ $\dot e(t)=-(k/L_d)\,e(t-L_d)$. Let $c_1<c_2<\dots$ be the setpoint
 crossings, let $c_0=0$, let lobe $i$ be the interval $[c_i,c_{i+1}]$, and
 let $E_0=1$.
 
-\begin{proposition}[Crossings]
-\label{prop:cross}
+\begin{theorem}[Counts on lag-cancelled loops]
+\label{thm:counts}
 For the loop \eqref{eq:loop} with $0<k<\pi/2$, the following hold.
 \begin{enumerate}
 \item[(a)] The error never crosses the setpoint if and only if
-$k\le1/e$, that is, if and only if $M_s\le M_s(1/e)=1.394$. For $k>1/e$,
+$k\le1/\mathrm{e}$, that is, if and only if $M_s\le M_s(1/\mathrm{e})=1.394$. For $k>1/\mathrm{e}$,
 it crosses infinitely often.
 \item[(b)] Lobe $i$ contains exactly one extremum $E_i$, at $c_i+L_d$.
 \item[(c)] $|E_{i+1}|\le r(k)\,|E_i|$, where $r(k)=k^2/2$ for $k\le1$
@@ -264,12 +273,12 @@ and $r(k)=k-\frac12$ for $k\ge1$.
 Corollary~\ref{cor:count} holds for $\Gamma_0$: $N_0$ is within half a
 turn of half the number of crossings.
 \end{enumerate}
-\end{proposition}
+\end{theorem}
 
 \begin{proof}
 (a) The record is the fundamental solution of the delay equation. It is
 positive if and only if $s+(k/L_d)e^{-sL_d}=0$ has a real root, that is,
-if and only if $k\le1/e$; for $k>1/e$, all solutions oscillate
+if and only if $k\le1/\mathrm{e}$; for $k>1/\mathrm{e}$, all solutions oscillate
 \cite{GyoriLadas1991}. The value of $M_s$ follows from
 Proposition~\ref{prop:exact}. (b) The sign of $\dot e(t)$ is that of
 $-e(t-L_d)$. By induction over the lobes, $e$ moves away from zero on
@@ -278,7 +287,8 @@ longer than $L_d$. On $(c_i+L_d,c_{i+1}+L_d)$, $e$ moves toward zero.
 For $i=0$, the extremum is the plateau $e=1$ on $[0,L_d]$. (c) On lobe $i$, $|e|\le|E_i|$. After the extremum,
 $|\dot e|\le(k/L_d)|E_i|$, so $e$ needs at least $L_d/k$ to reach zero,
 and $|e(t)|\le|E_i|\min\{1,k(c_{i+1}-t)/L_d\}$ on the last $L_d$ of the
-lobe. Since $e(c_{i+1})=0$,
+lobe (for $t\ge c_i+L_d$ by integrating the bound on $|\dot e|$; for
+earlier $t$, $k(c_{i+1}-t)/L_d>1$). Since $e(c_{i+1})=0$,
 $E_{i+1}=-\frac{k}{L_d}\int_{c_{i+1}-L_d}^{c_{i+1}}e\,dt$, and integrating
 the bound gives $r(k)|E_i|$. (d) Integrating $\dot e$ from $c_i+L_d$ to
 $c_{i+1}+L_d$ gives the area $\frac{L_d}{k}(|E_i|+|E_{i+1}|)$ of lobe
@@ -307,11 +317,10 @@ Outside lag-cancelled loops, crossings and $M_s$ are not tied. Consider
 a first-order plant with $T=0.3L_d$, controlled by PI with $T_i=8T$ and a
 gain margin of $1.624$. Its $M_s$ is $2.62$, yet its error never crosses
 the setpoint by more than $2\%$, because the oscillation rides on a slow
-decay. (This is the $M_s$ of the continuous loop; the digital loop of
-Fig.~\ref{fig:record} has $2.61$.) Conversely, overshoot caused by a
-controller zero can produce crossings at a low $M_s$. Counts can
-therefore guide tuning, but they cannot certify it. The same step,
-however, contains $M_s$.
+decay ($2.61$ for the digital loop of Fig.~\ref{fig:record}).
+Conversely, overshoot caused by a controller zero can produce crossings
+at a low $M_s$. Counts can guide tuning but cannot certify it; the same
+step, however, contains $M_s$.
 
 \section{One Step Reveals $M_s$}
 \label{sec:record}
@@ -336,13 +345,13 @@ S(e^{j\theta})=\sum_{n\ge0}a_n\,e^{-jn\theta}.
 \end{lemma}
 
 \begin{proof}
-$E(z)=S(z)R(z)$ with $R(z)=1/(1-z^{-1})$, so $S=(1-z^{-1})E$. In a stable
+The $z$-transform of $e$ is $S(z)/(1-z^{-1})$, so $S=(1-z^{-1})\mathcal Z\{e\}$. In a stable
 loop, $a_n$ decays exponentially, so the series converges on the unit
 circle.
 \end{proof}
 
-A real record is finite, and the only quantity it cannot provide is the
-remaining variation of the error after its end.
+A real record is finite; it cannot show the remaining variation of the
+error after its end.
 
 \begin{assumption}[Long enough record]
 \label{ass:tail}
@@ -350,12 +359,13 @@ The loop is stable, and the record $e_0,\dots,e_N$ satisfies
 $\sum_{n>N}|a_n|\le\tau$ for a known $\tau$.
 \end{assumption}
 
-In a stable loop, $|a_n|\le c\rho^n$ with $\rho<1$, so the remaining
-variation falls geometrically with the record length.
+In a stable loop, $|a_n|\le c\rho^n$ with $\rho<1$, so $\tau$ falls
+geometrically with the record length.
 
 \begin{theorem}[Certified bounds from one record]
 \label{thm:cert}
-Let Assumption~\ref{ass:tail} hold, and let
+Let the conditions of Lemma~\ref{lem:record} and
+Assumption~\ref{ass:tail} hold, and let
 $\hat S(\theta)=\sum_{n=0}^{N}a_ne^{-jn\theta}$. Let $G$ be a uniform
 grid on $[0,\bar\theta]$, $\bar\theta\le\pi$, that has spacing $h$ and
 contains both ends. For any $n_c$, let
@@ -384,8 +394,8 @@ term of $\overline M$. On $[\bar\theta,\pi]$, let $z=e^{-j\theta}$ and
 $Z_n=\sum_{m=1}^nz^m$, so that $|Z_n|\le2/|1-z|=1/\sin(\theta/2)$.
 Summation by parts gives $\sum_{n\ge1}a_nz^n=\sum_{n\ge1}(a_n-a_{n+1})Z_n$.
 Since $\sum_{n\ge N}|a_n-a_{n+1}|\le|a_N|+2\tau$, we obtain
-$|S-a_0|\le B/\sin(\theta/2)$ with $a_0=1$. Convergence follows because
-the remaining variation and $hJ$ tend to zero.
+$|S-a_0|\le B/\sin(\theta/2)$ with $a_0=1$. Convergence follows because, for fixed $n_c$, $J$ stays bounded as
+$N\to\infty$, so $hJ\to0$, and the remaining variation tends to zero.
 \end{proof}
 
 Every quantity in \eqref{eq:bound} except $\tau$ is computed from the
@@ -398,7 +408,7 @@ values;
 record, $B$ is small and bounds all high frequencies at once.
 \end{enumerate*}
 
-\section{\spin That Never Accepts a Fragile Tuning}
+\section{Never Accept a Fragile Tuning}
 \label{sec:spin}
 
 \begin{figure}[t]
@@ -410,7 +420,7 @@ is replaced by
 \noindent\begin{tabular}{@{}r@{\hspace{0.6em}}l@{}}
 7a: & compute $\overline M$ by Theorem~\ref{thm:cert}, with $\bar\theta$\\
     & from $1+B/\sin(\bar\theta/2)=M^*$ ($\bar\theta=\pi$ if no solution)\\
-    & and the grid spacing $h$ such that $hJ/2\le\eta$\\
+    & and $h=\bar\theta/\lceil\bar\theta J/(2\eta)\rceil$, so that $hJ/2\le\eta$\\
 7b: & \textbf{if} $\overline M\le M^*$ \textbf{then} raise all
 gains by one increment \hfill (accept)\\
 7c: & \textbf{else} predict by Proposition~\ref{prop:shape} the $M_s$
@@ -436,27 +446,31 @@ rejection, it uses two kinds of moves:
 
 \begin{theorem}[Certified \spin]
 \label{thm:spin}
-Let the plant be stable, let $K_iP(1)>0$, let
-Assumption~\ref{ass:tail} hold for every record, and let $hJ/2\le\eta$.
-For (iii) and (iv), also let no gain be clipped by the gain box.
+Let the plant be stable, let $K_iP(1)>0$, and let every record tested in
+line 7a meet the conditions of Lemma~\ref{lem:record} and
+Assumption~\ref{ass:tail}. For (iii) and (iv), also let no gain be
+clipped by the gain box, and let $\beta<\frac12$.
 \begin{enumerate}
-\item[(i)] Every tuning accepted by Algorithm~2 has $M_s\le M^*$.
-\item[(ii)] For gains $K$, let
-$m=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(e^{j\theta})\}$. For
-$0<\lambda<1/|m|$, the loop with the gains $\lambda K$ is stable, and
+\item[(i)] Every tuning that passes the test of line 7b, and hence the
+result of Algorithm~2, has $M_s\le M^*$.
+\item[(ii)] For a controller $C$, let
+$\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(e^{j\theta})\}$. For
+$0<\lambda<1/|\mu|$, the loop with the controller $\lambda C$ is stable,
+and
 \begin{equation}
-M_s(\lambda K)\le\frac{1}{1-\lambda|m|}.
+M_s(\lambda C)\le\frac{1}{1-\lambda|\mu|}.
 \label{eq:backoff}
 \end{equation}
 \item[(iii)] If $M^*>1+2\tau+\eta$, every run of consecutive rejections
 by the test of line 7b ends, either in an acceptance or in a move of
 Algorithm~1 (line 3 or line 10). The run contains at most
 $n_{\max}$ band moves, and each stretch of uniform back-offs in it has at
-most $\lceil\ln\frac{|m|M'}{M'-1}/\ln\frac1{1-\beta}\rceil$ of them,
-where $M'=M^*-2\tau-\eta$ and $m$ belongs to the gains at the start of
-the stretch.
+most $\lceil\ln\frac{|\mu|M'}{M'-1}/\ln\frac1{1-\beta}\rceil$ of them,
+where $M'=M^*-2\tau-\eta$ and $\mu$ belongs to the controller at the
+start of the stretch.
 \item[(iv)] Every move except an acceptance lowers
-$\Phi=\ln K_i+2\ln K_p+4\ln K_d$ by at least $\ln\frac1{1-\beta}$. Hence
+$\Phi=\ln K_i+2\ln K_p+4\ln K_d$ (without the last term for PI) by at
+least $\ln\frac1{1-\beta}$. Hence
 the gains never return to earlier values without an acceptance in
 between.
 \end{enumerate}
@@ -466,40 +480,42 @@ between.
 (i) This follows from Theorem~\ref{thm:cert}. (ii) $L$ is bounded on the
 unit circle except near $z=1$. There, the integral term has a bounded
 real part, because $P$ is analytic at $z=1$ and
-$\mathrm{Re}\,1/(e^{j\theta}-1)=-\frac12$; so $m$ is finite. Then
-$|1+\lambda L|\ge1+\lambda\,\mathrm{Re}\,L\ge1-\lambda|m|>0$, which gives
+$\mathrm{Re}\,1/(e^{j\theta}-1)=-\frac12$; so $\mu$ is finite. Then
+$|1+\lambda L|\ge1+\lambda\,\mathrm{Re}\,L\ge1-\lambda|\mu|>0$, which gives
 \eqref{eq:backoff}. The Nyquist curve of $\lambda L$ lies in
-$\mathrm{Re}\ge-\lambda|m|>-1$, also on the indentation at $z=1$, where
-$K_iP(1)>0$ makes the real part large and positive. It therefore cannot
+$\mathrm{Re}\ge-\lambda|\mu|>-1$, also on a small enough indentation
+outside $z=1$, where $K_iP(1)>0$ keeps $\mathrm{Re}\,L>\mu$. It therefore cannot
 encircle $-1$, and since $L$ has no poles outside the unit disc, the loop
 is stable. (iii) Line 7d allows at most $n_{\max}$ band moves. In a
-stretch of uniform back-offs from gains $K$, $\lambda=(1-\beta)^j$ after
+stretch of uniform back-offs from a controller $C$, $\lambda=(1-\beta)^j$ after
 $j$ back-offs, and \eqref{eq:backoff} gives $M_s\le M'$ for the stated
 $j$. In \eqref{eq:bound}, the grid term is then at most
 $M_s+\tau+\eta+\tau\le M^*$, and the second term is at most $M^*$ by the
 choice of $\bar\theta$; so the test passes unless the counts reject
 first. (iv) With $w=(1,2,4)$, a band move changes $\Phi$ by
 $\ln\frac1{1-\beta}(\sum_{j<k}w_j-w_k)\le-\ln\frac1{1-\beta}$. A uniform
-back-off changes it by $-7\ln\frac1{1-\beta}$, and line 3 by $-17\ln2$.
+back-off changes it by $-7\ln\frac1{1-\beta}$, and line 3 by
+$-17\ln2<-\ln\frac1{1-\beta}$ for $\beta<\frac12$.
 Returning to the same gains requires $\sum\Delta\Phi=0$, hence an
 acceptance, which raises $\Phi$.
 \end{proof}
 
-The test therefore never traps \spin: it either certifies a tuning or
-returns control to the original rules. Part (i) holds with or without the
-gain box. Part (iv) does not exclude a drift without acceptance, in which
-$\Phi$ decreases forever. Such a drift is a property of the counts, and
-the gain box of \spin stops it (Section~\ref{sec:sim}).
+So the test never traps \spin: it certifies a tuning or returns control
+to the original rules. Part (i) holds with or without the gain box. Part
+(iv) allows a drift in which $\Phi$ decreases forever; this is a
+property of the counts, stopped by the gain box (Section~\ref{sec:sim}).
 
-A uniform back-off is safe by (ii), but it worsens load rejection. A band
-move is often cheaper, and the same record predicts what each move does.
+A uniform back-off is safe by (ii) but worsens load rejection; a band
+move is often cheaper, and the record predicts what each move does.
 
 \begin{proposition}[Prediction from one step]
 \label{prop:shape}
 For any controller $C'$ on the same plant,
 $S'=S/(S+(1-S)C'/C)$ exactly. If the record gives
 $\hat S=S+\varepsilon$, the predicted $\hat S'$ has the error
-$\hat S'-S'=\varepsilon\,(C'/C)\,S'\hat S'/(S\hat S)$.
+$\hat S'-S'=\varepsilon\,(C'/C)/(D\hat D)$, where $D=S+(1-S)C'/C$ and
+$\hat D$ is $D$ with $\hat S$, wherever $D,\hat D\neq0$. The formula
+predicts the frequency response of the new loop, not its stability.
 \end{proposition}
 
 \begin{proof}
@@ -519,7 +535,7 @@ of $10$ and the gain box of \cite{SPIN}. Because the box ties the result
 to the initial tuning, every loop runs from two initial tunings: SIMC on
 a half-rule model with $\tau_c$ equal to three times its dead time
 (cautious start), and the same tuning with all gains doubled (bold
-start). The test set has $19$ loops.
+start). The $19$ test loops are:
 \begin{enumerate}
 \item The four plants of \cite{SPIN}, with PI and with PID,
 \begin{align*}
@@ -536,7 +552,7 @@ $e^{-0.1s}/((s+1)(0.5s+1))$ with PID.
 $L_d\in\{0.25,0.5,1,\dots,16\}$, whose dead-time share runs from $0.125$
 to $0.90$.
 \end{enumerate}
-P, I and D all act on the error (one degree of freedom). Let $T_a$ be the dead time plus the
+P, I and D act on the error. Let $T_a$ be the dead time plus the
 lag time constants of the plant and $T_f$ the derivative filter time
 constant; the controller runs at $T_s=\min(T_a/100,T_f/20)$ for PID and
 $T_a/1000$ for PI, with exactly discretized lags and the delay rounded to
@@ -545,10 +561,10 @@ those of this digital loop, computed from its exact $L$. Because \spin ends
 in a cycle between a few tunings, we report the most aggressive tuning
 accepted in the last $60$ iterations.
 
-\paragraph*{Counts (Section~\ref{sec:count})} On the lag-cancelled loop with $1/e<k<3/2$, for
+\paragraph*{Counts (Section~\ref{sec:count})} On the lag-cancelled loop with $1/\mathrm{e}<k<3/2$, for
 all $126$ values of $k$ tested,
 \begin{enumerate*}[label=(\arabic*)]
-\item bound (c) of Proposition~\ref{prop:cross} held for every
+\item bound (c) of Theorem~\ref{thm:counts} held for every
 extremum, with equality for the first one when $k\ge1$;
 \item the lobe areas decreased, and $\Gamma_0$ turned by half a turn
 between crossings to within $10^{-6}$, also after a linear map;
@@ -578,7 +594,7 @@ remaining variation (Theorem~\ref{thm:cert}).}
 \label{fig:record}
 \end{figure*}
 
-\paragraph*{Certified \spin (Section~\ref{sec:spin})} See Table~\ref{tab:spin} and Fig.~\ref{fig:certified}.
+\paragraph*{Certified \spin (Section~\ref{sec:spin}; Table~\ref{tab:spin}, Fig.~\ref{fig:certified})}
 \begin{itemize}
 \item \emph{Safety.} Published \spin ended above $M^*=1.7$ on $9$ of the
 $19$ loops from the cautious start (up to $2.01$) and on $8$ from the
@@ -590,21 +606,19 @@ Theorem~\ref{thm:spin}(i) guarantees.
 of the $18$ loops that accepted a tuning in their last $60$ iterations (up
 to $2.05$), whereas certified \spin stayed at or below $M^*$ on all $18$
 (up to $1.68$).
-\item \emph{Back-off and prediction.} Along the uniform back-off from the
-most aggressive published tuning of each loop (cautious start), the loop
-stayed stable and \eqref{eq:backoff} held. The predicted $M_s$ after
-every band move matched the true value to within $10^{-7}$
-(Fig.~\ref{fig:certified}(b)).
+\item \emph{Back-off and prediction.} Along the uniform back-off from each
+most aggressive published tuning, the loop stayed stable and
+\eqref{eq:backoff} held; the predicted $M_s$ after every band move
+matched the true value to within $10^{-7}$.
 \item \emph{No trapping.} Runs of rejections by the test contained at
 most $4$ band moves, fewer than $n_{\max}$, and every loop had at least
 $7$ acceptances in its last $60$ iterations. The one exception is
-$L_d=16$ without the box, which accepts no tuning under either rule: the
-counts reject in a repeating pattern that lowers $K_d$ in every round, the
-drift that Theorem~\ref{thm:spin}(iv) allows.
-\item \emph{Cost.} The price is worse load rejection: the
-integrated absolute error (IAE) after a unit load step at the plant input
-rose by $7.8\%$ on average over the $19$ loops ($6.4\%$ from the bold
-start).
+$L_d=16$ without the box, where under either rule the counts reject in a
+repeating pattern that lowers $K_d$ every round: the drift that
+Theorem~\ref{thm:spin}(iv) allows.
+\item \emph{Cost.} The integrated absolute error (IAE) after a unit
+load step at the plant input rose by $7.8\%$ on average ($6.4\%$ from
+the bold start).
 \end{itemize}
 % designed.py (cert-shape), confirm_thm2.py, analyze_cert.py
 
@@ -655,18 +669,19 @@ predicted by Proposition~\ref{prop:shape}); certified tuning ($1.689$).
 The three questions of the introduction have clear answers.
 \begin{enumerate}
 \item A count measures setpoint crossings; on lag-cancelled loops, an
-error that never crosses the setpoint means $M_s\le1.394$.
+error that never crosses the setpoint means $M_s\le1.394$
+(Theorem~\ref{thm:counts}).
 \item The setpoint step that \spin already records gives the sensitivity
 function of a digital loop exactly, and one finite record certifies $M_s$
-without a model; so does every logged setpoint change made from rest.
+without a model (Theorem~\ref{thm:cert}); so does every logged setpoint
+change made from rest.
 \item With this certificate as its acceptance test, \spin accepts only
-tunings with $M_s\le M^*$, and the test never traps it.
+tunings with $M_s\le M^*$, and the test never traps it
+(Theorem~\ref{thm:spin}).
 \end{enumerate}
 The theorems assume a linear loop and a long enough record; noise and real
-loops are the subject of a follow-up. Scripts for every number and
-figure are available at
-\url{https://github.com/ottapav/robopid-simulator}, folder
-\texttt{docs/ECC27\_certified\_SPIN}.
+loops are left to a follow-up. Scripts: \url{https://github.com/ottapav/robopid-simulator}
+(\texttt{docs/ECC27\_certified\_SPIN}).
 
 {\footnotesize
 \begin{thebibliography}{99}
