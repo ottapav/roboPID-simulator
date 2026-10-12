@@ -59,7 +59,7 @@ for n, (x0, x1) in enumerate(zip(lo, hi)):
 a.set_xlim(ms[0], 2.64); a.set_ylim(0, 2.05)
 a.set_yticks([0, 0.5, 1, 1.5, 2])
 a.set_xlabel("$M_s$ of the loop"); a.set_ylabel("turn count $N_k$")
-a.set_title(f"(a) one staircase, one step per crossing ($\\delta={DELTA:g}$)", fontsize=8, color=INK)
+a.set_title(f"(a) the whitened counts against $M_s$ ($\\delta={DELTA:g}$)", fontsize=8, color=INK)
 a.legend(fontsize=6.5, frameon=False, loc="upper left", handlelength=1.4)
 
 # ---- data for (b), (c): one record

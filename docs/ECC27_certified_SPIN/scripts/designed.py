@@ -55,6 +55,11 @@ RULES = {"original": (counts_old, (0.5, 0.75, 1.0), None),
          # same, but among the band moves predicted to lower M_s take the highest band: its move
          # raises the lower gains (K_i last), which costs the least load rejection
          "original+shape-hi": (counts_old, (0.5, 0.75, 1.0), 1.7),
+         # Algorithm 2 of the paper: accept iff the certified upper bound of Theorem 1 is <= M*;
+         # otherwise predict from the same record (discrete loop, exact) the M_s after each SPIN band
+         # move, apply the highest band predicted to lower it (at most NMAX in a row), else back off
+         # all gains uniformly
+         "cert-shape": (counts_old, (0.5, 0.75, 1.0), 1.7),
          "ms-bands": ("bands", tuple(float(x) for x in _os.environ.get("MS_LIMITS", "1.7,1.7,1.7").split(",")), None)}
 
 
@@ -112,6 +117,28 @@ def shape_move(e, dt, Ta, Ki0, Kp0, Kd0, F, nb, g, Mstar, prefer_high=False):
                       grad_pick=int(np.argmax(dk)), grad_ok=bool(max(dk) > 0))
 
 
+TAU, ETA, NMAX = 1e-3, 2e-3, 10
+
+
+def cert_move(e, dt, Ki0, Kp0, Kd0, F, nb, g, Mstar):
+    """Algorithm 2, lines 7a-7d. Returns (move or None, info)."""
+    from cert import certificate, S_grid, increments, C_d
+    c = certificate(e, TAU, ETA, Mhf=Mstar)
+    if c["upper"] <= Mstar: return None, c
+    a = increments(e); S, h = S_grid(a, c["th1"], c["M"])
+    th = np.arange(c["M"]) * h; th[0] = 1e-3 * h                 # avoid z = 1 (integrator)
+    S = np.where(np.arange(c["M"]) == 0, S_grid(a, h * 1e-3, 2)[0][1], S)
+    z = np.exp(1j * th); K0 = np.array([Ki0, Kp0, Kd0])
+    C = C_d(*(K0 * F), dt, z); Lr = 1 / S - 1
+    pred = {}
+    for k in range(nb):
+        Fn = F.copy(); Fn[:k] *= g; Fn[k] /= g
+        pred[k] = float(np.max(abs(1 / (1 + Lr * C_d(*(K0 * Fn), dt, z) / C))))
+    down = [k for k in range(nb) if pred[k] < c["read"]]
+    c["pred"] = pred
+    return (max(down) if down else "all"), c
+
+
 def run(K, L, lags, pid, rule, iters=200, beta=0.1):
     counter, limits, Mstar = RULES[rule]
     Ta = L + sum(lags); g = 1 / (1 - beta); nb = 3 if pid else 2
@@ -120,7 +147,7 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
     Kp0 = tau / (K * 4 * th); Ki0 = Kp0 / tau; Kd0 = Kp0 * l[1] * 0.5 if pid else 0.0
     sc = float(_os.environ.get("START_SCALE", "1"))   # e.g. 2 = SIMC with tau_c = theta
     Kp0, Ki0, Kd0 = sc * Kp0, sc * Ki0, sc * Kd0
-    F = np.ones(3); acc = []; log = []; shp = []; dts = 15 * Ta / 1500
+    F = np.ones(3); acc = []; log = []; shp = []; dts = 15 * Ta / 1500; streak = 0
     for it in range(iters):
         Ki, Kp, Kd = Ki0 * F[0], Kp0 * F[1], Kd0 * F[2]
         dt = min(dts, (Kd / Kp / 10) / 20) if pid else Ta / 1000
@@ -151,6 +178,21 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
         else:
             N = counter(e[::step], dt * step)
             V = [k for k in range(nb) if N[k] > limits[k]]; tag = None; read = None
+        if not V and rule == "cert-shape":
+            mv, info = cert_move(e, dt, Ki0, Kp0, Kd0, F, nb, g, Mstar)
+            read = max(info["read"] + info["grid_term"] + TAU, info["up_hf"])     # certified upper bound
+            if mv is not None:
+                streak = streak + 1 if mv != "all" else streak
+                if streak > NMAX: mv = "all"
+                Fn = F.copy()
+                if mv == "all": Fn = Fn / g
+                else: Fn[:mv] *= g; Fn[mv] /= g
+                Fn = np.clip(Fn, FMIN, FMAX)
+                if it >= iters - 60: log.append(f"shape{mv}")
+                shp.append(dict(it=it, move=mv, read=info["read"], upper=info["upper"],
+                                pred=(info["pred"][mv] if mv != "all" else None)))
+                F = Fn; continue
+            streak = 0
         if not V and rule in ("original+shape", "original+shape-hi"):
             mv, info = shape_move(e, dt, Ta, Ki0, Kp0, Kd0, F, nb, g, Mstar,
                                   prefer_high=(rule == "original+shape-hi")); read = info["read"]
@@ -165,7 +207,7 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
                 shp.append(dict(it=it, move=mv, read=info["read"], pred=info["pred"][mv], true_new=true_new,
                                 grad=info["grad"], grad_pick=info["grad_pick"], grad_ok=info["grad_ok"], ReS=info["ReS"]))
                 F = Fn; continue
-        if not V and Mstar is not None and rule not in ("original+shape", "original+shape-hi"):
+        if not V and Mstar is not None and rule not in ("original+shape", "original+shape-hi", "cert-shape"):
             wmax = min(3 / L, 0.3 * math.pi / dt)
             w = np.logspace(math.log10(0.01 / Ta), math.log10(wmax), 500)
             Sw = S_rec(e, dt, w); i = int(np.argmax(abs(Sw))); read = float(abs(Sw[i]))
@@ -192,7 +234,10 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
         if key in seen: continue
         Lw = loop_fr(K, L, lags, Ki, Kp, Kd, w)
         ph = np.unwrap(np.angle(Lw)); GM = 1 / abs(Lw[np.argmin(abs(ph + np.pi))])
-        seen[key] = dict(gains=[Ki, Kp, Kd], Ms=float(np.max(1 / abs(1 + Lw))), GM=float(GM), read=read)
+        from cert import Ms_d
+        dtk = min(dts, (Kd / Kp / 10) / 20) if pid else Ta / 1000
+        seen[key] = dict(gains=[Ki, Kp, Kd], Ms=float(np.max(1 / abs(1 + Lw))), GM=float(GM), read=read,
+                         Ms_d=Ms_d(K, L, lags, Ki, Kp, Kd, dtk)[0], dt=dtk)
     cand = list(seen.values()); worst = max(cand, key=lambda c: c["Ms"])
     worst["IAE"] = float(load_iae(K, L, lags, *worst["gains"]))
     hist = {k: log.count(k) for k in sorted(set(log))}
