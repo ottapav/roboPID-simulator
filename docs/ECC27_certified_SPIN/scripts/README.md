@@ -1,46 +1,37 @@
-# Certified Robustness for Model-Free PID Tuning by Step-Response Inspection
+# Scripts for "Certified Robustness for Model-Free PID Tuning by Step-Response Inspection"
 
-Code and results for the ECC 2027 paper by P. Otta, D. Pachner, J. Dostál and V. Havlena.
-Every number and figure in the paper is reproduced by the scripts below.
-Needs Python 3 with numpy, scipy and matplotlib. Run everything from this folder.
+Needs Python 3 with numpy, scipy (>= 1.8, for `scipy.signal.czt`) and matplotlib. Run everything from
+this folder. Every claim of the paper is a lemma, proposition or theorem; the scripts below
+*confirm* them in simulation (Section V) and draw the figures. Simulation results are included, so
+figures and tables rebuild without rerunning SPIN.
 
-## Result 1: lag-cancelled loops (Section 2)
+## Core
 
-| paper item | script |
+| file | content |
 |---|---|
-| Prop. 1, Prop. 2, Table I | `python3 reproduce.py` |
-| Prop. 2(a) no crossing iff k ≤ 1/e (M_s ≤ 1.39), error of Prop. 2(c) | `lagcancel.py` (exact record of de/dt = -k e(t-1)) |
-| Fig. 1 (staircase, record, portrait) | `python3 fig_stair.py` |
-| Per-axis counts of SPIN's own limits | `lagcancel.py` + `compare.counts_old` |
-| 630-loop grid, slow-integral loop | `python3 reproduce.py --grid`, `fig_record.py` |
+| `cert.py` | Theorem 1: certified lower/upper bound on M_s from one finite record (tail term, Lipschitz grid term, Abel high-frequency term); the exact digital loop `L_d`, `C_d`, `P_d` of the simulator; exact `Ms_d` |
+| `spin_cert_run.py` | `sim`: the digital loop (PID with forward-Euler integral and filtered derivative, lags discretized exactly, delay rounded to samples) |
+| `designed.py` | SPIN runner. Rule `original` = SPIN as published; rule `cert-shape` = Algorithm 2 (acceptance iff the certified upper bound <= M*, band move predicted by Prop. 3(d), at most `NMAX` in a row, else uniform back-off). `SPIN_BOX=1` turns on SPIN's gain box, `START_SCALE=2` the bold start |
 
-## Result 2: the certificate and certified SPIN (Sections 3–4)
+## Paper item -> script
 
-| paper item | script / data |
+| paper item | command / data |
 |---|---|
-| Lemma 1 exactness, sampling convergence | `python3 conv.py` |
-| Two-degree-of-freedom form (Corollary 1) | `python3 twodof.py` |
-| Noise paragraph | `python3 noise.py` |
-| Fig. 2 (122 readings) | `python3 fig_record.py` (cache: `record_points.json`) |
-| Original SPIN as published (gain box), cautious start | `SPIN_BOX=1 RULES_ONLY=original OUT_PREFIX=box python3 designed.py 0 2` and `... 1 2` → `box_*.jsonl` |
-| Same, bold start | add `START_SCALE=2`, `OUT_PREFIX=box2` → `box2_*.jsonl` |
-| Certified SPIN (published SPIN + acceptance test + band shaping, Algorithm 2), both starts | `SPIN_BOX=1 RULES_ONLY=original+shape-hi OUT_PREFIX=shapehi python3 designed.py 0 1` (and `START_SCALE=2 OUT_PREFIX=shapehi2`) → `shapehi*_0.jsonl` |
-| Other rules compared (elasticity band choice `original+test`, `shape`, uniform back-off `unif*`, `msbands*`) | same runner, `RULES_ONLY=<rule>`; tables by `python3 analyze_shape2.py`, shaping statistics by `analyze_shape.py` |
-| Runs without the gain box, ablation | `RULES_ONLY=original,original+shape-hi OUT_PREFIX=nbshape python3 designed.py 0 2` / `1 2` → `nbshape_*.jsonl` (older rules: `designed_*.jsonl`, `ablation_*.jsonl`) |
-| Owners of the peaks (Table II, Fig. 3a) | `OWN_IN=box python3 owner_designed.py` → `owner_box.json` |
-| Load-step IAE (Table II, "The price") | `python3 analyze_shape2.py` (uses `iae_fine.load_iae`) |
+| Prop. 1, Prop. 2 (c),(d), Lemma 1, Cor. 1 on the lag-cancelled loop (Sec. V, "Result 1") | `python3 check_result1.py` |
+| Fig. 1 | `python3 fig_stair.py` |
+| Published SPIN with gain box, cautious / bold start | `box_*.jsonl`, `box2_*.jsonl` (`SPIN_BOX=1 RULES_ONLY=original OUT_PREFIX=box python3 designed.py 0 2`; add `START_SCALE=2`, `OUT_PREFIX=box2`) |
+| Certified SPIN (Algorithm 2) with gain box, both starts | `cbox_0.jsonl`, `cbox2_0.jsonl` (`SPIN_BOX=1 RULES_ONLY=cert-shape OUT_PREFIX=cbox python3 designed.py 0 1`; add `START_SCALE=2`, `OUT_PREFIX=cbox2`) |
+| Without the gain box | published: `designed_*.jsonl` (rule `original`); certified: `cnob_0.jsonl`, `cnob_1.jsonl` (`RULES_ONLY=cert-shape OUT_PREFIX=cnob python3 designed.py 0 1`; `run_rest.py` ran the remaining loops on a second core) |
+| Lemma 2 and Theorem 1 on all 146 accepted tunings (true tail, identity, bracketing) | `python3 confirm_thm1.py` -> `thm1_points.json` |
+| Theorem 2(ii) along the uniform back-off; Prop. 3(a),(d) | `python3 confirm_thm2.py` -> `thm2_points.json` |
+| Table II, numbers of Section V, load-step IAE | `python3 analyze_cert.py` -> `summary_cert.json` |
+| Fig. 2 | `python3 bounds_vs_length.py` (panel b data), then `python3 fig_record.py` |
 | Fig. 3 | `python3 fig_certified.py` |
-| Plant that does not converge without the box | `diag16.py` |
+| Owner of the peak (Table II) | `owner_box.json` (`OWN_IN=box python3 owner_designed.py`) |
 
-The SPIN runs take about 20–40 minutes per rule on two cores; their results are included,
-so the figures and tables can be rebuilt without rerunning them.
+## Earlier material
 
-## Notes
-
-- `designed.py` simulates the controller finely (PID: T_f/20, PI: 1/1000 of the plant time scale),
-  so that the running loop matches its continuous design.
-- SPIN's gain box [0.001, 10] × start is off by default in `designed.py`; `SPIN_BOX=1` turns it on.
-- `spin_run.py`, `spin_cert_run.py`, `compare.py`, `battery.py`, `spin_cert.py`, `ex2.py`,
-  `exactlaw.py` are helper modules.
-
-- Proposition 3 (band shaping): `designed.py` function `shape_move` implements the gradient, the exact prediction and Algorithm 2.
+`shape*_0.jsonl`, `shapehi*_0.jsonl`, `boxtest_0.jsonl`, `box2test_0.jsonl`, `analyze_shape*.py`,
+`iae_*.json`, `record_points.json`, `conv.py`, `twodof.py`, `noise.py` belong to earlier drafts
+(acceptance by the read value instead of the certified bound, continuous-design M_s). They are kept
+for reference and are not used by the current paper.

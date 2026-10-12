@@ -38,13 +38,10 @@ def crossings(e):
 nc = np.array([crossings(E[::step, j]) for j in range(len(ks))])
 edges = [0.5 * (ms[i] + ms[i + 1]) for i in range(len(ks) - 1) if nc[i + 1] != nc[i] and ms[i] < 2.55]
 
-fig = plt.figure(figsize=(3.45, 4.1))
+fig = plt.figure(figsize=(3.45, 3.7))
 gs = fig.add_gridspec(2, 2, height_ratios=[1.15, 1.0], hspace=0.62, wspace=0.42)
 a = fig.add_subplot(gs[0, :]); b = fig.add_subplot(gs[1, 0]); c = fig.add_subplot(gs[1, 1])
 
-for lim in (0.5, 1.0, 1.5):
-    a.axhline(lim, color=RULE, lw=0.7, ls=(0, (3, 3)), zorder=0)
-a.text(2.63, 1.05, "limits\n$\\frac{1}{2},\\,1,\\,\\frac{3}{2}$", fontsize=6.3, color=INK2, va="center", ha="right")
 for x in edges:
     a.axvline(x, color=RULE, lw=0.7, ls=":", zorder=0)
     a.text(x + 0.012, 0.03, f"{x:.2f}", fontsize=6.3, color=INK2)
@@ -59,7 +56,7 @@ for n, (x0, x1) in enumerate(zip(lo, hi)):
 a.set_xlim(ms[0], 2.64); a.set_ylim(0, 2.05)
 a.set_yticks([0, 0.5, 1, 1.5, 2])
 a.set_xlabel("$M_s$ of the loop"); a.set_ylabel("turn count $N_k$")
-a.set_title(f"(a) one staircase, one step per crossing ($\\delta={DELTA:g}$)", fontsize=8, color=INK)
+a.set_title(f"(a) the whitened counts against $M_s$ ($\\delta={DELTA:g}$)", fontsize=8, color=INK)
 a.legend(fontsize=6.5, frameon=False, loc="upper left", handlelength=1.4)
 
 # ---- data for (b), (c): one record
