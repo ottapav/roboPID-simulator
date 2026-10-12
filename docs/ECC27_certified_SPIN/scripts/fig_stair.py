@@ -42,9 +42,6 @@ fig = plt.figure(figsize=(3.45, 4.1))
 gs = fig.add_gridspec(2, 2, height_ratios=[1.15, 1.0], hspace=0.62, wspace=0.42)
 a = fig.add_subplot(gs[0, :]); b = fig.add_subplot(gs[1, 0]); c = fig.add_subplot(gs[1, 1])
 
-for lim in (0.5, 1.0, 1.5):
-    a.axhline(lim, color=RULE, lw=0.7, ls=(0, (3, 3)), zorder=0)
-a.text(2.63, 1.05, "limits\n$\\frac{1}{2},\\,1,\\,\\frac{3}{2}$", fontsize=6.3, color=INK2, va="center", ha="right")
 for x in edges:
     a.axvline(x, color=RULE, lw=0.7, ls=":", zorder=0)
     a.text(x + 0.012, 0.03, f"{x:.2f}", fontsize=6.3, color=INK2)

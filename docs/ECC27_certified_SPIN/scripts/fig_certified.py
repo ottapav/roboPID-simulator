@@ -21,47 +21,35 @@ plt.rcParams.update({"font.size": 8, "font.family": "serif", "axes.edgecolor": I
                      "axes.labelcolor": INK, "xtick.color": INK2, "ytick.color": INK2,
                      "axes.spines.top": False, "axes.spines.right": False})
 S = json.load(open("summary_cert.json"))
-GROUPS = [("$\\Gamma_0$\nintegral", ["delay-dominant PI", "P3 PI"]),
-          ("$\\Gamma_1$\nproportional", ["P1 PI", "P2 PI", "P4 PI", "lag-dominant 2-lag PI", "lag-dominant PI",
-                                         "P1 PID", "P2 PID", "P3 PID", "P4 PID"]),
-          ("$\\Gamma_2$\nderiv.", ["fast PID"])]
-KEY = {"$\\Gamma_0$": "G0", "$\\Gamma_1$": "G1", "$\\Gamma_2$": "G2"}
+ORDER = ["P1 PI", "P1 PID", "P2 PI", "P2 PID", "P3 PI", "P3 PID", "P4 PI", "P4 PID",
+         "delay-dominant PI", "lag-dominant PI", "lag-dominant 2-lag PI", "fast PID"]
 LABEL = {"delay-dominant PI": "delay\nPI", "lag-dominant PI": "lag\nPI", "lag-dominant 2-lag PI": "2-lag\nPI",
          "fast PID": "fast\nPID"}
 LABEL.update({f"P{i} {c}": f"$P_{i}$\n{c}" for i in range(1, 5) for c in ("PI", "PID")})
-for title, plants in GROUPS:
-    want = [v for k, v in KEY.items() if k in title][0]
-    for p in plants: assert S[p]["owner"] == want, (p, S[p]["owner"])
 
 fig = plt.figure(figsize=(7.16, 2.4))
 gs = fig.add_gridspec(1, 3, width_ratios=[2.0, 1.25, 0.95], wspace=0.36)
 a, b, c = (fig.add_subplot(gs[i]) for i in range(3))
 
 # (a) ----------------------------------------------------------------------------------------
-x = 0; ticks = []; labels = []; spans = []
-for title, plants in GROUPS:
-    x0 = x
-    for p in plants:
-        mo, mc, m2 = S[p]["box"], S[p]["cbox"], S[p]["box2"]
-        a.plot([x, x], [mo, mc], color=RULE, lw=1.4, zorder=1, solid_capstyle="round")
-        a.plot(x, mo, "o", ms=8, color=ORIG, mec="white", mew=1.0, zorder=3)
-        a.plot(x, mc, "o", ms=4.8, color=CERT, mec="white", mew=0.8, zorder=4)
-        a.plot(x + 0.28, m2, "o", ms=4.6, mfc="white", mec=ORIG, mew=1.1, zorder=3)
-        ticks.append(x); labels.append(LABEL[p]); x += 1
-    spans.append((x0 - 0.5, x - 0.5, title)); x += 0.6
+ticks = list(range(len(ORDER))); labels = [LABEL[p] for p in ORDER]
+for x, p in enumerate(ORDER):
+    mo, mc, m2 = S[p]["box"], S[p]["cbox"], S[p]["box2"]
+    a.plot([x, x], [mo, mc], color=RULE, lw=1.4, zorder=1, solid_capstyle="round")
+    a.plot(x, mo, "o", ms=8, color=ORIG, mec="white", mew=1.0, zorder=3)
+    a.plot(x, mc, "o", ms=4.8, color=CERT, mec="white", mew=0.8, zorder=4)
+    a.plot(x + 0.3, m2, "o", ms=4.6, mfc="white", mec=ORIG, mew=1.1, zorder=3)
+a.axvline(7.6, color=RULE, lw=0.6, ls=":")
 a.axhline(TARGET, ls=(0, (4, 3)), color=INK2, lw=0.8, zorder=0)
-a.text(6.4, TARGET + 0.012, "target $M^*$", fontsize=6.5, color=INK2, ha="right")
-for i, (lo, hi, title) in enumerate(spans):
-    a.text((lo + hi) / 2, 2.17, title, ha="center", va="top", fontsize=6.5, color=INK, linespacing=1.1)
-    if i: a.axvline(lo - 0.3, color=RULE, lw=0.6, ls=":")
-a.set_xticks(ticks); a.set_xticklabels(labels, fontsize=6.3)
-a.set_xlim(-0.6, x - 0.9); a.set_ylim(1.4, 2.18)
+a.text(11.6, TARGET + 0.012, "target $M^*$", fontsize=6.5, color=INK2, ha="right")
+a.set_xticks(ticks); a.set_xticklabels(labels, fontsize=5.9)
+a.set_xlim(-0.6, len(ORDER) - 0.3); a.set_ylim(1.4, 2.18)
 a.set_ylabel("$M_s$ of the accepted tuning")
 a.set_title("(a) the twelve loops of the table", fontsize=8, color=INK)
 a.plot([], [], "o", ms=7, color=ORIG, label="published SPIN")
-a.plot([], [], "o", ms=4.6, mfc="white", mec=ORIG, mew=1.1, label="published, bolder start")
+a.plot([], [], "o", ms=4.6, mfc="white", mec=ORIG, mew=1.1, label="published, bold start")
 a.plot([], [], "o", ms=4.6, color=CERT, label="certified SPIN")
-a.legend(fontsize=6.3, frameon=False, loc="upper left", bbox_to_anchor=(1.75, 2.0), bbox_transform=a.transData,
+a.legend(fontsize=6.3, frameon=False, loc="upper left", bbox_to_anchor=(-0.4, 2.17), bbox_transform=a.transData,
          handletextpad=0.2, borderaxespad=0.0, labelspacing=0.25)
 
 # (b) ----------------------------------------------------------------------------------------
@@ -93,7 +81,7 @@ b.plot([], [], color=INK2, lw=0.9, label="one move ($K_i\\downarrow$)")
 b.plot([], [], color=INK, lw=1.0, ls=(0, (2, 2)), label="its prediction")
 b.plot([], [], color=CERT, lw=1.8, label="certified")
 b.set_xlim(0.07, 0.45); b.set_ylim(0.75, 2.3)
-b.set_xticks([0.1, 0.2, 0.4]); b.set_xticklabels(['0.1', '0.2', '0.4']); b.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter()); b.set_xlabel("frequency $\\omega$ (rad/s)"); b.set_ylabel("$|S_d|$")
+b.set_xticks([0.1, 0.2, 0.4]); b.set_xticklabels(['0.1', '0.2', '0.4']); b.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter()); b.set_xlabel("frequency $\\omega$ (rad/s)"); b.set_ylabel("$|S|$")
 b.set_title("(b) $P_3$ with PID, near the peak", fontsize=8, color=INK)
 b.legend(fontsize=5.8, frameon=False, loc="upper right", handlelength=1.6, labelspacing=0.15, borderaxespad=0.1)
 print("P3 PID: upper", round(ce["upper"], 4), "true before", round(S0.max(), 4), "pred", round(pred.max(), 5),
