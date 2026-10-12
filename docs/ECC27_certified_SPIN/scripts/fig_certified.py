@@ -27,7 +27,7 @@ LABEL = {"delay-dominant PI": "delay\nPI", "lag-dominant PI": "lag\nPI", "lag-do
          "fast PID": "fast\nPID"}
 LABEL.update({f"P{i} {c}": f"$P_{i}$\n{c}" for i in range(1, 5) for c in ("PI", "PID")})
 
-fig = plt.figure(figsize=(7.16, 2.4))
+fig = plt.figure(figsize=(7.16, 2.15))
 gs = fig.add_gridspec(1, 3, width_ratios=[2.0, 1.25, 0.95], wspace=0.36)
 a, b, c = (fig.add_subplot(gs[i]) for i in range(3))
 

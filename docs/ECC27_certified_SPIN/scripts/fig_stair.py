@@ -38,7 +38,7 @@ def crossings(e):
 nc = np.array([crossings(E[::step, j]) for j in range(len(ks))])
 edges = [0.5 * (ms[i] + ms[i + 1]) for i in range(len(ks) - 1) if nc[i + 1] != nc[i] and ms[i] < 2.55]
 
-fig = plt.figure(figsize=(3.45, 4.1))
+fig = plt.figure(figsize=(3.45, 3.7))
 gs = fig.add_gridspec(2, 2, height_ratios=[1.15, 1.0], hspace=0.62, wspace=0.42)
 a = fig.add_subplot(gs[0, :]); b = fig.add_subplot(gs[1, 0]); c = fig.add_subplot(gs[1, 1])
 

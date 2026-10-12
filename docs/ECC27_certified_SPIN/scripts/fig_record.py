@@ -43,7 +43,7 @@ def panel_curve(ax, K, L, lags, Ki, Kp, dt, n, w, col):
     return float(abs(St).max())
 
 
-fig, (a, b) = plt.subplots(1, 2, figsize=(7.16, 2.2), gridspec_kw=dict(width_ratios=[1.15, 1], wspace=0.28))
+fig, (a, b) = plt.subplots(1, 2, figsize=(7.16, 2.0), gridspec_kw=dict(width_ratios=[1.15, 1], wspace=0.28))
 K, L, lags = 1.0, 4.0, [8] * 6; Ki, Kp = simc_pi(K, L, lags); Ta = L + sum(lags); dt = Ta / 1000
 m1 = panel_curve(a, K, L, lags, Ki, Kp, dt, int(15 * Ta / dt), np.logspace(-3, math.log10(0.6), 300), BLUE)
 a.text(2.2e-3, 0.3, "$P_4$, SIMC PI\n$M_s=%.2f$" % m1, color=INK, fontsize=6.8)
