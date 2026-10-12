@@ -57,8 +57,9 @@ crossings and $M_s$ are not tied. Second, the setpoint step that \spin
 already records contains $M_s$: in a digital loop, the increments of the
 error are exactly the impulse response of the sensitivity function, so
 one finite record gives certified bounds on $M_s$ without a model.
-Third, with the upper bound as its acceptance test, \spin accepts only
-tunings with $M_s\le M^*$, and the test never traps it. In simulations
+Third, certified \spin adds one test to \spin: a tuning is accepted only
+if this upper bound is at most a target $M^*$. It accepts only tunings
+with $M_s\le M^*$, and the test never traps it. In simulations
 on $19$ loops, published \spin exceeded $M^*=1.7$ on up to $9$ loops and
 certified \spin on none.
 \end{abstract}
@@ -96,7 +97,9 @@ the reader try \spin.\footnote{\url{https://robopid-simulator.uceeb.cvut.cz}}
 \begin{figure}[t]
 \small
 \hrule\smallskip
-\noindent\textbf{Algorithm 1:} one iteration of \spin \cite{SPIN}
+\noindent\textbf{Algorithm 1:} one iteration of \spin \cite{SPIN} and,
+with lines 7a--7c in bold instead of line 7, of certified \spin
+(Section~\ref{sec:spin})
 \smallskip\hrule\smallskip
 \noindent\begin{tabular}{@{}r@{\hspace{0.6em}}l@{}}
 1: & apply a setpoint step and record the error $e$\\
@@ -106,6 +109,12 @@ the reader try \spin.\footnote{\url{https://robopid-simulator.uceeb.cvut.cz}}
 5: & \quad count the turns $N_0$, $N_1$, $N_2$ of $\Gamma_0$, $\Gamma_1$, $\Gamma_2$\\
 6: & \quad \textbf{if} $N_k\le\bar N_k$ for every band $k$ \textbf{then}\\
 7: & \quad\quad raise all gains by one increment \hfill (accept)\\
+\textbf{7a:} & \quad\quad \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert})}\\
+\textbf{7b:} & \quad\quad \textbf{if $\overline M\le M^*$ then} raise all gains \hfill (accept)\\
+\textbf{7c:} & \quad\quad \textbf{else lower the gains:} the band move that\\
+    & \quad\quad\quad Prop.~\ref{prop:shape} predicts to lower $M_s$ (highest\\
+    & \quad\quad\quad such band, at most $n_{\max}$ in a row), else a\\
+    & \quad\quad\quad uniform back-off \hfill (reject)\\
 8: & \quad \textbf{else}\\
 9: & \quad\quad $k\leftarrow$ lowest band with $N_k>\bar N_k$\\
 10: & \quad\quad lower the gain of band $k$ by one increment and\\
@@ -115,7 +124,11 @@ the reader try \spin.\footnote{\url{https://robopid-simulator.uceeb.cvut.cz}}
 \noindent One increment multiplies or divides a gain by $1/(1-\beta)$.
 Defaults: $\bar N=(0.5,0.75,1.0)$, $\delta=0.02$, $\beta=0.1$; each gain
 stays within $[0.001,10]$ times its initial value (the gain box). The
-result is the last accepted tuning.
+result is the last accepted tuning. Certified \spin: in line 7a,
+$\bar\theta$ solves $1+B/\sin(\bar\theta/2)=M^*$ ($\bar\theta=\pi$ if no
+solution) and $h=\bar\theta/\lceil\bar\theta J/(2\eta)\rceil$, so that
+$hJ/2\le\eta$; $M^*=1.7$, $\tau=10^{-3}$, $\eta=2\cdot10^{-3}$,
+$n_{\max}=10$.
 \smallskip\hrule
 \end{figure}
 
@@ -135,9 +148,10 @@ the plant lags (Theorem~\ref{thm:counts}), but not in general.
 digital loop, the record gives the sensitivity function exactly
 (Lemma~\ref{lem:record}), and a finite record gives certified bounds on
 $M_s$ (Theorem~\ref{thm:cert}).
-\item \emph{Certified \spin} (Section~\ref{sec:spin}). With the upper
-bound as its acceptance test, \spin accepts only tunings with $M_s\le
-M^*$, and the test never traps it (Theorem~\ref{thm:spin}).
+\item \emph{Certified \spin} (Section~\ref{sec:spin}) is \spin with one
+more test: a tuning is accepted only if the upper bound from its record
+is at most a target $M^*$. It accepts only tunings with $M_s\le M^*$,
+and the test never traps it (Theorem~\ref{thm:spin}).
 \end{enumerate}
 Section~\ref{sec:sim} confirms each step in simulation.
 
@@ -406,40 +420,16 @@ record, $B$ is small and bounds all high frequencies at once.
 \section{Certified \spin}
 \label{sec:spin}
 
-Certified \spin accepts a tuning only if the upper bound of
-Theorem~\ref{thm:cert} is at most $M^*$.
-
-\begin{figure}[t]
-\small
-\hrule\smallskip
-\noindent\textbf{Algorithm 2:} certified \spin; line 7 of Algorithm~1
-is replaced by
-\smallskip\hrule\smallskip
-\noindent\begin{tabular}{@{}r@{\hspace{0.6em}}l@{}}
-7a: & compute $\overline M$ by Theorem~\ref{thm:cert}, with $\bar\theta$\\
-    & from $1+B/\sin(\bar\theta/2)=M^*$ ($\bar\theta=\pi$ if no solution)\\
-    & and $h=\bar\theta/\lceil\bar\theta J/(2\eta)\rceil$, so that $hJ/2\le\eta$\\
-7b: & \textbf{if} $\overline M\le M^*$ \textbf{then} raise all
-gains by one increment \hfill (accept)\\
-7c: & \textbf{else} predict by Proposition~\ref{prop:shape} the $M_s$
-after\\
-    & each band move (lower one band, raise those below)\\
-7d: & \quad make the band move of the highest band predicted\\
-    & \quad to lower $M_s$, at most $n_{\max}$ times between\\
-    & \quad acceptances; otherwise lower all gains by one increment\\
-\end{tabular}
-\smallskip\hrule\smallskip
-\noindent Defaults: $M^*=1.7$, $\tau=10^{-3}$, $\eta=2\cdot10^{-3}$,
-$n_{\max}=10$.
-\smallskip\hrule
-\end{figure}
-
-Algorithm~2 changes only line 7 of \spin. The counts still shape the
-tuning, and the bound decides whether a tuning is accepted. After a
-rejection, it uses two kinds of moves:
+\emph{Certified \spin is \spin with one more test: a tuning that the
+counts accept is accepted only if the upper bound $\overline M$ of
+Theorem~\ref{thm:cert}, computed from the same record, is at most a
+target $M^*$.} In Algorithm~1, it replaces line 7 by the bold lines
+7a--7c; everything else is unchanged. The counts still shape the tuning;
+the bound decides whether it is accepted. When the bound rejects a
+tuning, certified \spin lowers the gains in one of two ways:
 \begin{enumerate*}[label=(\arabic*)]
-\item the band move of line 10 of Algorithm~1, and
-\item the uniform back-off, the reverse of line 7.
+\item a band move, as in line 10, or
+\item a uniform back-off, the reverse of an acceptance.
 \end{enumerate*}
 
 \begin{theorem}[Certified \spin]
@@ -450,7 +440,7 @@ Assumption~\ref{ass:tail}. For (iii) and (iv), also let no gain be
 clipped by the gain box, and let $\beta<\frac12$.
 \begin{enumerate}
 \item[(i)] Every tuning that passes the test of line 7b, and hence the
-result of Algorithm~2, has $M_s\le M^*$.
+result of certified \spin, has $M_s\le M^*$.
 \item[(ii)] For a controller $C$, let
 $\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(e^{j\theta})\}$. For
 $0<\lambda<1/|\mu|$, the loop with the controller $\lambda C$ is stable,
@@ -484,7 +474,7 @@ $|1+\lambda L|\ge1+\lambda\,\mathrm{Re}\,L\ge1-\lambda|\mu|>0$, which gives
 $\mathrm{Re}\ge-\lambda|\mu|>-1$, also on a small enough indentation
 outside $z=1$, where $K_iP(1)>0$ keeps $\mathrm{Re}\,L>\mu$. It therefore cannot
 encircle $-1$, and since $L$ has no poles outside the unit disc, the loop
-is stable. (iii) Line 7d allows at most $n_{\max}$ band moves. In a
+is stable. (iii) Line 7c allows at most $n_{\max}$ band moves. In a
 stretch of uniform back-offs from a controller $C$, $\lambda=(1-\beta)^j$ after
 $j$ back-offs, and \eqref{eq:backoff} gives $M_s\le M'$ for the stated
 $j$. In \eqref{eq:bound}, the grid term is then at most
@@ -528,7 +518,7 @@ safety never depends on the prediction.
 \label{sec:sim}
 
 \paragraph*{Setup} We compare \spin as published with certified \spin
-(Algorithm~2). Both run $200$ iterations with a derivative filter ratio
+(Algorithm~1 with lines 7a--7c). Both run $200$ iterations with a derivative filter ratio
 of $10$ and the gain box of \cite{SPIN}. Because the box ties the result
 to the initial tuning, every loop runs from two initial tunings: SIMC on
 a half-rule model with $\tau_c$ equal to three times its dead time
