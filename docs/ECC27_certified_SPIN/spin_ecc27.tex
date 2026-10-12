@@ -48,21 +48,20 @@ Engineering, Czech Technical University in Prague, Czech Republic.}}
 \begin{abstract}
 The \spin method tunes a PID controller without a model. After each
 setpoint step, it counts how many turns the control error makes in three
-phase portraits, and it raises the gains until a count exceeds its limit.
-The limits were found by calibration, so robustness was not guaranteed.
-We answer three questions with three theorems. (1) What does a count
-measure? For any loop, the count of the integral portrait is within half
-a turn of half the number of setpoint crossings if the lobes of the error
-shrink; on loops that cancel the plant lags, the lobes shrink whenever
-$M_s<26$, and the error never crosses the setpoint if and only if the
-sensitivity peak satisfies $M_s\le1.394$. (2) Can the step show $M_s$?
-For any stable digital loop with one degree of freedom, the increments of
-the error after a unit setpoint step are the impulse response of the
-sensitivity function, so one finite record gives a lower and an upper
-bound on $M_s$ without a model. (3) Can \spin then guarantee robustness?
-With the upper bound as its acceptance test, \spin accepts only tunings
-with $M_s\le M^*$, and the test never traps it. Simulations on $19$
-loops confirm the theory.
+phase portraits, and it raises the gains while the counts stay below
+calibrated limits. Its robustness was therefore not guaranteed. This
+paper explains why and removes the gap, in three steps. First, a count
+measures setpoint crossings, and crossings reveal the sensitivity peak
+$M_s$ only on special loops: on loops that cancel the plant lags, the
+error never crosses the setpoint if and only if $M_s\le1.394$; in general,
+crossings and $M_s$ are not tied. Second, the setpoint step that \spin
+already records contains $M_s$: in a digital loop, the increments of the
+error are exactly the impulse response of the sensitivity function, so
+one finite record gives certified bounds on $M_s$ without a model.
+Third, with the upper bound as its acceptance test, \spin accepts only
+tunings with $M_s\le M^*$, and the test never traps it. In simulations
+on $19$ loops, published \spin exceeded $M^*=1.7$ on up to $9$ loops and
+certified \spin on none.
 \end{abstract}
 
 \section{Introduction}
@@ -91,8 +90,7 @@ correspond to the frequency bands of $K_i$, $K_p$ and $K_d$, which we call
 bands $0$, $1$ and $2$. The turn count $N_k$ is the number of turns that
 $\Gamma_k$ makes around its end point before the error stays within
 $\pm\delta$ ($2\%$ of the step by default). Algorithm~1 states the
-rule. \spin needs neither a model nor plant-specific settings
-\cite{SPIN}. However, its limits $\bar N_k$ were found by calibration, and
+rule. Its limits $\bar N_k$ were found by calibration, and
 the robustness of the result was not guaranteed. An online simulator lets
 the reader try \spin.\footnote{\url{https://robopid-simulator.uceeb.cvut.cz}}
 
@@ -122,30 +120,27 @@ result is the last accepted tuning.
 \smallskip\hrule
 \end{figure}
 
-\subsection{Contributions}
+\subsection{Idea and contributions}
 
-The paper answers three questions, each building on the previous one;
-each answer is a theorem.
+The idea of this paper fits in one sentence: \emph{the setpoint step
+that \spin records in every iteration already contains $M_s$, so \spin
+can keep its counts to shape the tuning and let the record decide whether
+the tuning is accepted.} Three steps, each ending in a theorem, lead
+there.
 \begin{enumerate}
-\item \emph{What does a count measure?} (Section~\ref{sec:count}) A
-portrait turns by exactly half a turn between two consecutive zeros of
-its first coordinate, in any linear coordinates (Lemma~\ref{lem:half}),
-so the count of $\Gamma_0$ is within half a turn of half the number of
-setpoint crossings (Corollary~\ref{cor:count}). On loops that cancel the
-plant lags, the crossings reveal $M_s$: the error never crosses the
-setpoint if and only if $M_s\le1.394$ (Theorem~\ref{thm:counts}).
-Elsewhere, counts and $M_s$ are not tied.
-\item \emph{Can the step show $M_s$ anyway?} (Section~\ref{sec:record})
-Yes. For a digital loop, the record gives the sensitivity function
-exactly (Lemma~\ref{lem:record}), and one finite record gives certified
-lower and upper bounds on $M_s$ (Theorem~\ref{thm:cert}).
-\item \emph{Can \spin then guarantee robustness?}
-(Section~\ref{sec:spin}) Yes. With the upper bound as its acceptance
-test, \spin accepts only tunings with $M_s\le M^*$, the test never traps
-it (Theorem~\ref{thm:spin}), and the same record predicts which gain to
-lower (Proposition~\ref{prop:shape}).
+\item \emph{Counts cannot certify} (Section~\ref{sec:count}). A count
+measures setpoint crossings (Lemma~\ref{lem:half},
+Corollary~\ref{cor:count}). Crossings reveal $M_s$ on loops that cancel
+the plant lags (Theorem~\ref{thm:counts}), but not in general.
+\item \emph{One step reveals $M_s$} (Section~\ref{sec:record}). In a
+digital loop, the record gives the sensitivity function exactly
+(Lemma~\ref{lem:record}), and a finite record gives certified bounds on
+$M_s$ (Theorem~\ref{thm:cert}).
+\item \emph{Certified \spin} (Section~\ref{sec:spin}). With the upper
+bound as its acceptance test, \spin accepts only tunings with $M_s\le
+M^*$, and the test never traps it (Theorem~\ref{thm:spin}).
 \end{enumerate}
-Section~\ref{sec:sim} confirms every statement in simulation.
+Section~\ref{sec:sim} confirms each step in simulation.
 
 \paragraph*{Related work} Frequency responses, sensitivity functions and
 margins have been estimated from step or relay responses and from
@@ -156,7 +151,7 @@ model-free methods optimize performance from repeated experiments or one
 data set \cite{IFT1998,Killingsworth2006,VRFT2002}. Here, one ordinary
 setpoint step certifies $M_s$ inside a model-free tuning rule.
 
-\section{Counts Count Crossings}
+\section{Counts Cannot Certify}
 \label{sec:count}
 
 \subsection{Every crossing adds half a turn}
@@ -325,7 +320,8 @@ step, however, contains $M_s$.
 \section{One Step Reveals $M_s$}
 \label{sec:record}
 
-A digital controller runs with the sampling period $T_s$. Seen at the
+The counts cannot certify $M_s$, but the record they are computed from
+can. A digital controller runs with the sampling period $T_s$. Seen at the
 samples, the loop it closes is linear and time invariant. From here on,
 $L(z)$, $P(z)$, $S=1/(1+L)$ and
 $M_s=\max_{\theta\in[0,\pi]}|S(e^{j\theta})|$, with $\theta=\omega T_s$,
@@ -408,8 +404,11 @@ values;
 record, $B$ is small and bounds all high frequencies at once.
 \end{enumerate*}
 
-\section{Never Accept a Fragile Tuning}
+\section{Certified \spin}
 \label{sec:spin}
+
+Certified \spin accepts a tuning only if the upper bound of
+Theorem~\ref{thm:cert} is at most $M^*$.
 
 \begin{figure}[t]
 \small
@@ -526,7 +525,7 @@ error.
 The prediction only selects the move; the next iteration tests it, so
 safety never depends on the prediction.
 
-\section{The Theory at Work}
+\section{Simulations}
 \label{sec:sim}
 
 \paragraph*{Setup} We compare \spin as published with certified \spin
@@ -666,17 +665,18 @@ predicted by Proposition~\ref{prop:shape}); certified tuning ($1.689$).
 
 \section{Conclusion}
 
-The three questions of the introduction have clear answers.
+The setpoint step that \spin records in every iteration already contains
+$M_s$. The three steps of the paper follow from this.
 \begin{enumerate}
-\item A count measures setpoint crossings; on lag-cancelled loops, an
-error that never crosses the setpoint means $M_s\le1.394$
-(Theorem~\ref{thm:counts}).
-\item The setpoint step that \spin already records gives the sensitivity
-function of a digital loop exactly, and one finite record certifies $M_s$
+\item Counts cannot certify: a count measures setpoint crossings, which
+reveal $M_s$ only on special loops; on lag-cancelled loops, no crossing
+means exactly $M_s\le1.394$ (Theorem~\ref{thm:counts}).
+\item One step reveals $M_s$: in a digital loop, the record gives the
+sensitivity function exactly, and one finite record certifies $M_s$
 without a model (Theorem~\ref{thm:cert}); so does every logged setpoint
 change made from rest.
-\item With this certificate as its acceptance test, \spin accepts only
-tunings with $M_s\le M^*$, and the test never traps it
+\item Certified \spin: with this certificate as its acceptance test,
+\spin accepts only tunings with $M_s\le M^*$, and the test never traps it
 (Theorem~\ref{thm:spin}).
 \end{enumerate}
 The theorems assume a linear loop and a long enough record; noise and real
