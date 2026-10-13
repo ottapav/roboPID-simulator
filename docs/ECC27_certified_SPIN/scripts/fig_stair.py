@@ -35,17 +35,21 @@ gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.0], hspace=0.62, wspace=0.42)
 a = fig.add_subplot(gs[0, :]); b = fig.add_subplot(gs[1, 0]); c = fig.add_subplot(gs[1, 1])
 
 # (a) robustness from the limits: the counts at delta = 0.02 in turns, each band with its published limit
+# On this ideal loop de/dt jumps at t = L_d, so Gamma_2 starts with a quarter turn clockwise
+# (N_2 = n/2 - 1/4). N_2 and its limit are drawn a quarter turn up, so the three staircases align.
+SHIFT = [0.0, 0.0, 0.25]
+LAB = ["$\\Gamma_0$, $\\bar N_0=0.5$", "$\\Gamma_1$, $\\bar N_1=0.75$", "$\\Gamma_2+\\frac{1}{4}$, $\\bar N_2+\\frac{1}{4}=1.25$"]
 for kk, (col, lim) in enumerate([(INK, 0.5), (BLUE, 0.75), (ORANGE, 1.0)]):
-    a.plot(ms, N2[:, kk], color=col, lw=0.9, label=f"$\\Gamma_{kk}$, $\\bar N_{kk}={lim:g}$")
-    a.axhline(lim, color=col, lw=0.6, ls=(0, (1, 2)), zorder=0)
+    a.plot(ms, N2[:, kk] + SHIFT[kk], color=col, lw=0.9, label=LAB[kk])
+    a.axhline(lim + SHIFT[kk], color=col, lw=0.6, ls=(0, (1, 2)), zorder=0)
 for x in (1.534, 1.842, 2.210):
     a.axvline(x, color=RULE, lw=0.6, ls=":", zorder=0)
     a.text(x, 1.88, f"{x:.2f}", fontsize=5.6, color=INK2, ha="center", va="bottom", clip_on=False)
-a.set_xlim(1.15, 2.55); a.set_ylim(-0.4, 1.85); a.set_yticks([0, 0.5, 1, 1.5])
+a.set_xlim(1.15, 2.55); a.set_ylim(-0.15, 1.85); a.set_yticks([0, 0.5, 1, 1.5])
 a.set_yticklabels(["0", "½", "1", "1½"])
 a.set_xlabel("$M_s$ of the loop"); a.set_ylabel("$N_k$ (turns)", labelpad=1)
 a.set_title(f"(a) the counts at $\\delta={DELTA:g}$ and their limits", fontsize=8, color=INK, pad=9)
-a.legend(fontsize=5.4, frameon=False, loc="lower right", handlelength=1.2, labelspacing=0.15, borderaxespad=0.1)
+a.legend(fontsize=5.4, frameon=False, loc="upper left", handlelength=1.2, labelspacing=0.15, borderaxespad=0.1)
 
 # ---- (b), (c): one record
 k0 = 0.7
