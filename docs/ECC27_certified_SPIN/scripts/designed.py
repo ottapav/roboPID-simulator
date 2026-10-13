@@ -59,7 +59,8 @@ RULES = {"original": (counts_old, (0.5, 0.75, 1.0), None),
          # otherwise predict from the same record (discrete loop, exact) the M_s after each SPIN band
          # move, apply the highest band predicted to lower it (at most NMAX in a row), else back off
          # all gains uniformly
-         "cert-shape": (counts_old, (0.5, 0.75, 1.0), 1.7),
+         # the count limits of cert-shape can be set with CERT_LIMITS (default: SPIN's published limits)
+         "cert-shape": (counts_old, tuple(float(x) for x in _os.environ.get("CERT_LIMITS", "0.5,0.75,1.0").split(",")), 1.7),
          "ms-bands": ("bands", tuple(float(x) for x in _os.environ.get("MS_LIMITS", "1.7,1.7,1.7").split(",")), None)}
 
 

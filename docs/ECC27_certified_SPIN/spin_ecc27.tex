@@ -45,34 +45,31 @@ Engineering, Czech Technical University in Prague, Czech Republic.}}
 \pagestyle{empty}
 
 \begin{abstract}
-The \spin method tunes a PID controller without a model. After each
-setpoint step, it counts how many turns the control error makes in three
-phase portraits, and it raises the gains while the counts stay below
-calibrated limits, so its robustness was not guaranteed. We explain why
-and close the gap in three steps. First, a count
-measures setpoint crossings, and crossings reveal the sensitivity peak
-$M_s$ only on special loops: on loops that cancel the plant lags, the
-error never crosses the setpoint if and only if $M_s\le1.394$; in general
-they are not tied, so the counts cannot certify. Second, the step that \spin
-already records contains $M_s$: its increments are exactly the impulse
-response of the sensitivity function of the digital loop, so one finite
-record certifies bounds on $M_s$ without a model. Third, certified \spin
-accepts a tuning only if this upper bound is at most a target $M^*$; so
-the certificate, not the counts, guarantees $M_s\le M^*$, and the test
-never traps \spin. In simulations
-on $19$ loops, published \spin exceeded $M^*=1.7$ on up to $9$ loops and
-certified \spin on none.
+The \spin method tunes a PID controller without a model: after each
+setpoint step, it counts the turns of the control error in three phase
+portraits and raises the gains while the counts stay below calibrated
+limits. We separate two sources of robustness. \emph{From the limits:}
+each setpoint crossing adds half a turn; at the default trim of $2\%$,
+the published limits allow $0$, $1$ and $2$ crossings in the three
+portraits. On loops that cancel the plant lags, this bounds the
+sensitivity peak, $M_s\le1.534$, and no crossing at all means exactly
+$M_s\le1.394$; on general loops, no limit bounds $M_s$. \emph{From the
+certificate:} in a digital loop, the increments of the recorded error
+are the impulse response of the sensitivity function, so one finite
+record certifies $M_s$ without a model. Certified \spin accepts a tuning
+only if the certified bound is at most $M^*$; it then has $M_s\le M^*$
+whatever the limits, and it is never trapped. On $19$ loops, published
+\spin exceeded $M^*=1.7$ on up to $9$ and certified \spin on none.
 \end{abstract}
 
 \section{Introduction}
 
 Let $L=CP$ be the loop transfer function and $S=1/(1+L)$ the sensitivity
-function. Its peak $M_s=\max_\omega|S|$ measures robustness: a value near
-$1.4$ is safe, and a value near $2$ indicates poor robustness
-\cite{AstromHagglund2004}. Tuning rules reach a chosen $M_s$ by using a
-model \cite{AstromHagglund2004,Skogestad2003}. Once a loop is tuned,
-$M_s$ is rarely checked, because a check needs either a model or a test
-that disturbs production \cite{Desborough2002,Bauer2016}.
+function. Its peak $M_s=\max_\omega|S|$ measures robustness: near $1.4$
+is safe, near $2$ is poor \cite{AstromHagglund2004}. Tuning rules reach a
+chosen $M_s$ with a model \cite{AstromHagglund2004,Skogestad2003}; a
+tuned loop's $M_s$ is rarely checked, because a check needs a model or a
+disturbing test \cite{Desborough2002,Bauer2016}.
 
 \subsection{The \spin method}
 
@@ -132,38 +129,36 @@ $n_{\max}=10$.
 \smallskip\hrule
 \end{figure}
 
-\subsection{Idea and contributions}
+\subsection{Two sources of robustness}
 
-The idea of this paper fits in one sentence: \emph{the setpoint step
-that \spin records in every iteration already contains $M_s$, so \spin
-can keep its counts to shape the tuning and let the record decide whether
-the tuning is accepted.} Three steps, each ending in a theorem, lead
-there.
+The step that \spin records contains $M_s$, so robustness can come from
+two sources, which the paper separates.
 \begin{enumerate}
-\item \emph{Counts cannot certify} (Section~\ref{sec:count}). A count
-measures setpoint crossings (Lemma~\ref{lem:half},
-Corollary~\ref{cor:count}); at small $\delta$, it measures the damping of
-the dominant poles (Proposition~\ref{prop:delta}). Crossings reveal $M_s$
-on loops that cancel the plant lags (Theorem~\ref{thm:counts}), but not
-in general.
-\item \emph{One step reveals $M_s$} (Section~\ref{sec:record}). In a
-digital loop, the record gives the sensitivity function exactly
-(Lemma~\ref{lem:record}), and a finite record gives certified bounds on
-$M_s$ (Theorem~\ref{thm:cert}).
-\item \emph{Certified \spin} (Section~\ref{sec:spin}) is \spin with one
-more test: a tuning is accepted only if the upper bound from its record
-is at most a target $M^*$. It accepts only tunings with $M_s\le M^*$,
-and the test never traps it (Theorem~\ref{thm:spin}).
+\item \emph{Robustness from the limits} (Section~\ref{sec:count}). A
+count measures setpoint crossings (Lemma~\ref{lem:half},
+Corollary~\ref{cor:count}) and, at small $\delta$, the damping of the
+dominant poles (Proposition~\ref{prop:delta}). At $\delta=0.02$, the
+published limits allow $0$, $1$ and $2$ crossings above $\delta$. On
+loops that cancel the plant lags this bounds $M_s$
+(Theorem~\ref{thm:counts}); on general loops it does not.
+\item \emph{Robustness from the certificate} (Section~\ref{sec:cert}).
+The record gives the sensitivity function of a digital loop exactly
+(Lemma~\ref{lem:record}) and certified bounds on $M_s$
+(Theorem~\ref{thm:cert}). Certified \spin accepts a tuning only if the
+upper bound is at most $M^*$; this guarantees $M_s\le M^*$ whatever the
+limits, and the test never traps \spin (Theorem~\ref{thm:spin}).
 \end{enumerate}
-Section~\ref{sec:sim} confirms each step in simulation.
+Section~\ref{sec:sim} confirms both.
 
 \paragraph*{Related work} Margins have been estimated from step, relay
 and closed-loop data \cite{WangHangBi1997,VandenHofSchrama1993,Isoshima2023},
 PI tuned from one step \cite{Shamsuzzoha2010}, and performance optimized
 without a model \cite{IFT1998,Killingsworth2006,VRFT2002}.
 
-\section{Counts Cannot Certify}
+\section{Robustness from the Limits}
 \label{sec:count}
+
+A limit $\bar N_k$ can only guarantee what a count measures.
 
 \subsection{Every crossing adds half a turn}
 
@@ -181,7 +176,7 @@ Let $\dot q=p$ with $p$ continuous, let $p(t_1)=p(t_2)=0$ with
 $q(t_1)q(t_2)<0$, and let $p$ not change sign on $(t_1,t_2)$. Then, on $[t_1,t_2]$, the curve $(p,q)$
 turns counterclockwise around the origin by exactly half a turn. The same
 holds for its image under any linear map with a positive determinant,
-such as the whitening used in \cite{SPIN}.
+such as the per-axis normalization of \cite{SPIN}.
 \end{lemma}
 
 \begin{proof}
@@ -218,7 +213,7 @@ $q(t_j)=-\int_{t_j}^\infty e\,dt$ is an alternating sum of lobe areas; if
 the areas decrease, the sum has the sign of its first term.
 \end{proof}
 
-\subsection{When crossings reveal $M_s$}
+\subsection{What a limit guarantees}
 
 Lambda, IMC and SIMC tunings cancel the plant lags \cite{Skogestad2003},
 e.g., a PI controller $K_c(1+1/(T_is))$ with $T_i=T$ on the plant
@@ -342,51 +337,54 @@ fixed direction, so the angle converges.
 
 So a limit $\bar N$ at a fixed $\delta$ limits the damping of the
 dominant poles; the rate \eqref{eq:rate} is zero up to $M_s=1.394$ and
-grows with $M_s$ (Fig.~\ref{fig:stair}(a)).
+grows with $M_s$ (Fig.~\ref{fig:stair}(b)).
 
-\paragraph*{Robust limits at $\delta=0.02$} Each crossing above
-$\delta$ adds half a turn (Lemma~\ref{lem:half}), so the counts form a
-staircase. On the loop \eqref{eq:loop}, with $n$ crossings above $\delta$,
-all three computed counts lie strictly between $n/2$ and $(n+1)/2$
-(Fig.~\ref{fig:stair}(a), right axis). A half-integer limit
-$\bar N=(n+1)/2$ thus means exactly ``at most $n$ crossings above
-$\delta$'', that is, $M_s\le1.534$, $1.842$, $2.210$ for $n=0,1,2$, where
-the $(n+1)$th extremum equals $\delta$. Any other limit lies on a step,
-and its meaning depends on the portrait: $\bar N=0.75$ trips at
-$M_s=1.54$, $1.57$ or $1.59$. On general loops the staircase breaks: for the
-plants of Section~\ref{sec:sim} with random gains, a count with $m$ sign
-changes of $p$ left $(m/2,(m+1)/2)$ in $24$, $9$ and $68\%$ of $941$
-records ($\Gamma_0,\Gamma_1,\Gamma_2$).
+\paragraph*{What the published limits guarantee} Each crossing above
+$\delta$ adds half a turn (Lemma~\ref{lem:half}), so at $\delta=0.02$ the
+counts form a staircase (Fig.~\ref{fig:stair}(a)): on \eqref{eq:loop},
+with $n$ crossings above $\delta$, the computed $N_0$ and $N_1$ lie within
+a quarter turn above $n/2$, and $N_2$ is $n/2-1/4$ within $0.01$. The
+published limits lie in the gaps:
+$\bar N_0=1/2$, $\bar N_1=3/4$ and $\bar N_2=1$ allow $0$, $1$ and $2$
+crossings above $\delta$, that is, $M_s\le1.534$, $1.842$ and $2.210$,
+where the $(n+1)$th extremum equals $\delta$. Each band allows one
+crossing more than the band below, which is why the limits grow;
+$\Gamma_0$ binds, so \spin stops at $M_s\le1.534$, an overshoot below
+$2\%$.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_stair.pdf}
-\caption{The lag-cancelled loop. (a) Whitened counts divided by
-$\ln(1/\delta)$ versus $M_s$: at $\delta=0.02$ a staircase whose steps
-avoid the half-integer limits (dotted, right axis in turns); at
-$\delta=10^{-8}$, all three counts lie on the limit \eqref{eq:rate}
-(Proposition~\ref{prop:delta}). (b) A record with $M_s=2.00$ and two
-crossings ($\delta=0.02$). (c) Its portrait $\Gamma_0$ turns by exactly
-half a turn between the crossings (Lemma~\ref{lem:half}); the radius is
-compressed but the angle is not.}
+\caption{The lag-cancelled loop, \spin's counts. (a) At $\delta=0.02$,
+each count steps over its published limit (dotted) at $M_s=1.53$, $1.84$,
+$2.21$. (b) Counts per $\ln(1/\delta)$ at $\delta=10^{-8}$ on the limit
+\eqref{eq:rate} (Proposition~\ref{prop:delta}). (c) A record with
+$M_s=2.00$ and two crossings. (d) Its portrait $\Gamma_0$ turns by
+exactly half a turn between them (Lemma~\ref{lem:half}); the radius is
+compressed, the angle is not.}
 \label{fig:stair}
 \end{figure}
 
-\subsection{When they do not}
+\subsection{What a limit does not guarantee}
 
-Elsewhere, crossings and $M_s$ are not tied. A first-order plant with
+Elsewhere the staircase need not hold: in the $3800$ count decisions of
+Section~\ref{sec:sim}, $N_1$ always lay within a quarter turn above a
+half-integer, but $N_0$ and $N_2$ left it in $22$ and $67\%$. Above all,
+crossings and $M_s$ are not tied. A first-order plant with
 $T=0.3L_d$ under PI with $T_i=8T$ and a gain margin of $1.624$ has
 $M_s=2.62$, yet its error never crosses the setpoint by more than $2\%$:
 the oscillation rides on a slow decay (Fig.~\ref{fig:record}).
-Conversely, a controller zero can cause crossings at a low $M_s$. So the
-counts can shape a tuning, but they do not certify it; a certificate
-must, and the same step contains one.
+Conversely, a controller zero can cause crossings at a low $M_s$. So no
+limit certifies a tuning on general loops; a certificate must, and the
+same step contains one.
 
-\section{One Step Reveals $M_s$}
+\section{Robustness from the Certificate}
+\label{sec:cert}
+
+\subsection{One step reveals $M_s$}
 \label{sec:record}
 
-The counts cannot certify $M_s$, but the record they are computed from
-can. A digital controller runs with the sampling period $T_s$. Seen at the
+A digital controller runs with the sampling period $T_s$. Seen at the
 samples, the loop it closes is linear and time invariant. From here on,
 $L(z)$, $P(z)$, $S=1/(1+L)$ and
 $M_s=\max_{\theta\in[0,\pi]}|S(e^{j\theta})|$, with $\theta=\omega T_s$,
@@ -459,7 +457,7 @@ $N\to\infty$, so $hJ\to0$, and the remaining variation tends to zero.
 All of \eqref{eq:bound} but $\tau$ comes from the record, the grid
 values from one chirp $z$-transform; $B$ bounds $[\bar\theta,\pi]$ at once.
 
-\section{Certified \spin}
+\subsection{Certified \spin}
 \label{sec:spin}
 
 \emph{Certified \spin is \spin with one more test: a tuning that the
@@ -624,16 +622,16 @@ those of this digital loop, computed from its exact $L$. Because \spin ends
 in a cycle between a few tunings, we report the most aggressive tuning
 accepted in the last $60$ iterations.
 
-\paragraph*{Counts (Section~\ref{sec:count})} On the lag-cancelled loop,
+\paragraph*{Limits (Section~\ref{sec:count})} On the lag-cancelled loop,
 for $126$ values of $k\in(1/\mathrm{e},3/2)$, Theorem~\ref{thm:counts}(c),
 (d) and Lemma~\ref{lem:half} held (half turns within $10^{-6}$), and
 \eqref{eq:param} matched a direct search to six digits. For
 $\delta\in[10^{-12},10^{-3}]$, the counts grew with the slope
-\eqref{eq:rate} within $3.3\%$ (remainder ${<}\,0.45$ turn), and for
-$k\le1/\mathrm{e}$ varied by ${<}\,0.03$.
+\eqref{eq:rate} within $3.7\%$ (remainder ${<}\,0.5$ turn), and for
+$k\le1/\mathrm{e}$ varied by ${<}\,0.005$.
 % check_result1.py, confirm_counts_delta.py
 
-\paragraph*{Bounds (Section~\ref{sec:record})} For all $146$ tunings
+\paragraph*{Certificate (Section~\ref{sec:record})} For all $146$ tunings
 accepted below, a four times longer record showed a remaining variation
 $\le2.8\cdot10^{-5}$, so Assumption~\ref{ass:tail} held with
 $\tau=10^{-3}$; \eqref{eq:srecord} held up to this variation, and every
@@ -647,39 +645,46 @@ $M_s$ lay within its bounds, with $\overline M-M_s\le\eta+\tau+2.8\cdot
 \paragraph*{Certified \spin (Section~\ref{sec:spin}; Table~\ref{tab:spin}, Fig.~\ref{fig:certified})}
 \begin{itemize}
 \item \emph{Safety.} Published \spin ended above $M^*=1.7$ on $9$ of the
-$19$ loops from the cautious start (up to $2.01$) and on $8$ from the
-bold start (up to $2.09$); certified \spin ended at or below $M^*$ on all
-of them (at most $1.69$), as Theorem~\ref{thm:spin}(i) guarantees.
-\item \emph{Without the gain box.} Published \spin exceeded $M^*$ on $12$
-of the $18$ loops that kept accepting (up to $2.05$); certified \spin on
-none (up to $1.68$).
-\item \emph{Back-off, prediction.} \eqref{eq:backoff} held along each
-back-off; predicted and true $M_s$ agreed within $10^{-7}$.
-\item \emph{No trapping.} Runs of rejections had at most $4$ band moves;
-every loop kept accepting, except $L_d=16$ without the box, where the
-counts lower $K_d$ every round under either rule, as
-Theorem~\ref{thm:spin}(iv) allows.
+$19$ loops from the cautious start (up to $2.01$), on $8$ from the bold
+start (up to $2.09$) and, without the gain box, on $12$ of $18$ (up to
+$2.05$); certified \spin on none (at most $1.69$), as
+Theorem~\ref{thm:spin}(i) guarantees.
+\item \emph{No trapping.} \eqref{eq:backoff} held along each back-off,
+predicted and true $M_s$ agreed within $10^{-7}$, and runs of rejections
+had at most $4$ band moves; every loop kept accepting, except $L_d=16$
+without the box, where the counts lower $K_d$ every round under either
+rule, as Theorem~\ref{thm:spin}(iv) allows.
 \item \emph{Cost.} Load-step IAE: $+7.8\%$ on average ($+6.4\%$ bold).
 \end{itemize}
 % designed.py (cert-shape), confirm_thm2.py, analyze_cert.py
+
+\paragraph*{Limit values under the certificate} With every limit $1/2$,
+certified \spin stayed below $M^*$ (at most $1.68$), but the counts did
+the rejecting (the certificate $14$ and $8$ times in the last $60$
+iterations, against $151$ and $172$): $2$ and $3$ loops accepted no
+tuning, and the load-step IAE rose by a median of $11$ and $16\%$, up to
+sixteenfold (fast PID, $M_s=1.21$). Raising $\bar N_1$ to $1$ changed
+nothing, since $N_1$ never lay in $(3/4,1]$. With the certificate, the
+limits set performance, not robustness.
+% run_limits.sh, analyze_limits.py, confirm_limits.py
 
 
 
 \section{Conclusion}
 
-The setpoint step that \spin records in every iteration already contains
-$M_s$. (1) Counts cannot certify: they measure crossings and, at small
-$\delta$, damping; at $\delta=0.02$ the robust limits are the
-half-integers, which bound $M_s$ only on special loops
-(Theorem~\ref{thm:counts}, Proposition~\ref{prop:delta}). (2) One step reveals $M_s$: in a digital
-loop, one finite record certifies $M_s$ without a model
-(Theorem~\ref{thm:cert}); so does every logged setpoint change made from
-rest. (3) Certified \spin, with this certificate as its acceptance test,
-accepts only tunings with $M_s\le M^*$ and is never trapped
-(Theorem~\ref{thm:spin}). Not the counts certify a tuning, but the
-certificate. The theorems assume a linear loop and a long enough record; noise and real
-loops are left to a follow-up. Scripts: \url{https://github.com/ottapav/robopid-simulator}
-(\texttt{docs/ECC27\_certified\_SPIN}).
+The setpoint step that \spin records contains $M_s$, and robustness can
+come from two sources. \emph{From the limits:} a count measures crossings
+and, at small $\delta$, damping; at $\delta=0.02$ the published limits
+allow $0$, $1$ and $2$ crossings, which bounds $M_s$ only on special loops
+(Theorem~\ref{thm:counts}, Proposition~\ref{prop:delta}). \emph{From the
+certificate:} one finite record of a digital loop certifies $M_s$
+without a model (Theorem~\ref{thm:cert}), and so does every logged
+setpoint change made from rest; with this certificate as its acceptance
+test, certified \spin accepts only tunings with $M_s\le M^*$, whatever
+the limits, and is never trapped (Theorem~\ref{thm:spin}). Not the counts
+certify a tuning, but the certificate; the limits only shape it. The theorems assume a linear loop and a long enough record; noise and
+real loops are left to a follow-up. Scripts:
+\url{https://github.com/ottapav/robopid-simulator}.
 
 {\footnotesize
 \begin{thebibliography}{99}

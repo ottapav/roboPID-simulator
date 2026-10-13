@@ -7,16 +7,19 @@ Authors: P. Otta, D. Pachner, J. Dostál, V. Havlena. Extends the SPIN method (`
 - `fig_stair.pdf`, `fig_record.pdf`, `fig_certified.pdf`: figures 1-3.
 - `scripts/`: confirmation of every statement and all figures; see `scripts/README.md`.
 
-Results (all proved; simulation only confirms):
+Results. The paper separates two sources of robustness.
 
-1. **What a count means.** Lemma 1: between two zeros of its first coordinate, a SPIN portrait
-   turns by exactly half a turn, in any linear coordinates. Corollary 1: the count of Gamma_0 is
-   within half a turn of half the number of setpoint crossings when the error lobes shrink.
-   Lag-cancelled loops k e^{-sL}/(sL): M_s strictly increasing in k (parametric closed form),
-   no crossing iff k <= 1/e (M_s <= 1.394), extrema decay by r(k) < 1, lobes shrink for k < 3/2.
-2. **The step certifies M_s.** Lemma 2: for a digital loop the error increments after a unit
-   setpoint step are exactly the impulse response of S_d. Theorem 1: certified lower and upper
-   bounds on M_s from one finite record, under one assumption (tail variation <= tau).
-   Theorem 2: as SPIN's acceptance test, every accepted tuning has M_s <= M*; the uniform
-   back-off is stable with M_s <= 1/(1 - lambda|m|). Proposition 3: the same record predicts
-   exactly the sensitivity after any gain change, which selects the band to lower.
+1. **Robustness from the limits** (Section II). Lemma 1: between two zeros of its first coordinate,
+   a SPIN portrait turns by exactly half a turn, in any linear coordinates. Lag-cancelled loops
+   k e^{-sL}/(sL): M_s strictly increasing in k, no crossing iff M_s <= 1.394 (Theorem 1);
+   at small delta every count grows like ln(1/delta) * omega/(2 pi |sigma|) (Proposition 2). At
+   delta = 0.02 the counts form a staircase; the published limits (0.5, 0.75, 1.0) allow 0, 1, 2
+   crossings above delta, i.e. M_s <= 1.534, 1.842, 2.210 there. On general loops no limit bounds M_s.
+2. **Robustness from the certificate** (Section III). Lemma 2: the error increments after a unit
+   setpoint step are exactly the impulse response of S_d. Theorem 2: certified bounds on M_s from
+   one finite record. Theorem 3: certified SPIN (acceptance iff the upper bound <= M*) accepts only
+   M_s <= M*, whatever the limits, and is never trapped. Proposition 3: the same record predicts the
+   sensitivity after any gain change.
+3. **Simulations** (Section IV). Published SPIN exceeded M* = 1.7 on up to 9 of 19 loops, certified
+   SPIN on none. Under the certificate the limit values set performance only: all limits 0.5 keep
+   M_s <= M* but raise the load-step IAE (median +11/+16%); 0.75 and 1.0 for Gamma_1 act alike.

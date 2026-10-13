@@ -70,6 +70,6 @@ b.text(5.0, 1.6, "upper bound", fontsize=6.5, color=INK2); b.text(2.0, -55, "low
 b.set_xlabel("record length / plant time scale $T_a$"); b.set_ylabel("bound vs. true $M_s$ (%)")
 b.set_title("(b) the bounds close in on $M_s$ as the record grows", fontsize=8, color=INK)
 b.legend(fontsize=6.3, frameon=False, loc="lower right", handlelength=1.6, labelspacing=0.25)
-fig.subplots_adjust(left=0.075, right=0.99, bottom=0.21, top=0.88)
+fig.subplots_adjust(left=0.075, right=0.99, bottom=0.25, top=0.88)
 fig.savefig("fig_record.pdf"); fig.savefig("fig_record.png", dpi=200)
 print("P4 SIMC PI Ms_d", round(m1, 4), " slow integral Ms_d", round(m2, 4))

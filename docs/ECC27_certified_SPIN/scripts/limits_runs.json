@@ -1,0 +1,116 @@
+{
+ "0.5,0.75,1.0": {
+  "cautious": {
+   "loops": 19,
+   "no_tuning": 0,
+   "Ms_max": 1.6892393375368056,
+   "Ms_min": 1.4386125691739546,
+   "above": 0,
+   "iae_mean": 0.0,
+   "iae_median": 0.0,
+   "iae_min": 0.0,
+   "iae_max": 0.0,
+   "rej_count": [
+    488,
+    186,
+    20
+   ],
+   "rej_cert": 151,
+   "acc": 295
+  },
+  "bold": {
+   "loops": 19,
+   "no_tuning": 0,
+   "Ms_max": 1.6911261939786038,
+   "Ms_min": 1.4624864632142573,
+   "above": 0,
+   "iae_mean": 0.0,
+   "iae_median": 0.0,
+   "iae_min": 0.0,
+   "iae_max": 0.0,
+   "rej_count": [
+    523,
+    165,
+    37
+   ],
+   "rej_cert": 172,
+   "acc": 243
+  }
+ },
+ "0.5,1.0,1.0": {
+  "cautious": {
+   "loops": 19,
+   "no_tuning": 0,
+   "Ms_max": 1.6892393375368056,
+   "Ms_min": 1.4386125691739546,
+   "above": 0,
+   "iae_mean": 0.0,
+   "iae_median": 0.0,
+   "iae_min": 0.0,
+   "iae_max": 0.0,
+   "rej_count": [
+    488,
+    186,
+    20
+   ],
+   "rej_cert": 151,
+   "acc": 295
+  },
+  "bold": {
+   "loops": 19,
+   "no_tuning": 0,
+   "Ms_max": 1.6911261939786038,
+   "Ms_min": 1.4624864632142573,
+   "above": 0,
+   "iae_mean": 0.0,
+   "iae_median": 0.0,
+   "iae_min": 0.0,
+   "iae_max": 0.0,
+   "rej_count": [
+    523,
+    165,
+    37
+   ],
+   "rej_cert": 172,
+   "acc": 243
+  }
+ },
+ "0.5,0.5,0.5": {
+  "cautious": {
+   "loops": 17,
+   "no_tuning": 2,
+   "Ms_max": 1.6807536826891023,
+   "Ms_min": 1.0835872241214335,
+   "above": 0,
+   "iae_mean": 186.09316372179248,
+   "iae_median": 11.107809822604908,
+   "iae_min": -10.000000000013232,
+   "iae_max": 1526.0962445057398,
+   "rej_count": [
+    495,
+    242,
+    60
+   ],
+   "rej_cert": 14,
+   "acc": 209
+  },
+  "bold": {
+   "loops": 16,
+   "no_tuning": 3,
+   "Ms_max": 1.6696620741243986,
+   "Ms_min": 1.0881685615062517,
+   "above": 0,
+   "iae_mean": 149.46977577517262,
+   "iae_median": 16.01567063935063,
+   "iae_min": 0.0,
+   "iae_max": 1503.2902384526558,
+   "rej_count": [
+    471,
+    240,
+    67
+   ],
+   "rej_cert": 8,
+   "acc": 174
+  }
+ }
+}

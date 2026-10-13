@@ -11,6 +11,7 @@ import json, math
 import numpy as np
 from scipy.special import lambertw
 import spin_run as S
+from compare import counts_old          # SPIN Definition 1: per-axis peak normalization
 from lagcancel import records, Ms
 
 DT = 0.01
@@ -36,7 +37,7 @@ st = int(round(DT / (t[1] - t[0])))
 rows = []
 for j, k in enumerate(ks):
     e = E[::st, j]
-    N = np.array([S.counts(e, DT, math.exp(-x)) for x in LOGD])        # shape (len(LOGD), 3)
+    N = np.array([counts_old(e, DT, math.exp(-x)) for x in LOGD])        # shape (len(LOGD), 3)
     r = rate(k)
     out = {"k": k, "Ms": Ms(k), "rate": r}
     if k <= 1 / math.e + 1e-12:
