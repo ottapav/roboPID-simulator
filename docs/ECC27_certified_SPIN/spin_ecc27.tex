@@ -20,13 +20,14 @@
 \newtheorem{lemma}{Lemma}
 \newtheorem{proposition}{Proposition}
 \newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
 \newtheorem{assumption}{Assumption}
 \newenvironment{proof}{\noindent\textit{Proof:}\ }{\hfill$\square$\par\smallskip}
 \usepackage{xspace}
 \newcommand{\spin}{SPIN\xspace}
 
-\title{\LARGE\bf One Setpoint Step Certifies Robustness,\\
-with Application to Model-Free PID Tuning}
+\title{\LARGE\bf Certified Robustness from One Setpoint Step:\\
+A Safe Acceptance Test for Model-Free PID Tuning}
 
 \author{Pavel Otta$^{1}$, Daniel Pachner$^{1}$, Ji\v{r}\'{\i} Dost\'al$^{1}$
 and Vladim\'{\i}r Havlena$^{2}$%
@@ -44,60 +45,67 @@ Engineering, Czech Technical University in Prague, Czech Republic.}}
 
 
 \begin{abstract}
-The sensitivity peak $M_s$ is the standard measure of robustness, but
-checking it on a running loop needs a model or an experiment that
-disturbs production. We show that one ordinary setpoint step suffices.
-For a stable digital loop with one degree of freedom, the increments of
-the error after a unit setpoint step are exactly the impulse response of
-the sensitivity function, so one finite record gives certified lower and
-upper bounds on $M_s$, without a model and under one assumption on the
-unrecorded tail. We apply this certificate to \spin, a model-free PID
-tuner that raises the gains while the turns of the control error in
-three phase portraits stay below calibrated limits. The limits cannot
-certify robustness: a count measures setpoint crossings, and crossings
-bound $M_s$ only on special loops. Accepting a tuning only if its
-certified upper bound is at most a target $M^*$ makes \spin provably
-robust, and the test never traps it. On $19$ loops, published \spin
-exceeded $M^*=1.7$ on up to $9$, certified \spin on none.
+Model-free PID tuners improve a loop from closed-loop data but do not
+guarantee its robustness, and checking the sensitivity peak $M_s$ of a
+running loop usually needs a model or dedicated experiments. We give a
+deterministic certificate of $M_s$ from one ordinary setpoint step, the
+experiment such tuners already perform. In a stable digital loop, the
+increments of the error after a setpoint step form the impulse response
+of the sensitivity function; from a finite record we derive computable
+lower and upper bounds on $M_s$, with explicit tail, grid and
+high-frequency terms and one assumption on the unrecorded tail. As an
+acceptance test, the certificate lets any iterative tuner that applies
+setpoint steps accept only tunings with $M_s\le M^*$, and a uniform
+back-off of the gains always restores acceptance. We work the test out
+for \spin, which counts the turns of the control error in phase
+portraits: the counts measure setpoint crossings and bound $M_s$ only on
+special loops, while certified \spin provably meets $M^*$. On $19$ loops,
+published \spin exceeded $M^*=1.7$ on up to $9$, certified \spin on none.
 \end{abstract}
 
 \section{Introduction}
 
 Let $L=CP$ be the loop transfer function and $S=1/(1+L)$ the sensitivity
 function. Its peak $M_s=\max_\omega|S|$ measures robustness: near $1.4$
-is safe, near $2$ is poor \cite{AstromHagglund2004}. Tuning rules reach a
-chosen $M_s$ with a model \cite{AstromHagglund2004,Skogestad2003}. Once a
-loop runs, its $M_s$ is rarely checked \cite{Desborough2002,Bauer2016}:
-a check needs a model, a relay test, or a dedicated estimation from
-closed-loop data \cite{WangHangBi1997,VandenHofSchrama1993,Isoshima2023}.
+is safe, near $2$ is poor \cite{AstromHagglund2004}. Model-based tuning
+rules reach a chosen $M_s$ \cite{AstromHagglund2004,Skogestad2003}.
+Model-free tuners adjust the gains from closed-loop data instead, by
+iterative feedback tuning \cite{IFT1998}, extremum seeking
+\cite{Killingsworth2006}, virtual reference feedback tuning \cite{VRFT2002},
+setpoint overshoot \cite{Shamsuzzoha2010} or step-response inspection
+\cite{SPIN}; they target performance or a calibrated response shape, and
+none guarantees the $M_s$ of its result. Once a loop runs, its $M_s$ is
+rarely checked at all \cite{Desborough2002,Bauer2016}.
 
-This paper shows that neither is needed. In a digital loop, the error
-after a setpoint step contains the sensitivity function exactly: its
-increments are the impulse response of $S$. One finite record of an
-ordinary setpoint step, or of any logged setpoint change made from rest,
-therefore certifies $M_s$ without a model.
+The $\mathcal H_\infty$ norm of a system, and hence $M_s$, can be
+estimated from data: by power iterations over repeated dedicated
+experiments \cite{Wahlberg2010,Rojas2012}, by data-driven estimation
+\cite{vanHeusden2007}, from limit cycles induced in closed loop
+\cite{Garcia2003}, or from impulse-response data under a decay
+assumption, with a one-sided guarantee \cite{Tu2017}; margins can be
+bounded from data \cite{Isoshima2023} or measured by relay tests and
+closed-loop identification \cite{WangHangBi1997,VandenHofSchrama1993}.
+These methods need dedicated experiments, give estimates or one-sided
+bounds, and are not built into a tuner.
 
-We use the certificate to make a model-free PID tuner provably robust.
-\spin \cite{SPIN} tunes an I, PI or PID controller from one setpoint step per
-iteration, by counting how many turns the error makes in three phase
-portraits; its limits on the counts were calibrated, and its robustness
-was not guaranteed. The contributions are:
+We use the experiment a tuner already performs: a setpoint step. That
+the error increments after the step are the impulse response of $S$ is
+elementary (Lemma~\ref{lem:record}). The contributions are what it
+enables:
 \begin{enumerate}
-\item a certificate of $M_s$ from one setpoint step
-(Section~\ref{sec:cert}, Lemma~\ref{lem:record},
-Theorem~\ref{thm:cert});
-\item an explanation of why the turn counts cannot certify: a count
-measures setpoint crossings (Lemma~\ref{lem:half}), and crossings bound
-$M_s$ only on special loops (Section~\ref{sec:count},
-Proposition~\ref{prop:exact});
-\item certified \spin, which accepts a tuning only if its certificate
-meets a target $M^*$; it guarantees $M_s\le M^*$ whatever the limits and
-is never trapped (Section~\ref{sec:spin}, Theorem~\ref{thm:spin}).
+\item a deterministic, two-sided certificate of $M_s$ computable from
+one finite record (Section~\ref{sec:cert}, Theorem~\ref{thm:cert});
+\item a certified acceptance test for any iterative model-free tuner:
+accepted tunings have $M_s\le M^*$, a uniform back-off always restores
+acceptance, and the record predicts the effect of any gain change
+(Section~\ref{sec:accept}, Theorem~\ref{thm:spin},
+Proposition~\ref{prop:shape});
+\item its application to \spin \cite{SPIN}: why the turn counts of
+\spin cannot certify (Lemma~\ref{lem:half}, Proposition~\ref{prop:exact}),
+and certified \spin, which meets $M^*$ and is never trapped
+(Section~\ref{sec:app}, Corollary~\ref{cor:spin}).
 \end{enumerate}
-Section~\ref{sec:sim} confirms the results in simulation. Unlike
-model-free methods that optimize performance from data
-\cite{IFT1998,Killingsworth2006,VRFT2002,Shamsuzzoha2010}, the certificate
-bounds robustness and needs no extra experiment.
+Section~\ref{sec:sim} confirms the results in simulation.
 
 \section{A Certificate from One Setpoint Step}
 \label{sec:cert}
@@ -193,7 +201,77 @@ $2\%$ (grey band). The record ends at $8L_d$. (b) $|S|$ from the record
 \label{fig:record}
 \end{figure}
 
-\section{Application to Model-Free PID Tuning}
+\section{A Certified Acceptance Test}
+\label{sec:accept}
+
+An iterative tuner applies a controller $C$, records a setpoint step, and
+proposes the next controller. \emph{Certified acceptance} keeps the
+tuner's own rule for proposing, but accepts $C$ only if the upper bound
+$\overline M$ of Theorem~\ref{thm:cert}, computed from the record of $C$,
+is at most a target $M^*$; otherwise it lowers the gains, by the tuner's
+own rule or by a uniform back-off $C\to(1-\beta)C$. Here $C$ has integral
+action, $C=C_0+K_iT_s z^{-1}/(1-z^{-1})$ with $C_0$ bounded on the unit
+circle, and $\bar\theta$ in \eqref{eq:bound} solves
+$1+B/\sin(\bar\theta/2)=M^*$ ($\bar\theta=\pi$ if no solution), with a
+grid fine enough that $hJ/2\le\eta$.
+
+\begin{theorem}[Certified acceptance]
+\label{thm:spin}
+Let the plant be stable, let $K_iP(1)>0$, and let every tested record
+meet the conditions of Lemma~\ref{lem:record} and
+Assumption~\ref{ass:tail}.
+\begin{enumerate}
+\item[(i)] Every accepted tuning has $M_s\le M^*$, whatever rule
+proposed it.
+\item[(ii)] For a controller $C$, let
+$\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(e^{j\theta})\}$. For
+$0<\lambda<1/|\mu|$, the loop with $\lambda C$ is stable, and
+\begin{equation}
+M_s(\lambda C)\le\frac{1}{1-\lambda|\mu|}.
+\label{eq:backoff}
+\end{equation}
+\item[(iii)] If $M^*>1+2\tau+\eta$, then from any such $C$ at most
+$j^*=\lceil\ln\frac{|\mu|M'}{M'-1}/\ln\frac1{1-\beta}\rceil$ uniform
+back-offs lead to an accepted tuning, where $M'=M^*-2\tau-\eta$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(i) This follows from Theorem~\ref{thm:cert}. (ii) $L$ is bounded on the
+unit circle except near $z=1$, where the integral term has a bounded real
+part, because $P$ is analytic at $z=1$ and
+$\mathrm{Re}\,1/(e^{j\theta}-1)=-\frac12$; so $\mu$ is finite. Then
+$|1+\lambda L|\ge1+\lambda\,\mathrm{Re}\,L\ge1-\lambda|\mu|>0$, which
+gives \eqref{eq:backoff}. The Nyquist curve of $\lambda L$ lies in
+$\mathrm{Re}\ge-\lambda|\mu|>-1$, also on a small indentation outside
+$z=1$, where $K_iP(1)>0$ keeps $\mathrm{Re}\,L>\mu$; it cannot encircle
+$-1$, and $L$ has no poles outside the unit disc, so the loop is stable.
+(iii) After $j$ back-offs, $\lambda=(1-\beta)^j$, and \eqref{eq:backoff}
+gives $M_s\le M'$ for $j\ge j^*$. In \eqref{eq:bound}, the grid term is
+then at most $M_s+2\tau+\eta\le M^*$, and the second term is at most
+$M^*$ by the choice of $\bar\theta$; so the test passes.
+\end{proof}
+
+A back-off is safe by (ii) but slows load rejection. A tuner's own,
+cheaper moves can be chosen with the same record, which predicts the
+sensitivity of any other controller on the same plant.
+
+\begin{proposition}[Prediction from one step]
+\label{prop:shape}
+For any controller $C'$ on the same plant, $S'=S/(S+(1-S)C'/C)$ exactly.
+If the record gives $\hat S=S+\varepsilon$, the predicted $\hat S'$ has
+the error $\hat S'-S'=\varepsilon\,(C'/C)/(D\hat D)$, where
+$D=S+(1-S)C'/C$ and $\hat D$ is $D$ with $\hat S$, wherever
+$D,\hat D\neq0$. It predicts the frequency response of the new loop, not
+its stability.
+\end{proposition}
+
+\begin{proof}
+$L'=LC'/C$ with $L=(1-S)/S$; subtracting the two expressions gives the
+error.
+\end{proof}
+
+\section{Application to \spin}
 \label{sec:app}
 
 \subsection{The \spin method}
@@ -244,10 +322,9 @@ with lines 7a--7c in bold instead of line 7, of certified \spin
 \noindent An increment scales a gain by $1/(1-\beta)$. Defaults:
 $\bar N=(0.5,0.75,1.0)$, $\delta=0.02$, $\beta=0.1$; gains stay within
 $[0.001,10]$ times their initial values (the gain box); the result is the
-last accepted tuning. Certified \spin: in line 7a, $\bar\theta$ solves
-$1+B/\sin(\bar\theta/2)=M^*$ ($\bar\theta=\pi$ if no solution) and
-$h=\bar\theta/\lceil\bar\theta J/(2\eta)\rceil$, so that $hJ/2\le\eta$;
-$M^*=1.7$, $\tau=10^{-3}$, $\eta=2\cdot10^{-3}$, $n_{\max}=10$.
+last accepted tuning. Certified \spin: $\bar\theta$ and $h$ as in
+Section~\ref{sec:accept}; $M^*=1.7$, $\tau=10^{-3}$, $\eta=2\cdot10^{-3}$,
+$n_{\max}=10$.
 \smallskip\hrule
 \end{figure}
 
@@ -361,71 +438,28 @@ is not.}
 \emph{Certified \spin accepts a tuning that the counts accept only if the
 upper bound $\overline M$ of Theorem~\ref{thm:cert}, computed from the
 same record, is at most a target $M^*$.} In Algorithm~1, it replaces
-line 7 by the bold lines 7a--7c. The counts shape the tuning; the
+line 7 by the bold lines 7a--7c: the counts shape the tuning, and the
 certificate decides whether it is accepted. A rejected tuning is lowered
-by a band move, as in line 10, or by a uniform back-off, the reverse of
-an acceptance.
+by the band move that Proposition~\ref{prop:shape} predicts to lower
+$M_s$, as in line 10, or by a uniform back-off, the reverse of an
+acceptance.
 
-\begin{theorem}[Certified \spin]
-\label{thm:spin}
-Let the plant be stable, let $K_iP(1)>0$, and let every record tested in
-line 7a meet the conditions of Lemma~\ref{lem:record} and
-Assumption~\ref{ass:tail}.
-\begin{enumerate}
-\item[(i)] Every tuning accepted in line 7b, and hence the result, has
-$M_s\le M^*$, whatever the limits $\bar N_k$.
-\item[(ii)] For a controller $C$, let
-$\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(e^{j\theta})\}$. For
-$0<\lambda<1/|\mu|$, the loop with $\lambda C$ is stable, and
-\begin{equation}
-M_s(\lambda C)\le\frac{1}{1-\lambda|\mu|}.
-\label{eq:backoff}
-\end{equation}
-\item[(iii)] If $M^*>1+2\tau+\eta$ and no gain is clipped by the gain
-box, every run of rejections in line 7b ends in an acceptance or in a
-move of Algorithm~1 (line 3 or 10): it has at most $n_{\max}$ band moves,
-and each stretch of back-offs in it at most
-$\lceil\ln\frac{|\mu|M'}{M'-1}/\ln\frac1{1-\beta}\rceil$, where
-$M'=M^*-2\tau-\eta$ and $\mu$ belongs to the controller at its start.
-\end{enumerate}
-\end{theorem}
+\begin{corollary}[Certified \spin]
+\label{cor:spin}
+Under the conditions of Theorem~\ref{thm:spin}, the result of certified
+\spin has $M_s\le M^*$, whatever the limits $\bar N_k$. If no gain is
+clipped by the gain box, every run of rejections in line 7b ends in an
+acceptance or in a move of Algorithm~1 (line 3 or 10), after at most
+$n_{\max}$ band moves and at most $j^*$ back-offs in each stretch of
+back-offs.
+\end{corollary}
 
 \begin{proof}
-(i) This follows from Theorem~\ref{thm:cert}. (ii) $L$ is bounded on the
-unit circle except near $z=1$, where the integral term has a bounded real
-part, because $P$ is analytic at $z=1$ and
-$\mathrm{Re}\,1/(e^{j\theta}-1)=-\frac12$; so $\mu$ is finite. Then
-$|1+\lambda L|\ge1+\lambda\,\mathrm{Re}\,L\ge1-\lambda|\mu|>0$, which
-gives \eqref{eq:backoff}. The Nyquist curve of $\lambda L$ lies in
-$\mathrm{Re}\ge-\lambda|\mu|>-1$, also on a small indentation outside
-$z=1$, where $K_iP(1)>0$ keeps $\mathrm{Re}\,L>\mu$; it cannot encircle
-$-1$, and $L$ has no poles outside the unit disc, so the loop is stable.
-(iii) Line 7c allows at most $n_{\max}$ band moves. After $j$ back-offs
-from $C$, $\lambda=(1-\beta)^j$, and \eqref{eq:backoff} gives $M_s\le M'$
-for the stated $j$. In \eqref{eq:bound}, the grid term is then at most
-$M_s+2\tau+\eta\le M^*$, and the second term is at most $M^*$ by the
-choice of $\bar\theta$; so the test passes unless the counts reject
-first.
+Line 7c allows at most $n_{\max}$ band moves in a row; the rest follows
+from Theorem~\ref{thm:spin}(i) and (iii), unless the counts reject first.
 \end{proof}
 
-So the test never traps \spin. A back-off is safe by (ii) but slows
-load rejection; a band move is often cheaper, and the same record
-predicts what it does.
-
-\begin{proposition}[Prediction from one step]
-\label{prop:shape}
-For any controller $C'$ on the same plant, $S'=S/(S+(1-S)C'/C)$ exactly.
-If the record gives $\hat S=S+\varepsilon$, the predicted $\hat S'$ has
-the error $\hat S'-S'=\varepsilon\,(C'/C)/(D\hat D)$, where
-$D=S+(1-S)C'/C$ and $\hat D$ is $D$ with $\hat S$, wherever
-$D,\hat D\neq0$. It predicts the frequency response of the new loop, not
-its stability.
-\end{proposition}
-
-\begin{proof}
-$L'=LC'/C$ with $L=(1-S)/S$; subtracting the two expressions gives the
-error.
-\end{proof}
+So the test never traps \spin.
 
 \begin{figure*}[t]
 \centering
@@ -539,22 +573,20 @@ limits set performance, not robustness.
 
 \section{Conclusion}
 
-One ordinary setpoint step contains the sensitivity function of a
-digital loop, and one finite record certifies its peak without a model;
-so does every logged setpoint change made from rest. Applied to \spin,
-the certificate turns a calibrated, model-free tuner into a provably
-robust one: the turn counts, which measure setpoint crossings and bound
-$M_s$ only on special loops, keep shaping the tuning, and the certificate
-decides what is accepted. The theorems assume a linear loop and a long
-enough record; noise and real loops are left to a follow-up. Scripts:
-\url{https://github.com/ottapav/robopid-simulator}.
+The setpoint step that a model-free tuner applies anyway certifies the
+robustness of the loop it tests: one finite record gives two-sided bounds
+on $M_s$ without a model and without a dedicated experiment, and so does
+every logged setpoint change made from rest. As an acceptance test, the
+certificate makes any iterative tuner accept only tunings with $M_s\le
+M^*$, and a uniform back-off always restores acceptance. For \spin, the
+turn counts measure setpoint crossings and bound $M_s$ only on special
+loops; with the certificate they keep shaping the tuning, and the
+certificate decides what is accepted. The theorems assume a linear loop
+and a long enough record; noise and real loops are left to a follow-up.
+Scripts: \url{https://github.com/ottapav/robopid-simulator}.
 
 {\footnotesize
 \begin{thebibliography}{99}
-
-\bibitem{SPIN} D.~Pachner, P.~Otta, J.~Dost\'al, and V.~Havlena,
-``Model-free PID tuning by step-response inspection,'' submitted to
-\emph{J. Process Control}, 2026.
 
 \bibitem{AstromHagglund2004} K.~J.~\r{A}str\"om and T.~H\"agglund,
 ``Revisiting the Ziegler--Nichols step response method for PID control,''
@@ -563,6 +595,28 @@ enough record; noise and real loops are left to a follow-up. Scripts:
 \bibitem{Skogestad2003} S.~Skogestad, ``Simple analytic rules for model
 reduction and PID controller tuning,'' \emph{J. Process Control},
 vol.~13, no.~4, pp.~291--309, 2003.
+
+\bibitem{IFT1998} H.~Hjalmarsson, M.~Gevers, S.~Gunnarsson, and
+O.~Lequin, ``Iterative feedback tuning: theory and applications,''
+\emph{IEEE Control Syst. Mag.}, vol.~18, no.~4, pp.~26--41, 1998.
+
+\bibitem{Killingsworth2006} N.~J.~Killingsworth and M.~Krsti\'c, ``PID
+tuning using extremum seeking: online, model-free performance
+optimization,'' \emph{IEEE Control Syst. Mag.}, vol.~26, no.~1,
+pp.~70--79, 2006.
+
+\bibitem{VRFT2002} M.~C.~Campi, A.~Lecchini, and S.~M.~Savaresi,
+``Virtual reference feedback tuning: a direct method for the design of
+feedback controllers,'' \emph{Automatica}, vol.~38, no.~8,
+pp.~1337--1346, 2002.
+
+\bibitem{Shamsuzzoha2010} M.~Shamsuzzoha and S.~Skogestad, ``The setpoint
+overshoot method: a simple and fast closed-loop approach for PID tuning,''
+\emph{J. Process Control}, vol.~20, no.~10, pp.~1220--1234, 2010.
+
+\bibitem{SPIN} D.~Pachner, P.~Otta, J.~Dost\'al, and V.~Havlena,
+``Model-free PID tuning by step-response inspection,'' submitted to
+\emph{J. Process Control}, 2026.
 
 \bibitem{Desborough2002} L.~Desborough and R.~Miller, ``Increasing
 customer value of industrial control performance monitoring---Honeywell's
@@ -574,6 +628,32 @@ N.~Thornhill, ``The current state of control loop performance
 monitoring---a survey of application in industry,'' \emph{J. Process
 Control}, vol.~38, pp.~1--10, 2016.
 
+\bibitem{Wahlberg2010} B.~Wahlberg, M.~Barenthin, and H.~Hjalmarsson,
+``Non-parametric methods for $L_2$-gain estimation using iterative
+experiments,'' \emph{Automatica}, vol.~46, no.~8, pp.~1376--1381, 2010.
+
+\bibitem{Rojas2012} C.~R.~Rojas, T.~Oomen, H.~Hjalmarsson, and B.~Wahlberg,
+``Analyzing iterations in identification with application to
+nonparametric $\mathcal H_\infty$-norm estimation,'' \emph{Automatica},
+vol.~48, no.~11, pp.~2776--2790, 2012.
+
+\bibitem{vanHeusden2007} K.~van Heusden, A.~Karimi, and D.~Bonvin,
+``Data-driven estimation of the infinity norm of a dynamical system,'' in
+\emph{Proc. 46th IEEE Conf. Decision and Control}, New Orleans, 2007.
+
+\bibitem{Garcia2003} D.~Garcia, A.~Karimi, and R.~Longchamp, ``Infinity norm
+measurement of sensitivity function based on limit cycles in a
+closed-loop experiment,'' in \emph{Proc. European Control Conf.},
+Cambridge, UK, 2003, pp.~2073--2078.
+
+\bibitem{Tu2017} S.~Tu, R.~Boczar, and B.~Recht, ``On the approximation of
+Toeplitz operators for nonparametric $\mathcal H_\infty$-norm
+estimation,'' arXiv:1709.10203, 2017.
+
+\bibitem{Isoshima2023} K.~Isoshima, M.~Tanemura, and Y.~Chida,
+``Data-driven estimation of the lower bounds of gain and phase margins,''
+\emph{Automatica}, vol.~153, art.~111008, 2023.
+
 \bibitem{WangHangBi1997} Q.-G.~Wang, C.~C.~Hang, and Q.~Bi, ``Process
 frequency response estimation from relay feedback,'' \emph{Control Eng.
 Pract.}, vol.~5, no.~9, pp.~1293--1302, 1997.
@@ -583,31 +663,9 @@ R.~J.~P.~Schrama, ``An indirect method for transfer function estimation
 from closed loop data,'' \emph{Automatica}, vol.~29, no.~6,
 pp.~1523--1527, 1993.
 
-\bibitem{Isoshima2023} K.~Isoshima, M.~Tanemura, and Y.~Chida,
-``Data-driven estimation of the lower bounds of gain and phase margins,''
-\emph{Automatica}, vol.~153, art.~111008, 2023.
-
 \bibitem{GyoriLadas1991} I.~Gy\H{o}ri and G.~Ladas, \emph{Oscillation
 Theory of Delay Differential Equations with Applications}. Oxford:
 Clarendon Press, 1991.
-
-\bibitem{IFT1998} H.~Hjalmarsson, M.~Gevers, S.~Gunnarsson, and
-O.~Lequin, ``Iterative feedback tuning: theory and applications,''
-\emph{IEEE Control Syst. Mag.}, vol.~18, no.~4, pp.~26--41, 1998.
-
-\bibitem{Killingsworth2006} N.~J.~Killingsworth and M.~Krsti\'c, ``PID
-tuning using extremum seeking: online, model-free performance
-optimization,'' \emph{IEEE Control Syst. Mag.}, vol.~26, no.~1,
-pp.~70--79, 2006.
-
-\bibitem{Shamsuzzoha2010} M.~Shamsuzzoha and S.~Skogestad, ``The setpoint
-overshoot method: a simple and fast closed-loop approach for PID tuning,''
-\emph{J. Process Control}, vol.~20, no.~10, pp.~1220--1234, 2010.
-
-\bibitem{VRFT2002} M.~C.~Campi, A.~Lecchini, and S.~M.~Savaresi,
-``Virtual reference feedback tuning: a direct method for the design of
-feedback controllers,'' \emph{Automatica}, vol.~38, no.~8,
-pp.~1337--1346, 2002.
 
 \end{thebibliography}}
 

@@ -1,4 +1,4 @@
-# ECC 2027 paper: One Setpoint Step Certifies Robustness, with Application to Model-Free PID Tuning
+# ECC 2027 paper: Certified Robustness from One Setpoint Step: A Safe Acceptance Test for Model-Free PID Tuning
 
 Authors: P. Otta, D. Pachner, J. Dostál, V. Havlena. Extends the SPIN method (`../SPIN_poster`).
 
