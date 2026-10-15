@@ -78,7 +78,7 @@ ordinary setpoint step, or of any logged setpoint change made from rest,
 therefore certifies $M_s$ without a model.
 
 We use the certificate to make a model-free PID tuner provably robust.
-\spin \cite{SPIN} tunes a PI or PID controller from one setpoint step per
+\spin \cite{SPIN} tunes an I, PI or PID controller from one setpoint step per
 iteration, by counting how many turns the error makes in three phase
 portraits; its limits on the counts were calibrated, and its robustness
 was not guaranteed. The contributions are:
@@ -179,25 +179,26 @@ Everything in \eqref{eq:bound} except $\tau$ comes from the record, and
 all grid values follow from one chirp $z$-transform. The grid term
 covers the frequencies up to $\bar\theta$; above them, $B$ bounds $|S|$
 at once, and it is small for a smooth record. Fig.~\ref{fig:record}
-shows the identity and the bounds on two loops.
+shows both steps on one loop.
 
-\begin{figure*}[t]
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.92\textwidth]{fig_record.pdf}
-\caption{(a) $|S|$ from one setpoint step (dashed) lies on the true
-$|S|$ (thick) (Lemma~\ref{lem:record}), also for a slow-integral loop
-whose error never crosses the setpoint by more than $2\%$. (b) The bounds
-\eqref{eq:bound} relative to the true $M_s$ versus the record length, with
-$\tau$ the true remaining variation (Theorem~\ref{thm:cert}).}
+\includegraphics[width=\columnwidth]{fig_record.pdf}
+\caption{One step certifies $M_s$. (a) The error after a setpoint step
+of the slow-integral PI loop of Section~\ref{sec:count}; it never crosses the setpoint by more than
+$2\%$ (grey band). The record ends at $8L_d$. (b) $|S|$ from the record
+(Lemma~\ref{lem:record}) lies on the true $|S|$, and the bounds
+\eqref{eq:bound} bracket $M_s=2.62$, far above $M^*$
+(Theorem~\ref{thm:cert}, with $\tau=0.13$).}
 \label{fig:record}
-\end{figure*}
+\end{figure}
 
 \section{Application to Model-Free PID Tuning}
 \label{sec:app}
 
 \subsection{The \spin method}
 
-\spin \cite{SPIN} tunes a PI or PID controller with the gains
+\spin \cite{SPIN} tunes an I, PI or PID controller with the gains
 $K_i,K_p,K_d$. In each iteration, it applies one setpoint step, records
 the error $e$, and forms three phase portraits,
 \begin{equation}
@@ -499,9 +500,9 @@ tunings accepted below, a four times longer record showed a remaining
 variation $\le2.8\cdot10^{-5}$, so Assumption~\ref{ass:tail} held with
 $\tau=10^{-3}$; \eqref{eq:srecord} held up to this variation, and every
 $M_s$ lay within its bounds, with $\overline M-M_s\le\eta+\tau+2.8\cdot
-10^{-5}$. Short records give wide bounds that still contain $M_s$
+10^{-5}$. Short records give wider bounds that still contain $M_s$
 (Fig.~\ref{fig:record}(b)).
-% confirm_thm1.py, bounds_vs_length.py
+% confirm_thm1.py, fig_record.py
 
 \paragraph*{The counts (Section~\ref{sec:count})} On the lag-cancelled
 loop, $\Gamma_0$ turned by half a turn between crossings within

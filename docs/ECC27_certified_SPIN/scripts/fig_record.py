@@ -1,28 +1,23 @@
 """
-Figure 2: Lemma 2 and Theorem 1.
-  (a) true |S_d| of the digital loop (thick, light) and |S_d| read from one setpoint step (dashed),
-      for P4 with SIMC PI and for the slow-integral loop that no turn count detects
-  (b) Theorem 1 bounds against record length, tau = true tail of the truncated record (bounds_vs_length.py)
+Figure 1: one setpoint step certifies M_s (Lemma 1, Theorem 1), on the slow-integral loop
+(first-order plant T = 0.3 L_d, PI with T_i = 8T, gain margin 1.624; digital, T_s = 0.01 L_d).
+  (a) the error after a unit setpoint step; the record ends at N = 8 L_d
+  (b) the true |S| of the digital loop, |S| from the record (1), and the certified bounds (2)
+      with tau the true remaining variation of the record
 """
-import json, math
+import math
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from spin_cert_run import sim
-from cert import L_d, increments
+from cert import increments, certificate, L_d
 
-BLUE, ORANGE = "#2a78d6", "#eb6834"
+BLUE = "#2a78d6"
 INK, INK2, RULE = "#0b0b0b", "#52514e", "#b9b8b3"
 plt.rcParams.update({"font.size": 8, "font.family": "serif", "axes.edgecolor": INK2,
                      "axes.labelcolor": INK, "xtick.color": INK2, "ytick.color": INK2,
                      "axes.spines.top": False, "axes.spines.right": False})
-
-
-def simc_pi(K, L, lags):
-    l = sorted(lags, reverse=True); tau = l[0] + l[1] / 2; th = L + l[1] / 2 + sum(l[2:])
-    Kc = tau / (K * 2 * th); Ti = min(tau, 8 * th)
-    return Kc / Ti, Kc
 
 
 def slow_integral_Kp():
@@ -33,43 +28,37 @@ def slow_integral_Kp():
     return 1 / abs(Lw[np.argmin(abs(ph + np.pi))]) / (6 - 4.7 * 27 / 29)
 
 
-def panel_curve(ax, K, L, lags, Ki, Kp, dt, n, w, col):
-    e = sim(K, L, lags, Ki, Kp, 0.0, dt, n); a = increments(e)
-    th = w * dt; idx = np.arange(len(a))
-    Sr = np.array([np.sum(a * np.exp(-1j * t * idx)) for t in th])
-    St = 1 / (1 + L_d(K, L, lags, Ki, Kp, 0.0, dt, th))
-    ax.loglog(w, abs(St), color=col, lw=4, alpha=0.3, solid_capstyle="butt")
-    ax.loglog(w, abs(Sr), color=col, lw=1.0, ls=(0, (4, 2)))
-    return float(abs(St).max())
+K, L, lags, Ti = 1.0, 1.0, [0.3], 2.4
+Kp = slow_integral_Kp(); Ki = Kp / Ti
+dt = 0.01; e = sim(K, L, lags, Ki, Kp, 0.0, dt, int(60 / dt)); a = increments(e); t = np.arange(len(e)) * dt
+TN = 8.0; N = int(TN / dt); tau = float(np.sum(abs(a[N + 1:])))
+c = certificate(e[:N + 1], tau, 2e-3)
 
+w = np.logspace(-2, math.log10(math.pi / dt), 1500); th = w * dt; idx = np.arange(N + 1)
+S_rec = np.array([abs(np.sum(a[:N + 1] * np.exp(-1j * x * idx))) for x in th])
+S_true = abs(1 / (1 + L_d(K, L, lags, Ki, Kp, 0.0, dt, th)))
 
-fig, (a, b) = plt.subplots(1, 2, figsize=(7.16, 1.7), gridspec_kw=dict(width_ratios=[1.15, 1], wspace=0.28))
-K, L, lags = 1.0, 4.0, [8] * 6; Ki, Kp = simc_pi(K, L, lags); Ta = L + sum(lags); dt = Ta / 1000
-m1 = panel_curve(a, K, L, lags, Ki, Kp, dt, int(15 * Ta / dt), np.logspace(-3, math.log10(0.6), 300), BLUE)
-a.text(2.2e-3, 0.3, "$P_4$, SIMC PI\n$M_s=%.2f$" % m1, color=INK, fontsize=6.8)
-Kp = slow_integral_Kp()
-m2 = panel_curve(a, 1.0, 1.0, [0.3], Kp / 2.4, Kp, 0.01, int(150 / 0.01), np.logspace(-2, math.log10(3.2), 300), ORANGE)
-a.text(0.35, 0.05, "slow integral:\nno crossing,\n$M_s=%.2f$" % m2, color=INK, fontsize=6.8)
-a.plot([], [], color=INK2, lw=4, alpha=0.3, label="true $|S|$")
-a.plot([], [], color=INK2, lw=1.0, ls=(0, (4, 2)), label="from one step, (5)")
-a.legend(fontsize=6.8, frameon=False, loc="upper left", handlelength=2.2)
-a.set_xlim(1e-3, 4); a.set_ylim(2e-2, 5)
-a.set_xlabel("frequency $\\omega$ (rad/s)"); a.set_ylabel("$|S|$", labelpad=1)
-a.set_title("(a) the step gives the whole sensitivity function", fontsize=8, color=INK)
+fig, (A, B) = plt.subplots(1, 2, figsize=(3.45, 1.55), gridspec_kw=dict(width_ratios=[1, 1.15], wspace=0.42))
+A.fill_between([0, 20], -0.02, 0.02, color=RULE, alpha=0.45, lw=0)
+A.plot(t[:N + 1], e[:N + 1], color=BLUE, lw=1.1)
+A.plot(t[N:int(20 / dt)], e[N:int(20 / dt)], color=RULE, lw=0.9)
+A.axvline(TN, color=INK2, lw=0.6, ls=":")
+A.text(TN + 0.5, 0.62, "end of\nrecord", fontsize=6.3, color=INK2)
+A.set_xlim(0, 20); A.set_ylim(-0.1, 1.05); A.set_yticks([0, 0.5, 1])
+A.set_xlabel("time $t/L_d$", labelpad=1); A.set_ylabel("error $e$", labelpad=1)
+A.set_title("(a) one setpoint step", fontsize=8)
 
-B = json.load(open("bounds_vs_length.json"))
-for (pl, d), col, lab in zip(B.items(), [ORANGE, BLUE, INK2], ["$P_3$, PID", "$P_4$, PID", "lag-dom. PI"]):
-    T = np.array([r[0] for r in d["rows"]]); lo = np.array([r[1] for r in d["rows"]]); up = np.array([r[2] for r in d["rows"]])
-    b.plot(T, 100 * (up / d["Ms"] - 1), color=col, lw=1.2, marker="o", ms=2.5, label=lab)
-    b.plot(T, 100 * (lo / d["Ms"] - 1), color=col, lw=1.0, ls=(0, (3, 2)), marker="o", ms=2.5, mfc="white")
-b.axhline(0, color=INK, lw=0.8)
-b.set_xscale("log"); b.set_yscale("symlog", linthresh=0.1, linscale=0.6)
-b.set_yticks([-100, -10, -1, -0.1, 0, 0.1, 1, 10]); b.set_yticklabels(["$-100$", "$-10$", "$-1$", "$-0.1$", "0", "0.1", "1", "10"])
-b.set_ylim(-110, 40); b.set_xlim(0.28, 16)
-b.text(5.0, 1.6, "upper bound", fontsize=6.5, color=INK2); b.text(2.0, -55, "lower bound", fontsize=6.5, color=INK2)
-b.set_xlabel("record length / plant time scale $T_a$"); b.set_ylabel("bound vs. true $M_s$ (%)")
-b.set_title("(b) the bounds close in on $M_s$ as the record grows", fontsize=8, color=INK)
-b.legend(fontsize=6.3, frameon=False, loc="lower right", handlelength=1.6, labelspacing=0.25)
-fig.subplots_adjust(left=0.075, right=0.99, bottom=0.25, top=0.88)
+wp = w[np.argmax(S_true)]
+B.semilogx(w, S_true, color=BLUE, lw=3.5, alpha=0.3, solid_capstyle="butt", label="true")
+B.semilogx(w, S_rec, color=BLUE, lw=0.9, ls=(0, (4, 2)), label="from (a)")
+for v in (c["lower"], c["upper"]):
+    B.plot([wp / 2.2, wp * 2.2], [v, v], color=INK, lw=0.8)
+B.text(wp * 2.5, (c["lower"] + c["upper"]) / 2, f"bounds\n{c['lower']:.2f}, {c['upper']:.2f}", fontsize=6.3, va="center")
+B.axhline(1.7, color=INK2, lw=0.7, ls=(0, (4, 3))); B.text(0.012, 1.78, "$M^*$", fontsize=6.3, color=INK2)
+B.set_xlim(0.01, math.pi / dt); B.set_ylim(0, 3.0); B.set_xticks([0.01, 1, 100])
+B.set_xlabel("frequency $\\omega$ (rad/s)", labelpad=1); B.set_ylabel("$|S|$", labelpad=1)
+B.set_title(f"(b) $|S|$, $M_s={S_true.max():.2f}$", fontsize=8)
+B.legend(fontsize=6, frameon=False, loc="lower right", handlelength=1.8, labelspacing=0.2, borderaxespad=0.2)
+fig.subplots_adjust(left=0.125, right=0.99, bottom=0.25, top=0.86)
 fig.savefig("fig_record.pdf"); fig.savefig("fig_record.png", dpi=200)
-print("P4 SIMC PI Ms_d", round(m1, 4), " slow integral Ms_d", round(m2, 4))
+print(f"M_s {S_true.max():.4f}  record {TN} L_d  tau {tau:.4f}  bounds {c['lower']:.4f} {c['upper']:.4f}")

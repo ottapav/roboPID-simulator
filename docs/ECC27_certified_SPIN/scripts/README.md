@@ -28,13 +28,13 @@ figures and tables rebuild without rerunning SPIN.
 | Lemma 1 and Theorem 1 on all 146 accepted tunings (true tail, identity, bracketing) | `python3 confirm_thm1.py` -> `thm1_points.json` |
 | Theorem 2(ii) along the uniform back-off; Prop. 2 | `python3 confirm_thm2.py` -> `thm2_points.json` |
 | Table I, numbers of Section IV, load-step IAE | `python3 analyze_cert.py` -> `summary_cert.json` |
-| Fig. 1 | `python3 bounds_vs_length.py` (panel b data), then `python3 fig_record.py` |
+| Fig. 1 | `python3 fig_record.py` |
 | Fig. 3 | `python3 fig_certified.py` |
 | Owner of the peak | `owner_box.json` (`OWN_IN=box python3 owner_designed.py`) |
 
 ## Earlier material
 
 `shape*_0.jsonl`, `shapehi*_0.jsonl`, `boxtest_0.jsonl`, `box2test_0.jsonl`, `analyze_shape*.py`,
-`iae_*.json`, `record_points.json`, `confirm_counts_delta.py` / `counts_delta.json` (counts at small delta), `conv.py`, `twodof.py`, `noise.py` belong to earlier drafts
+`iae_*.json`, `record_points.json`, `confirm_counts_delta.py` / `counts_delta.json` (counts at small delta), `bounds_vs_length.py` / `bounds_vs_length.json` (bounds versus record length), `conv.py`, `twodof.py`, `noise.py` belong to earlier drafts
 (acceptance by the read value instead of the certified bound, continuous-design M_s). They are kept
 for reference and are not used by the current paper.
