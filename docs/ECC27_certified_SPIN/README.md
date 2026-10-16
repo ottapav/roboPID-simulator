@@ -23,10 +23,12 @@ Results.
    k e^{-sL}/(sL), M_s increases with k and the error never crosses iff M_s <= 1.394. At delta = 0.02
    the published limits (0.5, 0.75, 1.0) allow 0, 1, 2 crossings, i.e. M_s <= 1.534, 1.842, 2.210 on
    these loops; on general loops crossings do not bound M_s.
-4. **Certified and safe SPIN** (Section 4.3). Corollary 1: certified SPIN ends with M_s <= M*,
-   whatever the limits, and is never trapped. Corollary 2: safe SPIN certifies every move before
-   applying it, so from the first accepted tuning on, every applied tuning is stable with M_s <= M*.
-5. **Simulations** (Section 5). Published SPIN ended above M* = 1.7 on up to 9 of 19 loops, certified
-   SPIN on none (load-step IAE +7.8%). During tuning (fixed T_s, 7600 iterations), published SPIN
-   applied a tuning above M* in 4371 iterations (up to 2.38), certified SPIN in 3398 (up to 1.98),
-   safe SPIN in none (at most 1.696). Under the certificate the limit values set performance only.
+4. **From certified to safe SPIN** (Section 4.3). Corollary 1: certified SPIN (checks each tuning after
+   applying it) ends with M_s <= M*, whatever the limits, and is never trapped. Corollary 2: safe SPIN
+   certifies every move before applying it, so from the first accepted tuning on, every applied tuning
+   is stable with M_s <= M*.
+5. **Simulations** (Section 5; one experiment: 19 loops, gain box, fixed T_s, two starts). Published SPIN
+   ended above M* = 1.7 on 9 and 7 loops and applied a tuning above M* in 4371 of 7600 iterations (up
+   to 2.38); certified SPIN ended below M* everywhere but applied such tunings in 3398 (up to 1.98);
+   safe SPIN in none (at most 1.696). Mean load-step IAE vs published: certified +9%/+8%, safe
+   +15%/+22% (medians: 0% and +4%/+2%). Under the certificate the limit values set performance only.

@@ -4,7 +4,7 @@ Figure 3: P3 with PID, exact M_s of the digital loop.
       record, and the true |S_d| after the move
   (b) M_s of the tuning applied in each iteration, published, certified and safe SPIN
       (traj_P3PID.json from traj_P3PID.py)
-Reads summary_cert.json (analyze_cert.py), owner_box.json, box_*.jsonl.
+Reads safe1_*.jsonl (run_safe.sh) and traj_P3PID.json (traj_P3PID.py).
 """
 import json, glob, math
 import numpy as np
@@ -20,7 +20,6 @@ TARGET = 1.7
 plt.rcParams.update({"font.size": 8, "font.family": "serif", "axes.edgecolor": INK2,
                      "axes.labelcolor": INK, "xtick.color": INK2, "ytick.color": INK2,
                      "axes.spines.top": False, "axes.spines.right": False})
-S = json.load(open("summary_cert.json"))
 ORDER = ["P1 PI", "P1 PID", "P2 PI", "P2 PID", "P3 PI", "P3 PID", "P4 PI", "P4 PID",
          "delay-dominant PI", "lag-dominant PI", "lag-dominant 2-lag PI", "fast PID"]
 LABEL = {"delay-dominant PI": "delay\nPI", "lag-dominant PI": "lag\nPI", "lag-dominant 2-lag PI": "2-lag\nPI",
@@ -32,10 +31,10 @@ gs = fig.add_gridspec(1, 2, width_ratios=[1, 1], wspace=0.55)
 b, c = (fig.add_subplot(gs[i]) for i in range(2))
 
 # (b) ----------------------------------------------------------------------------------------
-r = [json.loads(l) for f in glob.glob("box_*.jsonl") for l in open(f)
-     if json.loads(l)["plant"] == "P3 PID" and json.loads(l)["rule"] == "original"][0]
+RUNS = [json.loads(l) for f in glob.glob("safe1_*.jsonl") for l in open(f)]       # fixed T_s, cautious start
+r = [x for x in RUNS if x["plant"] == "P3 PID" and x["rule"] == "original"][0]
 K, L, lags = r["K"], r["L"], r["lags"]; Ta = L + sum(lags)
-G0 = np.array(r["res"]["worst"]["gains"]); dt = min(15 * Ta / 1500, (G0[2] / G0[1] / 10) / 20)
+G0 = np.array(r["res"]["worst"]["gains"]); dt = r["res"]["worst"]["dt"]
 e = sim(K, L, lags, *G0, dt, int(15 * Ta / dt)); ce = certificate(e, 1e-3)
 w = np.logspace(-2, 0.7, 700); th = w * dt
 a_n = increments(e); idx = np.arange(len(a_n))
@@ -45,8 +44,8 @@ ip = int(np.argmax(abs(Sr))); wp = w[ip]
 g = 1 / 0.9; G1 = G0 * np.array([1 / g, 1.0, 1.0])                     # move of the integral band
 pred = abs(1 / (1 + Lr * C_d(*G1, dt, z) / C0))
 S0 = abs(1 / (1 + L_d(K, L, lags, *G0, dt, th))); S1 = abs(1 / (1 + L_d(K, L, lags, *G1, dt, th)))
-rc = [json.loads(l) for l in open("cbox_0.jsonl") if json.loads(l)["plant"] == "P3 PID"][0]
-Gc = np.array(rc["res"]["worst"]["gains"]); dtc = min(15 * Ta / 1500, (Gc[2] / Gc[1] / 10) / 20)
+rc = [x for x in RUNS if x["plant"] == "P3 PID" and x["rule"] == "cert-shape"][0]
+Gc = np.array(rc["res"]["worst"]["gains"]); dtc = rc["res"]["worst"]["dt"]
 Sc = abs(1 / (1 + L_d(K, L, lags, *Gc, dtc, w * dtc)))
 b.semilogx(w, S0, color=ORIG, lw=4, alpha=0.35, solid_capstyle="butt")
 b.semilogx(w, S1, color=INK2, lw=0.9)

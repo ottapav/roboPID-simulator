@@ -57,10 +57,12 @@ same record certifies the stability and bounds the $M_s$ of any other
 controller before it is applied. Any iterative tuner can thus accept
 only tunings with $M_s\le M^*$ and never apply one above $M^*$. For
 \spin, which tunes by counting the turns of the control error in phase
-portraits, the counts bound $M_s$ only on special loops. On $19$
-simulated loops, published \spin ended above $M^*=1.7$ on up to $9$ and
-applied tunings above it in $57\%$ of its iterations; certified \spin
-ended above it on none, and safe \spin never applied one.
+portraits, the counts bound $M_s$ only on special loops. We add the
+certificates in two steps: certified \spin checks each tuning after
+applying it, safe \spin before. On $19$ simulated loops, published \spin
+ended above $M^*=1.7$ on up to $9$ and applied tunings above it in $57\%$
+of its iterations; certified \spin ended below $M^*$ on all loops but
+still applied such tunings in $45\%$; safe \spin never applied one.
 \end{abstract}
 
 \section{Introduction}
@@ -393,10 +395,8 @@ with lines 7a--7c in bold instead of line 7, of certified \spin
 7: & \quad\quad raise all gains by one increment \hfill (accept)\\
 \textbf{7a:} & \quad\quad \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert})}\\
 \textbf{7b:} & \quad\quad \textbf{if $\overline M\le M^*$ then} raise all gains \hfill (accept)\\
-\textbf{7c:} & \quad\quad \textbf{else lower the gains:} the move of line 10\\
-    & \quad\quad\quad for the highest band whose move is predicted\\
-    & \quad\quad\quad (Thm.~\ref{thm:ahead}) to lower $M_s$, at most $n_{\max}$ in\\
-    & \quad\quad\quad a row; else a uniform back-off \hfill (reject)\\
+\textbf{7c:} & \quad\quad \textbf{else lower the gains} by a band move\\
+    & \quad\quad\quad (line 10) or a uniform back-off \hfill (reject)\\
 8: & \quad \textbf{else}\\
 9: & \quad\quad $k\leftarrow$ lowest band with $N_k>\bar N_k$\\
 10: & \quad\quad lower the gain of band $k$ by one increment and\\
@@ -407,8 +407,7 @@ with lines 7a--7c in bold instead of line 7, of certified \spin
 $\bar N_k=(0.5,0.75,1.0)$, $\delta=0.02$, $\beta=0.1$; gains stay within
 $[0.001,10]$ times their initial values (the gain box); the result is the
 last accepted tuning. Certified \spin: $M^*=1.7$, $\tau=10^{-3}$,
-$\eta=2\cdot10^{-3}$, $n_{\max}=10$, $\bar\theta$ and $h$ as in
-Section~\ref{sec:accept}.
+$\eta=2\cdot10^{-3}$, $\bar\theta$ and $h$ as in Section~\ref{sec:accept}.
 \smallskip\hrule
 \end{figure}
 
@@ -507,7 +506,7 @@ $M_s\le1.534$.
 On general loops, this guarantee is lost. The counts leave the steps: in
 the $3800$ count decisions of Section~\ref{sec:sim} ($19$ loops, $200$
 iterations), $N_0$ and $N_2$ lay between $n/2+1/4$ and $(n+1)/2$ in
-$22$ and $67\%$ of them. And crossings do not bound $M_s$: the loop of
+$23$ and $69\%$ of them. And crossings do not bound $M_s$: the loop of
 Fig.~\ref{fig:record}, with a gain margin of $1.624$, has $M_s=2.62$,
 yet its error never crosses the setpoint by more than $2\%$, while a
 controller zero can cause crossings at a low $M_s$. The counts can shape
@@ -526,8 +525,11 @@ angle.}
 \label{fig:stair}
 \end{figure}
 
-\subsection{Certified and safe \spin}
+\subsection{From certified to safe \spin}
 \label{sec:spin}
+
+We add the certificates to \spin in two steps. The first checks each
+tuning after it is applied, the second before.
 
 \emph{Certified \spin accepts a tuning that the counts accept only if the
 upper bound $\overline M$ of Theorem~\ref{thm:cert}, computed from the
@@ -535,33 +537,32 @@ same record, is at most $M^*$.} In Algorithm~1, it replaces line 7 by
 the bold lines 7a--7c: the counts shape the tuning, and the certificate
 decides whether it is accepted. A rejected tuning is lowered by a band
 move of line 10 that the prediction of Theorem~\ref{thm:ahead} expects
-to lower $M_s$, or by a uniform back-off, the reverse of an acceptance.
+to lower $M_s$, at most $10$ in a row, or else by a uniform back-off.
 
 \begin{corollary}[Certified \spin]
 \label{cor:spin}
 Under the conditions of Theorem~\ref{thm:spin}, the result of certified
 \spin has $M_s\le M^*$, whatever the limits $\bar N_k$. If no gain
-reaches the gain box, the test never traps \spin: after a rejection, at
-most $n_{\max}$ band moves and then at most $j^*$ back-offs
-(Theorem~\ref{thm:spin}(iii), for the tuning where they start) lead to
-an accepted tuning, unless line 3 or 10 moves the gains first.
+reaches the gain box, the test never traps \spin: every rejection is
+followed by an accepted tuning after finitely many moves.
 \end{corollary}
 
 \begin{proof}
 The result is an accepted tuning, so Theorem~\ref{thm:spin}(i) applies.
-Line 7c makes at most $n_{\max}$ band moves in a row and then backs off
-uniformly, which ends in an acceptance by Theorem~\ref{thm:spin}(iii).
+After at most $10$ band moves, line 7c backs off uniformly, which ends
+in an acceptance within $j^*$ steps by Theorem~\ref{thm:spin}(iii),
+unless line 3 or 10 moves the gains first.
 \end{proof}
 
-Certified \spin learns that a tuning is fragile only by applying it.
-\emph{Safe \spin certifies every move before applying it}, by
-Theorem~\ref{thm:ahead}. It proposes moves only from an accepted tuning,
-one that passes line 7b on its own record. It computes the move of
-Algorithm~1 (line 7 or 10) and applies it only if \eqref{eq:ahead} holds
-and the bound \eqref{eq:aheadbound} is at most $M^*$; otherwise it tries
-the band moves of line 10 for $k=2,1,0$ and then a uniform back-off, and
-applies the first one so certified; if there is none, it keeps the
-current tuning. Before its first accepted tuning, it backs off
+Certified \spin ends safe, but it learns that a tuning is fragile only
+by applying it. \emph{Safe \spin certifies every move before applying
+it}, by Theorem~\ref{thm:ahead}. It proposes moves only from an accepted
+tuning, one that passes line 7b on its own record. It computes the move
+of Algorithm~1 (line 7 or 10) and applies it only if \eqref{eq:ahead}
+holds and the bound \eqref{eq:aheadbound} is at most $M^*$; otherwise it
+tries the band moves of line 10 for $k=2,1,0$ and then a uniform
+back-off, and applies the first one so certified; if there is none, it
+keeps the current tuning. Before its first accepted tuning, it backs off
 uniformly; if a tuning certified in advance fails line 7b, it returns to
 the last accepted tuning.
 
@@ -583,38 +584,43 @@ tuning, or is accepted itself (Theorem~\ref{thm:spin}(i)).
 \includegraphics[width=\columnwidth]{fig_certified.pdf}
 \caption{$P_3$ with PID, $M^*=1.7$. (a) The published tuning
 ($\overline M=1.81$, $\circ$), one band move lowering $K_i$
-($M_s=1.739$, as predicted by \eqref{eq:predict}), and the certified
-tuning ($M_s=1.689$). (b) $M_s$ of the tuning applied in each iteration
-(fixed $T_s$); safe \spin stays below $M^*$ throughout.}
+($M_s=1.740$, as predicted by \eqref{eq:predict}), and the certified
+tuning ($M_s=1.690$). (b) $M_s$ of the tuning applied in each iteration;
+safe \spin stays below $M^*$ throughout.}
 \label{fig:certified}
 \end{figure}
 
 \begin{table}[t]
 \centering
-\caption{$M_s$ of the most aggressive tuning that published and
-certified \spin accept, from the cautious and the bold start, and the
-change of the load-step IAE (cautious start; --: tuning unchanged).}
+\caption{Published, certified and safe \spin, $M^*=1.7$: $M_s$ of the
+most aggressive tuning accepted in the last $60$ iterations (bold: above
+$M^*$), from the cautious (c) and the bold (b) start. Bottom: totals
+over all $19$ loops ($3800$ iterations per start).}
 \label{tab:spin}
-\footnotesize\setlength{\tabcolsep}{3.6pt}
-\begin{tabular}{llccccc}
+\footnotesize\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{llcccccc}
 \toprule
-& & \multicolumn{2}{c}{published} & \multicolumn{2}{c}{certified} & \\
-\cmidrule(lr){3-4}\cmidrule(lr){5-6}
-& & caut. & bold & caut. & bold & $\Delta$IAE \\
+& & \multicolumn{2}{c}{published} & \multicolumn{2}{c}{certified} & \multicolumn{2}{c}{safe}\\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}
+& & c & b & c & b & c & b \\
 \midrule
-$P_1$ & PI & $1.46$ & $1.46$ & $1.46$ & $1.46$ & -- \\
- & PID & $1.66$ & $\mathbf{1.84}$ & $1.66$ & $1.61$ & -- \\
-$P_2$ & PI & $1.64$ & $1.67$ & $1.64$ & $1.67$ & -- \\
- & PID & $1.59$ & $\mathbf{1.78}$ & $1.59$ & $1.66$ & -- \\
-$P_3$ & PI & $1.67$ & $1.63$ & $1.67$ & $1.63$ & -- \\
- & PID & $\mathbf{1.81}$ & $\mathbf{1.74}$ & $1.69$ & $1.60$ & $+23\%$ \\
-$P_4$ & PI & $1.55$ & $1.60$ & $1.55$ & $1.60$ & -- \\
- & PID & $1.61$ & $1.55$ & $1.61$ & $1.55$ & -- \\
+$P_1$ & PI & $1.46$ & $1.46$ & $1.46$ & $1.46$ & $1.53$ & $1.53$ \\
+ & PID & $1.66$ & $\mathbf{2.03}$ & $1.66$ & $1.62$ & $1.68$ & $1.68$ \\
+$P_2$ & PI & $1.64$ & $1.67$ & $1.64$ & $1.67$ & $1.67$ & $1.67$ \\
+ & PID & $1.60$ & $\mathbf{1.78}$ & $1.68$ & $1.66$ & $1.68$ & $1.69$ \\
+$P_3$ & PI & $1.67$ & $1.63$ & $1.67$ & $1.63$ & $1.65$ & $1.58$ \\
+ & PID & $\mathbf{1.81}$ & $\mathbf{1.74}$ & $1.69$ & $1.66$ & $1.68$ & $1.69$ \\
+$P_4$ & PI & $1.55$ & $1.60$ & $1.55$ & $1.60$ & $1.56$ & $1.63$ \\
+ & PID & $1.61$ & $1.55$ & $1.61$ & $1.55$ & $1.66$ & $1.63$ \\
 \midrule
-delay-dom. & PI & $1.68$ & $1.63$ & $1.68$ & $1.63$ & -- \\
-lag-dom. & PI & $\mathbf{2.01}$ & $1.69$ & $1.67$ & $1.69$ & $+52\%$ \\
-2 lags & PI & $1.44$ & $1.47$ & $1.44$ & $1.47$ & -- \\
-fast & PID & $\mathbf{1.89}$ & $\mathbf{1.98}$ & $1.66$ & $1.69$ & $0\%$ \\
+delay-dom. & PI & $1.68$ & $1.63$ & $1.68$ & $1.63$ & $1.68$ & $1.67$ \\
+lag-dom. & PI & $\mathbf{2.01}$ & $1.69$ & $1.67$ & $1.69$ & $1.67$ & $1.69$ \\
+2 lags & PI & $1.44$ & $1.47$ & $1.44$ & $1.47$ & $1.49$ & $1.66$ \\
+fast & PID & $\mathbf{1.89}$ & $\mathbf{1.98}$ & $1.63$ & $1.69$ & $1.47$ & $1.50$ \\
+\midrule
+\multicolumn{2}{l}{loops ending $>M^*$} & $9$ & $7$ & $0$ & $0$ & $0$ & $0$ \\
+\multicolumn{2}{l}{iterations applying $>M^*$} & $2146$ & $2225$ & $1623$ & $1775$ & $0$ & $0$ \\
+\multicolumn{2}{l}{load-step IAE, mean} & -- & -- & $+9\%$ & $+8\%$ & $+15\%$ & $+22\%$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -622,15 +628,16 @@ fast & PID & $\mathbf{1.89}$ & $\mathbf{1.98}$ & $1.66$ & $1.69$ & $0\%$ \\
 \section{Simulations}
 \label{sec:sim}
 
-\paragraph*{Setup} Each run has $200$ iterations of Algorithm~1 with its
-defaults. The derivative has a first-order filter with the time
-constant $T_f=T_d/10$, where $T_d=K_d/K_p$. Since the gain box ties the
-result to the start, every loop runs from two starts: SIMC
-\cite{Skogestad2003} on a first-order-plus-dead-time model obtained by
-the half rule, with the closed-loop time constant three times the model
-dead time (cautious start), and the same tuning with all gains doubled
-(bold start). The $19$ test loops are (1) the four plants of
-\cite{SPIN}, $P_1=e^{-s}/((10s+1)(s+1)^3)$, $P_2=1.25e^{-8s}/(5s+1)^4$,
+\paragraph*{Setup} We run published, certified and safe \spin, each for
+$200$ iterations of Algorithm~1 with its defaults. The derivative has a
+first-order filter with the time constant $T_f=T_d/10$, where
+$T_d=K_d/K_p$. Since the gain box ties the result to the start, every
+loop runs from two starts: SIMC \cite{Skogestad2003} on a
+first-order-plus-dead-time model obtained by the half rule, with the
+closed-loop time constant three times the model dead time (cautious
+start), and the same tuning with all gains doubled (bold start). The
+$19$ test loops are (1) the four plants of \cite{SPIN},
+$P_1=e^{-s}/((10s+1)(s+1)^3)$, $P_2=1.25e^{-8s}/(5s+1)^4$,
 $P_3=e^{-10s}/((2s+1)(s+1)^3)$ and $P_4=e^{-4s}/(8s+1)^6$, with PI and
 with PID; (2) four plants that place the oscillation in a chosen band:
 the delay-dominant $e^{-5s}/(s+1)$ and the lag-dominant $e^{-s}/(10s+1)$
@@ -639,61 +646,54 @@ $e^{-0.1s}/((s+1)(0.5s+1))$ with PID; (3) the family
 $e^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$ with PID and
 $L_d\in\{0.25,0.5,1,\dots,16\}$. P, I and D act on the error. Let $T_a$
 be the dead time plus the lag time constants (the dead-time share
-$L_d/T_a$ of the family runs from $0.125$ to $0.90$). The controller
-runs at $T_s=\min(T_a/100,T_f/20)$ for PID and $T_a/1000$ for PI, with
-exactly discretized lags and the dead time rounded to whole samples.
-Each record covers $15\,T_a$. All values of $M_s$ are those of this
-digital loop, computed from its exact $L$. Performance is measured by
-the load-step IAE, the integral of $|y|$ after a unit step disturbance
-at the plant input. Because \spin ends in a cycle between a few tunings,
-we report the most aggressive tuning accepted in the last $60$
-iterations.
+$L_d/T_a$ of the family runs from $0.125$ to $0.90$). As in a real
+controller, $T_s$ stays fixed: $T_s=\min(T_a/100,T_f/20)$ for the PID
+start tuning and $T_a/1000$ for PI. The lags are discretized exactly and
+the dead time is rounded to whole samples. Each record covers $15\,T_a$.
+All values of $M_s$ are those of this digital loop, computed from its
+exact $L$. Performance is measured by the load-step IAE, the integral of
+$|y|$ after a unit step disturbance at the plant input. Because \spin
+ends in a cycle between a few tunings, we report the most aggressive
+tuning accepted in the last $60$ iterations.
 
-\paragraph*{The certificate (Section~\ref{sec:cert})} For all $146$
-tunings accepted in the runs of Table~\ref{tab:spin}, a four times
-longer record gave a true remaining variation $\sum_{n>N}|a_n|\le
-2.8\cdot10^{-5}$, so Assumption~\ref{ass:tail} held with $\tau=10^{-3}$,
-and every $M_s$ lay between its bounds, with $\overline M-M_s\le\eta+\tau+2.8\cdot10^{-5}$.
-% confirm_thm1.py, fig_record.py
+\paragraph*{The certificate (Section~\ref{sec:cert})} For all $276$
+tunings accepted in these runs, a four times longer record gave a true
+remaining variation $\sum_{n>N}|a_n|\le2.7\cdot10^{-5}$, so
+Assumption~\ref{ass:tail} held with $\tau=10^{-3}$, and every $M_s$ lay
+between its bounds, with $\overline M-M_s\le0.003\approx\eta+\tau$.
+% confirm_thm1.py (RUNS=safe1,safe2), fig_record.py
 
-\paragraph*{Certified \spin (Corollary~\ref{cor:spin}, Table~\ref{tab:spin}, Fig.~\ref{fig:certified}(a))}
-\begin{itemize}
-\item \emph{Safety.} Published \spin ended above $M^*=1.7$ on $9$ of the
-$19$ loops from the cautious start (up to $2.01$), on $8$ from the bold
-start (up to $2.09$) and, without the gain box, on $12$ of $18$;
-certified \spin on none (at most $1.69$), as
-Theorem~\ref{thm:spin}(i) guarantees.
-\item \emph{No trapping.} \eqref{eq:backoff} held along each back-off,
-and predicted and true $M_s$ agreed within $10^{-7}$ after every band
-move. Every loop kept accepting tunings, except $L_d=16$ without the
-box, where the counts lower $K_d$ in every round under either rule.
-\item \emph{Cost.} The load-step IAE rose by $7.8\%$ on average ($6.4\%$
-from the bold start).
-\end{itemize}
-% designed.py (cert-shape), confirm_thm2.py, analyze_cert.py
+\paragraph*{Ending below $M^*$ (Corollary~\ref{cor:spin}, Table~\ref{tab:spin})}
+Published \spin ended above $M^*=1.7$ on $9$ of the $19$ loops from the
+cautious start and on $7$ from the bold start (up to $M_s=2.07$);
+certified \spin on none (at most $1.69$), as Theorem~\ref{thm:spin}(i)
+guarantees, and every loop kept accepting tunings. A rejected tuning was
+lowered by the band move that the prediction chose; on $P_3$ with PID,
+the prediction matched the true $M_s$ (Fig.~\ref{fig:certified}(a)). The
+load-step IAE rose by $9\%$ and $8\%$ on average.
 
-\paragraph*{Safety during tuning (Corollary~\ref{cor:safe}, Fig.~\ref{fig:certified}(b))}
-Theorem~\ref{thm:ahead} compares controllers at one $T_s$, so here all
-three variants ran with $T_s$ fixed at its value for the start tuning,
-as in a real controller. In the $7600$ iterations of the $38$ runs, published
-\spin applied a tuning with $M_s>M^*$ in $4371$ (up to $M_s=2.38$),
-certified \spin, which must apply a tuning to reject it, in $3398$ (up
-to $1.98$), and safe \spin in none: all its tunings were stable, with
-$M_s\le1.696$. Every start tuning was accepted. Safe \spin ended with
-$M_s\le1.694$ and the same median load-step IAE as certified \spin, but
-up to twice as large on the fast PID loop. On $456$ random moves (gains
-scaled by up to $8$) from accepted tunings, \eqref{eq:ahead} held for
-$339$, all stable, and failed for $117$, all unstable;
-\eqref{eq:aheadbound} exceeded $M_s$ by a median of $0.011$ and
-certified $116$ of the $118$ moves with $M_s\le M^*$.
+\paragraph*{Staying below $M^*$ (Corollary~\ref{cor:safe}, Table~\ref{tab:spin}, Fig.~\ref{fig:certified}(b))}
+In the $7600$ iterations of the $38$ runs, published \spin applied a
+tuning with $M_s>M^*$ in $4371$ (up to $M_s=2.38$), certified \spin,
+which must apply a tuning to reject it, in $3398$ (up to $1.98$), and
+safe \spin in none: all its tunings were stable, with $M_s\le1.696$.
+Every start tuning was accepted, so Corollary~\ref{cor:safe} covered
+every iteration. Safe \spin also ended below $M^*$, with the same median
+load-step IAE as certified \spin; its mean is higher because on the fast
+PID loop it settled at $M_s\approx1.5$ with twice the IAE. On $456$
+random moves (gains scaled by up to $8$) from accepted tunings,
+\eqref{eq:ahead} held for $339$, all stable, and failed for $117$, all
+unstable; \eqref{eq:aheadbound} exceeded $M_s$ by a median of $0.011$.
 % run_safe.sh, analyze_safe.py, confirm_thm3.py
 
 \paragraph*{Limit values under the certificate} With every limit
 $\bar N_k=1/2$, certified \spin still ended below $M^*$, but the counts
 did most of the rejecting: $2$ and $3$ loops (cautious, bold start)
-accepted no tuning, and the median load-step IAE rose by $11$ and $16\%$. Under the certificate, the limits set
-performance, not robustness.
-% run_limits.sh, analyze_limits.py
+accepted no tuning, and the median load-step IAE rose by $11$ and
+$19\%$. It still applied tunings above $M^*$ in $1310$ and $1420$
+iterations. Under the certificate, the limits set performance, not
+robustness; only certifying in advance keeps the tuning safe.
+% run_limits_fixed.sh, analyze_limits_fixed.py
 
 \section{Conclusion}
 
@@ -706,7 +706,9 @@ these certificates, any iterative tuner accepts only tunings with
 $M_s\le M^*$, a uniform back-off always restores acceptance, and no
 applied tuning exceeds $M^*$. For \spin, the turn counts bound $M_s$
 only on special loops; they keep shaping the tuning, and the
-certificates decide what is accepted and applied. The theorems assume a linear loop and a
+certificates decide what is accepted and applied. Checking a tuning
+after applying it makes the result safe; checking it before makes the
+whole tuning safe. The theorems assume a linear loop and a
 long enough record; noise and real loops are left to a follow-up.
 Scripts: \url{https://github.com/ottapav/robopid-simulator}.
 

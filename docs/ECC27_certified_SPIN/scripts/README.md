@@ -17,26 +17,26 @@ figures and tables rebuild without rerunning SPIN.
 
 ## Paper item -> script
 
+All simulation results of the paper come from one experiment: published, certified and safe SPIN on the
+19 loops, gain box, fixed sampling period (`FIXED_TS=1`), cautious and bold start.
+
 | paper item | command / data |
 |---|---|
-| Lemma 2 (half turns) and Prop. 1 (eq. (5) against a direct search) on the lag-cancelled loop (Sec. IV, "The counts") | `python3 check_result1.py` |
-| What the published limits allow (Sec. III-B: SPIN's per-axis counts at delta = 0.02 on the lag-cancelled loop, steps at 1.534, 1.842, 2.210; the 3800 count decisions of the runs) | `python3 confirm_limits.py` -> `limits.json` |
-| Limit values under the certificate (Sec. IV): certified SPIN with limits (0.5, 1.0, 1.0) and (0.5, 0.5, 0.5), both starts | `bash run_limits.sh` (`designed.py` with `CERT_LIMITS`) -> `lim101*_0.jsonl`, `lim050*_0.jsonl` (`run_rest.py` re-ran the bold-start PI loops on a second core: `lim050b_rest.jsonl`, identical results); then `python3 analyze_limits.py` -> `limits_runs.json` |
-| Fig. 2 | `python3 fig_stair.py` |
-| Published SPIN with gain box, cautious / bold start | `box_*.jsonl`, `box2_*.jsonl` (`SPIN_BOX=1 RULES_ONLY=original OUT_PREFIX=box python3 designed.py 0 2`; add `START_SCALE=2`, `OUT_PREFIX=box2`) |
-| Certified SPIN (lines 7a-7c) with gain box, both starts | `cbox_0.jsonl`, `cbox2_0.jsonl` (`SPIN_BOX=1 RULES_ONLY=cert-shape OUT_PREFIX=cbox python3 designed.py 0 1`; add `START_SCALE=2`, `OUT_PREFIX=cbox2`) |
-| Without the gain box | published: `designed_*.jsonl` (rule `original`); certified: `cnob_0.jsonl`, `cnob_1.jsonl` (`RULES_ONLY=cert-shape OUT_PREFIX=cnob python3 designed.py 0 1`; `run_rest.py` ran the remaining loops on a second core) |
-| Lemma 1 and Theorem 1 on all 146 accepted tunings (true tail, identity, bracketing) | `python3 confirm_thm1.py` -> `thm1_points.json` |
-| Theorem 2(ii) along the uniform back-off; Prop. 2 | `python3 confirm_thm2.py` -> `thm2_points.json` |
-| Table I, numbers of Section IV, load-step IAE | `python3 analyze_cert.py` -> `summary_cert.json` |
-| Fig. 1 | `python3 fig_record.py` |
-| Fig. 3 | `python3 fig_certified.py` (panel (b) from `traj_P3PID.json`, `python3 traj_P3PID.py`) |
-| Safety during tuning (Sec. 5, Corollary 2): published, certified and safe SPIN, gain box, fixed T_s, both starts | `bash run_safe.sh` -> `safe1_*.jsonl`, `safe2_*.jsonl`; then `python3 analyze_safe.py` -> `summary_safe.json` |
+| The experiment (Table 1, Sec. 5, Fig. 3) | `bash run_safe.sh` -> `safe1_*.jsonl` (cautious), `safe2_*.jsonl` (bold); `python3 analyze_safe.py` -> `summary_safe.json` (Table 1 incl. totals, applied tunings above M*, IAE) |
+| Fig. 3 | `python3 fig_certified.py` (panel (a) from `safe1_*.jsonl`; panel (b) from `traj_P3PID.json`, `python3 traj_P3PID.py`) |
+| Sec. 5 "The certificate": Lemma 1 and Theorem 1 on all 276 accepted tunings (true tail, identity, bracketing) | `RUNS=safe1,safe2 OUT=thm1_safe.json python3 confirm_thm1.py` |
 | Theorem 3 on 456 random moves from the accepted tunings of safe SPIN | `python3 confirm_thm3.py` -> `thm3_points.json` |
-| Owner of the peak | `owner_box.json` (`OWN_IN=box python3 owner_designed.py`) |
+| Limit values under the certificate (every limit 1/2) | `bash run_limits_fixed.sh` -> `limf1_*.jsonl`, `limf2_*.jsonl`; `python3 analyze_limits_fixed.py` -> `limits_fixed.json` |
+| Sec. 4.2: SPIN's counts on the lag-cancelled loop (steps at 1.534, 1.842, 2.210) and the 3800 count decisions of certified SPIN | `FIXED_TS=1 python3 confirm_limits.py` -> `limits.json` (run by `run_limits_fixed.sh`) |
+| Lemma 2 and Prop. 1 against a direct search | `python3 check_result1.py` |
+| Fig. 1, Fig. 2 | `python3 fig_record.py`, `python3 fig_stair.py` |
 
 ## Earlier material
 
+Runs with a sampling period that changes with the gains (earlier drafts): `box_*`, `box2_*`, `cbox*_0`,
+`designed_*`, `cnob_*` (published/certified SPIN with and without the gain box), `lim101*`, `lim050*`
+(`run_limits.sh`, `analyze_limits.py`, `limits_runs.json`), `analyze_cert.py` / `summary_cert.json`,
+`confirm_thm2.py` / `thm2_points.json`, `thm1_points.json`, `owner_box.json`.
 `shape*_0.jsonl`, `shapehi*_0.jsonl`, `boxtest_0.jsonl`, `box2test_0.jsonl`, `analyze_shape*.py`,
 `iae_*.json`, `record_points.json`, `confirm_counts_delta.py` / `counts_delta.json` (counts at small delta), `bounds_vs_length.py` / `bounds_vs_length.json` (bounds versus record length), `conv.py`, `twodof.py`, `noise.py` belong to earlier drafts
 (acceptance by the read value instead of the certified bound, continuous-design M_s). They are kept

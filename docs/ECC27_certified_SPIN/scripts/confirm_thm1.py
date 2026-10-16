@@ -16,7 +16,11 @@ TAU = 1e-3
 GROUPS = [("box", "original", "published SPIN"), ("box2", "original", "published SPIN"),
           ("designed", "original", "published SPIN"),
           ("cbox", "cert-shape", "certified SPIN"), ("cbox2", "cert-shape", "certified SPIN"),
-          ("cnob", "cert-shape", "certified SPIN")]
+          ("cnob", "cert-shape", "certified SPIN"),
+          # fixed T_s runs of the paper (run_safe.sh): all three variants, both starts
+          ("safe1", "original", "published SPIN"), ("safe1", "cert-shape", "certified SPIN"),
+          ("safe1", "cert-ahead", "safe SPIN"), ("safe2", "original", "published SPIN"),
+          ("safe2", "cert-shape", "certified SPIN"), ("safe2", "cert-ahead", "safe SPIN")]
 import os
 ONLY = os.environ.get("RUNS"); OUT = os.environ.get("OUT", "thm1_points.json")
 out = []; seen = set()
@@ -25,13 +29,13 @@ for pre, rule, lab in GROUPS:
     for f in sorted(glob.glob(f"{pre}_*.jsonl")):
         for line in open(f):
             r = json.loads(line)
-            if r["rule"] != rule or r["res"] is None: continue
+            if r["rule"] != rule or r["res"] is None or not r["res"].get("accepted"): continue
             K, L, lags, pid = r["K"], r["L"], r["lags"], r["pid"]; Ta = L + sum(lags)
             for c in r["res"]["accepted"]:
-                Ki, Kp, Kd = c["gains"]; key = (pre, r["plant"], round(Ki, 10), round(Kp, 10), round(Kd, 10))
+                Ki, Kp, Kd = c["gains"]; key = (pre, rule, r["plant"], round(Ki, 10), round(Kp, 10), round(Kd, 10))
                 if key in seen: continue
                 seen.add(key)
-                dt = min(15 * Ta / 1500, (Kd / Kp / 10) / 20) if pid else Ta / 1000
+                dt = c.get("dt") or (min(15 * Ta / 1500, (Kd / Kp / 10) / 20) if pid else Ta / 1000)
                 n = int(15 * Ta / dt); eL = sim(K, L, lags, Ki, Kp, Kd, dt, 4 * n); e = eL[:n]
                 a = increments(eL); tail = float(np.sum(abs(a[n:])))
                 ce = certificate(e, TAU)
@@ -43,7 +47,7 @@ for pre, rule, lab in GROUPS:
                            upper=ce["upper"], read=ce["read"], tail=tail, id_err=idm, grid=ce["grid_term"],
                            hf=ce["up_hf"], N=ce["N"], M=ce["M"])
                 out.append(row)
-                ok = row["lower"] <= Ms <= row["upper"] and tail <= TAU and idm <= tail + 1e-12
+                ok = row["lower"] <= Ms <= row["upper"] and tail <= TAU and idm <= tail + 1e-9            # 1e-9: round-off of the chirp z-transform
                 print(pre, r["plant"], f"Ms {Ms:.4f} in [{row['lower']:.4f}, {row['upper']:.4f}] tail {tail:.1e} "
                       f"id {idm:.1e}", "OK" if ok else "FAIL", flush=True)
 json.dump(out, open(OUT, "w"), indent=0)

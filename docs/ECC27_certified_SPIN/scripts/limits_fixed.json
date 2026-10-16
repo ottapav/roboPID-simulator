@@ -1,0 +1,29 @@
+{
+ "1": {
+  "loops": 19,
+  "no_accept": [
+   "P4 PID",
+   "F L=4"
+  ],
+  "max_final": 1.6807536826891023,
+  "IAE_median": 0.1094032329636867,
+  "IAE_max": 12.987845190828232,
+  "rejections_certificate": 15,
+  "rejections_counts": 794,
+  "iters_applied_above": 1310
+ },
+ "2": {
+  "loops": 19,
+  "no_accept": [
+   "P3 PID",
+   "F L=8",
+   "F L=16"
+  ],
+  "max_final": 1.6769648998402917,
+  "IAE_median": 0.1924265020319733,
+  "IAE_max": 14.954949139730873,
+  "rejections_certificate": 8,
+  "rejections_counts": 778,
+  "iters_applied_above": 1420
+ }
+}
