@@ -3,7 +3,8 @@ Figure 3: published SPIN against certified SPIN (Algorithm 2), exact M_s of the 
   (a) the twelve loops of Table II, grouped by the band that owns the peak of the published tuning
   (b) one band move on P3 with PID: true |S_d| before, the prediction of Prop. 3(d) from the same
       record, and the true |S_d| after the move
-  (c) the plant family against the dead-time share
+  (c) P3 with PID: M_s of the tuning applied in each iteration, published, certified and safe SPIN
+      (traj_P3PID.json from traj_P3PID.py)
 Reads summary_cert.json (analyze_cert.py), owner_box.json, box_*.jsonl.
 """
 import json, glob, math
@@ -28,7 +29,7 @@ LABEL = {"delay-dominant PI": "delay\nPI", "lag-dominant PI": "lag\nPI", "lag-do
 LABEL.update({f"P{i} {c}": f"$P_{i}$\n{c}" for i in range(1, 5) for c in ("PI", "PID")})
 
 fig = plt.figure(figsize=(7.16, 1.85))
-gs = fig.add_gridspec(1, 3, width_ratios=[2.0, 1.25, 0.95], wspace=0.36)
+gs = fig.add_gridspec(1, 3, width_ratios=[1.9, 1.2, 1.1], wspace=0.36)
 a, b, c = (fig.add_subplot(gs[i]) for i in range(3))
 
 # (a) ----------------------------------------------------------------------------------------
@@ -88,17 +89,16 @@ print("P3 PID: upper", round(ce["upper"], 4), "true before", round(S0.max(), 4),
       "true after", round(S1.max(), 5))
 
 # (c) ----------------------------------------------------------------------------------------
-fam = sorted([p for p in S if p.startswith("F L=") and S[p]["box"] and S[p]["cbox"]], key=lambda s: float(s[4:]))
-share = [float(s[4:]) / (float(s[4:]) + 1.75) for s in fam]
-mo = [S[s]["box"] for s in fam]; mc = [S[s]["cbox"] for s in fam]; m2 = [S[s]["box2"] for s in fam]
-for xs, o, q in zip(share, mo, mc): c.plot([xs, xs], [o, q], color=RULE, lw=1.4, zorder=1)
-c.plot(share, mo, "o-", color=ORIG, ms=5.5, lw=0.9, mec="white", mew=0.9, label="published SPIN", zorder=3)
-c.plot(share, mc, "o-", color=CERT, ms=4.2, lw=0.9, mec="white", mew=0.8, label="certified SPIN", zorder=4)
-c.plot(share, m2, "o", ms=4.2, mfc="white", mec=ORIG, mew=1.0, zorder=3)
+T = json.load(open("traj_P3PID.json")); SAFE = "#1f9e6a"
+it = np.arange(len(T["original"]))
+c.step(it, T["original"], where="post", color=ORIG, lw=0.8, label="published")
+c.step(it, T["cert-shape"], where="post", color=CERT, lw=0.8, label="certified")
+c.step(it, T["cert-ahead"], where="post", color=SAFE, lw=1.1, label="safe")
 c.axhline(TARGET, ls=(0, (4, 3)), color=INK2, lw=0.8)
-c.set_xlim(0, 1); c.set_ylim(1.4, 2.18); c.set_xticks([0, 0.25, 0.5, 0.75, 1]); c.set_xticklabels(["0", ".25", ".5", ".75", "1"])
-c.set_xlabel("dead-time share"); c.set_ylabel("$M_s$ of the accepted tuning")
-c.set_title("(c) a plant family, PID", fontsize=8, color=INK)
-c.legend(fontsize=6.3, frameon=False, loc="lower left", handletextpad=0.3)
+c.set_xlim(0, 80); c.set_ylim(1.3, 2.1); c.set_xticks([0, 40, 80])
+c.set_xlabel("iteration"); c.set_ylabel("$M_s$ of the applied tuning")
+c.set_title("(c) $P_3$, PID, while tuning", fontsize=8, color=INK)
+c.legend(fontsize=6.0, frameon=False, loc="lower right", handlelength=1.2, labelspacing=0.15,
+         handletextpad=0.3, borderaxespad=0.1)
 fig.subplots_adjust(left=0.065, right=0.99, bottom=0.22, top=0.89)
 fig.savefig("fig_certified.pdf"); fig.savefig("fig_certified.png", dpi=150)

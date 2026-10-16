@@ -1,4 +1,4 @@
-# Scripts for "Certified Robustness for Model-Free PID Tuning by Step-Response Inspection"
+# Scripts for "Certified Robustness from One Setpoint Step: A Safe Acceptance Test for Model-Free PID Tuning"
 
 Needs Python 3 with numpy, scipy (>= 1.8, for `scipy.signal.czt`) and matplotlib. Run everything from
 this folder. All counts are SPIN's own (Definition 1 of SPIN: each axis divided by its peak; `compare.counts_old`).
@@ -11,8 +11,9 @@ figures and tables rebuild without rerunning SPIN.
 | file | content |
 |---|---|
 | `cert.py` | Theorem 1: certified lower/upper bound on M_s from one finite record (tail term, Lipschitz grid term, Abel high-frequency term); the exact digital loop `L_d`, `C_d`, `P_d` of the simulator; exact `Ms_d` |
+| `cert_ahead.py` | Theorem 3: certify a proposed controller before applying it, from the record of the running one (stability condition (4) and bound (5) on a grid with Lipschitz margins, Abel bound above the grid) |
 | `spin_cert_run.py` | `sim`: the digital loop (PID with forward-Euler integral and filtered derivative, lags discretized exactly, delay rounded to samples) |
-| `designed.py` | SPIN runner. Rule `original` = SPIN as published; rule `cert-shape` = certified SPIN, Algorithm 1 with lines 7a-7c (acceptance iff the certified upper bound <= M*, band move predicted by Prop. 2, at most `NMAX` in a row, else uniform back-off). `SPIN_BOX=1` turns on SPIN's gain box, `START_SCALE=2` the bold start, `CERT_LIMITS` the count limits of `cert-shape` (default 0.5,0.75,1.0) |
+| `designed.py` | SPIN runner. Rule `original` = SPIN as published; rule `cert-shape` = certified SPIN, Algorithm 1 with lines 7a-7c (acceptance iff the certified upper bound <= M*, band move predicted by Prop. 2, at most `NMAX` in a row, else uniform back-off). rule `cert-ahead` = safe SPIN (Corollary 2: every move certified by Theorem 3 before it is applied; else the next band move or a uniform back-off; else hold). `SPIN_BOX=1` turns on SPIN's gain box, `START_SCALE=2` the bold start, `CERT_LIMITS` the count limits of `cert-shape`/`cert-ahead` (default 0.5,0.75,1.0), `FIXED_TS=1` keeps the sampling period of the start tuning. Every run logs the exact M_s of the tuning applied in each iteration (`traj`) |
 
 ## Paper item -> script
 
@@ -29,7 +30,9 @@ figures and tables rebuild without rerunning SPIN.
 | Theorem 2(ii) along the uniform back-off; Prop. 2 | `python3 confirm_thm2.py` -> `thm2_points.json` |
 | Table I, numbers of Section IV, load-step IAE | `python3 analyze_cert.py` -> `summary_cert.json` |
 | Fig. 1 | `python3 fig_record.py` |
-| Fig. 3 | `python3 fig_certified.py` |
+| Fig. 3 | `python3 fig_certified.py` (panel (c) from `traj_P3PID.json`, `python3 traj_P3PID.py`) |
+| Safety during tuning (Sec. 5, Corollary 2): published, certified and safe SPIN, gain box, fixed T_s, both starts | `bash run_safe.sh` -> `safe1_*.jsonl`, `safe2_*.jsonl`; then `python3 analyze_safe.py` -> `summary_safe.json` |
+| Theorem 3 on 456 random moves from the accepted tunings of safe SPIN | `python3 confirm_thm3.py` -> `thm3_points.json` |
 | Owner of the peak | `owner_box.json` (`OWN_IN=box python3 owner_designed.py`) |
 
 ## Earlier material

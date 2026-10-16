@@ -61,6 +61,10 @@ RULES = {"original": (counts_old, (0.5, 0.75, 1.0), None),
          # all gains uniformly
          # the count limits of cert-shape can be set with CERT_LIMITS (default: SPIN's published limits)
          "cert-shape": (counts_old, tuple(float(x) for x in _os.environ.get("CERT_LIMITS", "0.5,0.75,1.0").split(",")), 1.7),
+         # certify before applying (Theorem 3): a move is applied only if the record of the running
+         # controller certifies the next one (stable, M_s <= M*); else the next candidate (band moves,
+         # uniform back-off), else hold. Before the first certified tuning, back off uniformly.
+         "cert-ahead": (counts_old, tuple(float(x) for x in _os.environ.get("CERT_LIMITS", "0.5,0.75,1.0").split(",")), 1.7),
          "ms-bands": ("bands", tuple(float(x) for x in _os.environ.get("MS_LIMITS", "1.7,1.7,1.7").split(",")), None)}
 
 
@@ -149,11 +153,16 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
     sc = float(_os.environ.get("START_SCALE", "1"))   # e.g. 2 = SIMC with tau_c = theta
     Kp0, Ki0, Kd0 = sc * Kp0, sc * Ki0, sc * Kd0
     F = np.ones(3); acc = []; log = []; shp = []; dts = 15 * Ta / 1500; streak = 0
+    FIXED = bool(_os.environ.get("FIXED_TS")); dt0 = None; applied = []; safe = False; bad = set(); F_cert = None
     for it in range(iters):
         Ki, Kp, Kd = Ki0 * F[0], Kp0 * F[1], Kd0 * F[2]
         dt = min(dts, (Kd / Kp / 10) / 20) if pid else Ta / 1000
+        if FIXED:                                      # a real controller keeps its sampling period
+            dt0 = dt if dt0 is None else dt0; dt = dt0
         n = int(15 * Ta / dt); e = sim(K, L, lags, Ki, Kp, Kd, dt, n)
-        if abs(e[int(0.8 * n):]).max() > 0.5 * abs(e).max():
+        unstable = bool(abs(e[int(0.8 * n):]).max() > 0.5 * abs(e).max())
+        applied.append(dict(it=it, gains=[Ki, Kp, Kd], dt=dt, unstable=unstable, safe=safe))
+        if unstable:
             F = np.clip(F / np.array([2, 4, 8]), FMIN, FMAX)
             if it >= iters - 60: log.append("unstable")
             continue
@@ -179,6 +188,42 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
         else:
             N = counter(e[::step], dt * step)
             V = [k for k in range(nb) if N[k] > limits[k]]; tag = None; read = None
+        if rule == "cert-ahead":
+            from cert import certificate
+            from cert_ahead import ahead
+            c = certificate(e, TAU, ETA, Mhf=Mstar)
+            if c["upper"] > Mstar:
+                if not safe:                           # before the first certified tuning: back off
+                    F = np.clip(F / g, FMIN, FMAX)
+                    if it >= iters - 60: log.append("warm")
+                    continue
+                # certified ahead but its own record does not certify it: return to the last
+                # tuning certified by its own record and never propose this one again
+                bad.add(tuple(np.round(np.log(F), 6))); F = F_cert.copy()
+                if it >= iters - 60: log.append("fallback")
+                continue
+            safe = True; applied[-1]["safe"] = True; F_cert = F.copy()
+            if it >= iters - 60: acc.append((Ki, Kp, Kd, c["upper"]))
+            K0 = np.array([Ki0, Kp0, Kd0]); cand = []
+            Fp = F.copy()
+            if not V: Fp[:nb] *= g; tagp = "raise"
+            else:
+                km = min(V); Fp[:km] *= g; Fp[km] /= g; tagp = f"G{km}"
+            cand.append((tagp, Fp))
+            for k in reversed(range(nb)):
+                Fn = F.copy(); Fn[:k] *= g; Fn[k] /= g; cand.append((f"band{k}", Fn))
+            cand.append(("back", F / g))
+            moved = False
+            for tag_, Fn in cand:
+                Fn = np.clip(Fn, FMIN, FMAX)
+                if np.allclose(Fn, F) or tuple(np.round(np.log(Fn), 6)) in bad: continue
+                A = ahead(e, dt, (Ki, Kp, Kd), tuple(K0 * Fn), TAU, Mstar, ETA)
+                if A["stable"] and A["U"] <= Mstar:
+                    F = Fn; moved = True
+                    if it >= iters - 60: log.append(f"ahead:{tag_}")
+                    break
+            if not moved and it >= iters - 60: log.append("hold")
+            continue
         if not V and rule == "cert-shape":
             mv, info = cert_move(e, dt, Ki0, Kp0, Kd0, F, nb, g, Mstar)
             read = max(info["read"] + info["grid_term"] + TAU, info["up_hf"])     # certified upper bound
@@ -226,7 +271,20 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
             if k < kmin: F[k] *= g
             elif k == kmin: F[k] /= g
         F = np.clip(F, FMIN, FMAX)
-    if not acc: return None
+    from cert import Ms_d as _Ms_d
+    cache = {}
+    for a_ in applied:
+        key = tuple(round(x, 12) for x in a_["gains"]) + (round(a_["dt"], 12),)
+        if key not in cache:
+            cache[key] = math.inf if a_["unstable"] else _Ms_d(K, L, lags, *a_["gains"], a_["dt"])[0]
+        a_["Ms_d"] = cache[key]
+    traj = dict(n=len(applied), above=sum(a_["Ms_d"] > 1.7 for a_ in applied),
+                above_safe=sum(a_["Ms_d"] > 1.7 for a_ in applied if a_["safe"]),
+                unstable=sum(a_["unstable"] for a_ in applied),
+                max_Ms=max(a_["Ms_d"] for a_ in applied),
+                first_safe=next((a_["it"] for a_ in applied if a_["safe"]), None),
+                Ms_it=[a_["Ms_d"] for a_ in applied])
+    if not acc: return dict(worst=None, traj=traj)
     # SPIN ends in a limit cycle; every tuning it accepts in the final cycle is a
     # candidate output. Report all of them and the most aggressive one.
     w = np.logspace(-4, 2.5, 80000); seen = {}
@@ -236,14 +294,14 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
         Lw = loop_fr(K, L, lags, Ki, Kp, Kd, w)
         ph = np.unwrap(np.angle(Lw)); GM = 1 / abs(Lw[np.argmin(abs(ph + np.pi))])
         from cert import Ms_d
-        dtk = min(dts, (Kd / Kp / 10) / 20) if pid else Ta / 1000
+        dtk = dt0 if FIXED else (min(dts, (Kd / Kp / 10) / 20) if pid else Ta / 1000)
         seen[key] = dict(gains=[Ki, Kp, Kd], Ms=float(np.max(1 / abs(1 + Lw))), GM=float(GM), read=read,
                          Ms_d=Ms_d(K, L, lags, Ki, Kp, Kd, dtk)[0], dt=dtk)
     cand = list(seen.values()); worst = max(cand, key=lambda c: c["Ms"])
     worst["IAE"] = float(load_iae(K, L, lags, *worst["gains"]))
     hist = {k: log.count(k) for k in sorted(set(log))}
     return dict(worst=worst, Ms_all=sorted(c["Ms"] for c in cand), accepted=cand,
-                fired=hist, F=[float(x) for x in F], shape_log=shp)
+                fired=hist, F=[float(x) for x in F], shape_log=shp, traj=traj)
 
 
 if __name__ == "__main__":
@@ -261,6 +319,6 @@ if __name__ == "__main__":
             res = run(K, L, lags, pid, rule)
             f.write(json.dumps(dict(plant=name, K=K, L=L, lags=lags, pid=pid, rule=rule, res=res)) + "\n")
             f.flush()
-            print(name, rule, None if res is None else
+            print(name, rule, None if res is None or res.get("worst") is None else
                   (f"Ms accepted {res['Ms_all'][0]:.3f}-{res['Ms_all'][-1]:.3f}", res["fired"]), flush=True)
     print("DONE", flush=True)
