@@ -2,7 +2,8 @@
 %  ECC 2027 submission draft (ieeeconf, 6 pages; 8 allowed for review).
 %  Deadline: 31 October 2026.
 %  Main result: one setpoint step certifies M_s of a digital loop
-%  (Lemma 1, Theorem 1); application: certified SPIN (Theorem 2).
+%  (Lemma 1, Theorem 1), accepted tunings (Theorem 2) and the next tuning
+%  before it is applied (Theorem 3); application: certified and safe SPIN.
 %  Computed numbers are confirmed by the scripts in
 %  docs/ECC27_certified_SPIN/scripts (see scripts/README.md).
 % =====================================================================
@@ -45,40 +46,40 @@ Engineering, Czech Technical University in Prague, Czech Republic.}}
 
 
 \begin{abstract}
-Model-free PID tuners improve a loop from closed-loop data but do not
-guarantee its robustness, and checking the sensitivity peak $M_s$ of a
-running loop usually needs a model or dedicated experiments. We give a
-deterministic certificate of $M_s$ from one ordinary setpoint step, the
-experiment such tuners already perform. In a stable digital loop, the
-increments of the error after a setpoint step form the impulse response
-of the sensitivity function; from a finite record we derive computable
-lower and upper bounds on $M_s$, with explicit tail, grid and
-high-frequency terms and one assumption on the unrecorded tail. As an
-acceptance test, the certificate lets any iterative tuner that applies
-setpoint steps accept only tunings with $M_s\le M^*$, a uniform back-off
-of the gains always restores acceptance, and the same record certifies
-stability and $M_s$ of a proposed tuning before it is applied. We work
-this out for \spin, which counts the turns of the control error in phase
-portraits: the counts bound $M_s$ only on special loops, while certified
-\spin provably ends below $M^*$ and safe \spin never applies a tuning
-above it. On $19$ loops, published \spin ended above $M^*=1.7$ on up to
-$9$ and applied tunings above it in $57\%$ of its iterations; safe
-\spin, in none.
+Model-free PID tuners improve a loop from closed-loop data, but they do
+not guarantee its robustness, measured by the peak $M_s$ of the
+sensitivity function. We show that the setpoint step such tuners already
+apply certifies $M_s$: in a stable digital loop, the error increments
+after a unit setpoint step are the impulse response of the sensitivity
+function, so a finite record gives computable lower and upper bounds on
+$M_s$, under one assumption on the unrecorded rest of the response. The
+same record certifies the stability and bounds the $M_s$ of any other
+controller before it is applied. Any iterative tuner can thus accept
+only tunings with $M_s\le M^*$ and never apply one above $M^*$. For
+\spin, which tunes by counting the turns of the control error in phase
+portraits, the counts bound $M_s$ only on special loops. On $19$
+simulated loops, published \spin ended above $M^*=1.7$ on up to $9$ and
+applied tunings above it in $57\%$ of its iterations; certified \spin
+ended above it on none, and safe \spin never applied one.
 \end{abstract}
 
 \section{Introduction}
 
-Let $L=CP$ be the loop transfer function and $S=1/(1+L)$ the sensitivity
-function. Its peak $M_s=\max_\omega|S|$ measures robustness: near $1.4$
-is safe, near $2$ is poor \cite{AstromHagglund2004}. Model-based tuning
-rules reach a chosen $M_s$ \cite{AstromHagglund2004,Skogestad2003}.
-Model-free tuners adjust the gains from closed-loop data instead, by
-iterative feedback tuning \cite{IFT1998}, extremum seeking
-\cite{Killingsworth2006}, virtual reference feedback tuning \cite{VRFT2002},
-setpoint overshoot \cite{Shamsuzzoha2010} or step-response inspection
-\cite{SPIN}; they target performance or a calibrated response shape, and
-none guarantees the $M_s$ of its result. Once a loop runs, its $M_s$ is
-rarely checked at all \cite{Desborough2002,Bauer2016}.
+Let $C$ be the controller, $P$ the plant, $L=CP$ the loop transfer
+function, $S=1/(1+L)$ the sensitivity function and $T=1-S$ the
+complementary sensitivity function. The peak $M_s=\max_\omega|S|$
+measures robustness: $1/M_s$ is the shortest distance from the Nyquist
+curve of $L$ to the critical point $-1$, so $M_s$ near $1.4$ is safe and
+near $2$ is poor \cite{AstromHagglund2004}. Model-based tuning rules
+reach a chosen $M_s$ \cite{AstromHagglund2004,Skogestad2003}. Model-free
+tuners adjust the gains from closed-loop data instead, by iterative
+feedback tuning \cite{IFT1998}, extremum seeking
+\cite{Killingsworth2006}, virtual reference feedback tuning
+\cite{VRFT2002}, setpoint overshoot \cite{Shamsuzzoha2010} or
+step-response inspection \cite{SPIN}. They target performance or a
+response shape; none guarantees the $M_s$ of its result, or of the
+tunings it tries on the way. Once a loop runs, its $M_s$ is rarely
+checked at all \cite{Desborough2002,Bauer2016}.
 
 The $\mathcal H_\infty$ norm of a system, and hence $M_s$, can be
 estimated from data: by power iterations over repeated dedicated
@@ -96,17 +97,16 @@ probabilistic guarantees under a Gaussian-process model of the cost.
 We use the experiment a tuner already performs: a setpoint step. That
 the error increments after the step are the impulse response of $S$ is
 elementary (Lemma~\ref{lem:record}). The contributions are what it
-enables:
+enables, for a chosen target $M^*$:
 \begin{enumerate}
-\item a deterministic, two-sided certificate of $M_s$ computable from
-one finite record (Section~\ref{sec:cert}, Theorem~\ref{thm:cert});
-\item for any iterative model-free tuner, a certified acceptance test
-(Theorem~\ref{thm:spin}) and a certificate of stability and $M_s$ of a
-proposed tuning \emph{before} it is applied (Theorem~\ref{thm:ahead}),
-which makes the tuning safe throughout, not only at its end
-(Section~\ref{sec:accept});
-\item their application to \spin \cite{SPIN}: why the turn counts of
-\spin cannot certify (Lemma~\ref{lem:half}, Proposition~\ref{prop:exact}),
+\item a deterministic, two-sided certificate of $M_s$ from one finite
+record (Section~\ref{sec:cert}, Theorem~\ref{thm:cert});
+\item for any iterative tuner, a certified acceptance test
+(Theorem~\ref{thm:spin}) and a certificate of the stability and $M_s$ of
+a tuning \emph{before} it is applied (Theorem~\ref{thm:ahead}), which
+keeps the loop robust during the tuning (Section~\ref{sec:accept});
+\item their application to \spin \cite{SPIN}: why its turn counts cannot
+certify $M_s$ (Lemma~\ref{lem:half}, Proposition~\ref{prop:exact}),
 certified \spin, which ends below $M^*$, and safe \spin, which never
 applies a tuning above it (Section~\ref{sec:app},
 Corollaries~\ref{cor:spin} and~\ref{cor:safe}).
@@ -117,17 +117,21 @@ Section~\ref{sec:sim} confirms the results in simulation.
 \label{sec:cert}
 
 A digital controller runs with the sampling period $T_s$. Seen at the
-samples, the loop it closes is linear and time invariant. Throughout,
-$L(z)$, $P(z)$, $S=1/(1+L)$ and
-$M_s=\max_{\theta\in[0,\pi]}|S(e^{j\theta})|$, with $\theta=\omega T_s$,
-refer to this digital loop, the loop that actually runs.
+sampling instants, the loop it closes is linear and time invariant, with
+transfer functions $C(z)$, $P(z)$, $L$, $S$ and $T$ as above. On the
+unit circle, $z=e^{j\theta}$ with the normalized frequency
+$\theta=\omega T_s\in[0,\pi]$, and
+$M_s=\max_{\theta}|S(e^{j\theta})|$; we write $M_s(C)$ when the
+controller matters. All these quantities refer to the digital loop, the
+loop that actually runs.
 
 \begin{lemma}[The step contains $S$]
 \label{lem:record}
-Let the loop be stable, have one degree of freedom, and have a strictly
-proper $L$ (the measurement precedes the control action). Let $e_n$ be
-the error after a unit setpoint step at $n=0$, applied from rest and
-without disturbances, so that $e_{-1}=0$ and $e_0=1$, and let
+Let the loop be stable and have one degree of freedom (the controller
+acts on the error $e=r-y$, with setpoint $r$ and output $y$), and let $L$
+be strictly proper (the measurement precedes the control action). Let
+$e_n$ be the error after a unit setpoint step at $n=0$, applied from
+rest and without disturbances, so that $e_{-1}=0$ and $e_0=1$, and let
 $a_n=e_n-e_{n-1}$. Then
 \begin{equation}
 S(e^{j\theta})=\sum_{n\ge0}a_n\,e^{-jn\theta}.
@@ -136,12 +140,14 @@ S(e^{j\theta})=\sum_{n\ge0}a_n\,e^{-jn\theta}.
 \end{lemma}
 
 \begin{proof}
-The $z$-transform of $e$ is $S(z)/(1-z^{-1})$, so
-$S=(1-z^{-1})\mathcal Z\{e\}$. In a stable loop, $a_n$ decays
-exponentially, so the series converges on the unit circle.
+The step has the $z$-transform $R=1/(1-z^{-1})$ and $E=SR$, so
+$S=(1-z^{-1})E$, whose coefficients are the increments $a_n$. In a
+stable loop, $a_n$ decays exponentially, so the series converges on the
+unit circle.
 \end{proof}
 
-A real record is finite, so one assumption covers what it does not show.
+A real record $e_0,\dots,e_N$ is finite, so one assumption covers the
+increments it does not show.
 
 \begin{assumption}[Long enough record]
 \label{ass:tail}
@@ -149,16 +155,20 @@ The loop is stable, and the record $e_0,\dots,e_N$ satisfies
 $\sum_{n>N}|a_n|\le\tau$ for a known $\tau$.
 \end{assumption}
 
-In a stable loop, $|a_n|\le c\rho^n$ with $\rho<1$, so $\tau$ falls
-geometrically with the record length.
+In a stable loop, $|a_n|$ decays exponentially, so a valid $\tau$ falls
+geometrically with the record length; Section~\ref{sec:sim} checks it
+with a longer record. By \eqref{eq:srecord}, the record gives the
+estimate $\hat S(\theta)=\sum_{n=0}^{N}a_ne^{-jn\theta}$ of $S$ at every
+frequency. Three errors separate the largest $|\hat S|$ on a frequency
+grid from $M_s$: the unrecorded tail, the gaps between grid points, and
+high frequencies, which a grid resolves only at great cost.
+Theorem~\ref{thm:cert} bounds each of them.
 
 \begin{theorem}[Certified bounds from one record]
 \label{thm:cert}
-Let the conditions of Lemma~\ref{lem:record} and
-Assumption~\ref{ass:tail} hold, and let
-$\hat S(\theta)=\sum_{n=0}^{N}a_ne^{-jn\theta}$. Let $G$ be a uniform
-grid on $[0,\bar\theta]$, $\bar\theta\le\pi$, that has spacing $h$ and
-contains both ends. For any $n_c$, let
+Let Lemma~\ref{lem:record} and Assumption~\ref{ass:tail} hold. Let $G$ be
+a uniform grid on $[0,\bar\theta]$, $0<\bar\theta\le\pi$, with spacing
+$h$ and containing both ends. For any integer $n_c$, let
 \begin{align*}
 J&=\textstyle\sum_{n=0}^N|n-n_c|\,|a_n|,\;\;
 B=\sum_{n=1}^{N-1}|a_{n+1}-a_n|+|a_N|+2\tau.
@@ -171,157 +181,200 @@ Then $\underline M\le M_s\le\overline M$, where
 \label{eq:bound}
 \end{align}
 and the second term is omitted if $\bar\theta=\pi$. If $\tau$ equals the
-true remaining variation, $N\to\infty$, $h\to0$ and $\bar\theta=\pi$,
-then both bounds converge to $M_s$.
+true remaining variation $\sum_{n>N}|a_n|$, then both bounds converge to
+$M_s$ as $N\to\infty$ and $h\to0$ with $\bar\theta=\pi$.
 \end{theorem}
 
 \begin{proof}
-By \eqref{eq:srecord}, $|S-\hat S|\le\sum_{n>N}|a_n|\le\tau$ at every
-$\theta$, which gives $\underline M$. On $[0,\bar\theta]$, $|\hat S|$
-equals $|e^{jn_c\theta}\hat S|$, whose derivative is bounded by $J$.
-Every $\theta$ lies within $h/2$ of a grid point, which gives the first
-term of $\overline M$. On $[\bar\theta,\pi]$, let $z=e^{-j\theta}$ and
-$Z_n=\sum_{m=1}^nz^m$, so that $|Z_n|\le2/|1-z|=1/\sin(\theta/2)$.
-Summation by parts gives $\sum_{n\ge1}a_nz^n=\sum_{n\ge1}(a_n-a_{n+1})Z_n$.
-Since $\sum_{n\ge N}|a_n-a_{n+1}|\le|a_N|+2\tau$, we obtain
-$|S-a_0|\le B/\sin(\theta/2)$ with $a_0=1$. Convergence follows because,
-for fixed $n_c$, $J$ stays bounded as $N\to\infty$, so $hJ\to0$, and the
-remaining variation tends to zero.
+\emph{Tail.} By \eqref{eq:srecord}, $S-\hat S=\sum_{n>N}a_ne^{-jn\theta}$,
+so $|S-\hat S|\le\tau$ at every $\theta$. This gives $\underline M$ and
+the term $\tau$ in $\overline M$. \emph{Grid.} On $[0,\bar\theta]$,
+$|\hat S(\theta)|=|\sum_na_ne^{-j(n-n_c)\theta}|$, whose derivative with
+respect to $\theta$ is at most $J$ in magnitude. Every $\theta$ lies
+within $h/2$ of a grid point, so $|\hat S|$ exceeds its largest grid
+value by at most $hJ/2$. \emph{High frequencies.} On
+$[\bar\theta,\pi]$, let $z=e^{-j\theta}$ and $Z_n=\sum_{m=1}^nz^m$, so
+that $|Z_n|=|z(1-z^n)/(1-z)|\le2/|1-z|=1/\sin(\theta/2)$. Summation by
+parts gives $\sum_{n\ge1}a_nz^n=\sum_{n\ge1}(a_n-a_{n+1})Z_n$, and
+$\sum_{n\ge N}|a_n-a_{n+1}|\le|a_N|+2\sum_{n>N}|a_n|\le|a_N|+2\tau$. So
+$|S-a_0|\le B/\sin(\theta/2)\le B/\sin(\bar\theta/2)$ with $a_0=1$.
+\emph{Convergence.} For a fixed $n_c$, $J$ stays bounded as
+$N\to\infty$, so $hJ\to0$, and the remaining variation tends to zero.
 \end{proof}
 
-Everything in \eqref{eq:bound} except $\tau$ comes from the record, and
-all grid values follow from one chirp $z$-transform. The grid term
-covers the frequencies up to $\bar\theta$; above them, $B$ bounds $|S|$
-at once, and it is small for a smooth record. Fig.~\ref{fig:record}
-shows both steps on one loop.
+Everything in \eqref{eq:bound} except $\tau$ comes from the record. The
+choice of $n_c$ only affects how tight the bound is; the weighted median
+of $|a_n|$ keeps $J$ small. All grid values $\hat S$ follow from one
+chirp $z$-transform, an FFT-type algorithm. The grid term needs a fine
+grid where $|\hat S|$ changes fast; the high-frequency term needs no grid
+at all, and $B$ is small for a smooth record. Fig.~\ref{fig:record}
+shows both bounds on one loop.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_record.pdf}
-\caption{One step certifies $M_s$. (a) The error after a setpoint step
-of the slow-integral PI loop of Section~\ref{sec:count}; it never crosses the setpoint by more than
-$2\%$ (grey band). The record ends at $8L_d$. (b) $|S|$ from the record
-(Lemma~\ref{lem:record}) lies on the true $|S|$, and the bounds
-\eqref{eq:bound} bracket $M_s=2.62$, far above $M^*$
-(Theorem~\ref{thm:cert}, with $\tau=0.13$).}
+\caption{One step certifies $M_s$: a first-order plant with dead time
+$L_d$ and time constant $T_1=0.3L_d$ under PI with integral time
+$T_i=8T_1$, $T_s=0.01L_d$. (a) The error after a setpoint step; it never
+crosses the setpoint by more than $2\%$ (grey band). The record ends at
+$8L_d$. (b) $|\hat S|$ from the record lies on the true $|S|$, and the
+bounds \eqref{eq:bound} bracket $M_s=2.62$, far above $M^*$ ($\tau=0.13$,
+the true variation after $8L_d$).}
 \label{fig:record}
 \end{figure}
 
 \section{A Certified Acceptance Test}
 \label{sec:accept}
 
-An iterative tuner applies a controller $C$, records a setpoint step, and
-proposes the next controller. \emph{Certified acceptance} keeps the
-tuner's own rule for proposing, but accepts $C$ only if the upper bound
-$\overline M$ of Theorem~\ref{thm:cert}, computed from the record of $C$,
-is at most a target $M^*$; otherwise it lowers the gains, by the tuner's
-own rule or by a uniform back-off $C\to(1-\beta)C$. Here $C$ has integral
-action, $C=C_0+K_iT_s z^{-1}/(1-z^{-1})$ with $C_0$ stable,
-and $\bar\theta$ in \eqref{eq:bound} solves
-$1+B/\sin(\bar\theta/2)=M^*$ ($\bar\theta=\pi$ if no solution), with a
-grid fine enough that $hJ/2\le\eta$.
+An iterative tuner applies a controller $C$, records the error after a
+setpoint step, and proposes the next controller from the record. We call
+a set of gains a \emph{tuning}, and say that a tuning is
+\emph{accepted} when the tuner keeps it as a candidate result.
+\emph{Certified acceptance} keeps the tuner's own rule for proposing
+tunings, but accepts $C$ only if the upper bound $\overline M$ of
+Theorem~\ref{thm:cert}, computed from the record of $C$, is at most the
+target $M^*$. Otherwise it lowers the gains, by the tuner's own rule or
+by a \emph{uniform back-off} $C\to(1-\beta)C$ with $0<\beta<1$.
+
+We assume integral action, $C=C_0+K_iT_s/(z-1)$, where the integral gain
+is $K_i>0$ and $C_0$, the proportional and derivative part, is stable.
+In \eqref{eq:bound}, we choose $\bar\theta$ so that the high-frequency
+term equals $M^*$, that is, $1+B/\sin(\bar\theta/2)=M^*$ ($\bar\theta=\pi$
+if $1+B>M^*$), and the grid so fine that $hJ/2\le\eta$ for a small
+tolerance $\eta$.
 
 \begin{theorem}[Certified acceptance]
 \label{thm:spin}
-Let the plant be stable, let $K_iP(1)>0$, and let every tested record
-meet the conditions of Lemma~\ref{lem:record} and
+Let the plant be stable, let $K_iP(1)>0$ (the integral action counteracts
+the error), and let every record meet Lemma~\ref{lem:record} and
 Assumption~\ref{ass:tail}.
 \begin{enumerate}
 \item[(i)] Every accepted tuning has $M_s\le M^*$, whatever rule
 proposed it.
 \item[(ii)] For a controller $C$, let
-$\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(e^{j\theta})\}$. For
-$0<\lambda<1/|\mu|$, the loop with $\lambda C$ is stable, and
+$\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(e^{j\theta})\}$, the
+leftmost real part of its Nyquist curve. For $0<\lambda<1/|\mu|$, the
+controller $\lambda C$ stabilizes the plant, and
 \begin{equation}
 M_s(\lambda C)\le\frac{1}{1-\lambda|\mu|}.
 \label{eq:backoff}
 \end{equation}
-\item[(iii)] If $M^*>1+2\tau+\eta$, then from any such $C$ at most
+\item[(iii)] If $M^*>1+2\tau+\eta$, then at most
 $j^*=\lceil\ln\frac{|\mu|M'}{M'-1}/\ln\frac1{1-\beta}\rceil$ uniform
-back-offs lead to an accepted tuning, where $M'=M^*-2\tau-\eta$.
+back-offs from any such $C$ lead to an accepted tuning, where
+$M'=M^*-2\tau-\eta$.
 \end{enumerate}
 \end{theorem}
 
 \begin{proof}
-(i) This follows from Theorem~\ref{thm:cert}. (ii) $L$ is bounded on the
-unit circle except near $z=1$, where the integral term has a bounded real
-part, because $P$ is analytic at $z=1$ and
-$\mathrm{Re}\,1/(e^{j\theta}-1)=-\frac12$; so $\mu$ is finite. Then
+(i) Accepted means $\overline M\le M^*$, and $M_s\le\overline M$ by
+Theorem~\ref{thm:cert}. (ii) First, $\mu$ is finite: $L$ is bounded on
+the unit circle except near $z=1$, where the integral term has the real
+part $-K_iT_s/2$, since $\mathrm{Re}\,1/(e^{j\theta}-1)=-\frac12$, and
+$P$ is continuous at $z=1$. For every $\theta$,
 $|1+\lambda L|\ge1+\lambda\,\mathrm{Re}\,L\ge1-\lambda|\mu|>0$, which
-gives \eqref{eq:backoff}. The Nyquist curve of $\lambda L$ lies in
-$\mathrm{Re}\ge-\lambda|\mu|>-1$, also on a small indentation outside
-$z=1$, where $K_iP(1)>0$ keeps $\mathrm{Re}\,L>\mu$; it cannot encircle
-$-1$, and $L$ has no poles outside the unit disc, so the loop is stable.
-(iii) After $j$ back-offs, $\lambda=(1-\beta)^j$, and \eqref{eq:backoff}
-gives $M_s\le M'$ for $j\ge j^*$. In \eqref{eq:bound}, the grid term is
-then at most $M_s+2\tau+\eta\le M^*$, and the second term is at most
-$M^*$ by the choice of $\bar\theta$; so the test passes.
+gives \eqref{eq:backoff}. For stability, we apply the Nyquist criterion
+on the unit circle with a small indentation that passes outside the pole
+$z=1$. On the indentation, $\lambda L\approx\lambda K_iT_sP(1)/(z-1)$ has
+a positive real part, since $K_iP(1)>0$. So the whole Nyquist curve of
+$\lambda L$ lies in $\mathrm{Re}\ge-\lambda|\mu|>-1$ and cannot encircle
+$-1$; as $\lambda L$ has no poles outside the indented circle, the loop
+is stable. (iii) After $j$ back-offs, $\lambda=(1-\beta)^j$, and
+\eqref{eq:backoff} gives $M_s\le M'$ once $j\ge j^*$. Then the grid term
+of \eqref{eq:bound} is at most $(M_s+\tau)+\eta+\tau\le M^*$, and the
+high-frequency term is at most $M^*$ by the choice of $\bar\theta$; so
+the tuning is accepted.
 \end{proof}
 
-Acceptance tests a tuning after it has been applied. The same record
-also certifies any other controller \emph{before} it is applied, so a
-tuner can avoid applying a fragile tuning at all.
+Acceptance tests a tuning after it has been applied: the tuner learns
+that a tuning is fragile only by running it. The record of $C$, however,
+determines the sensitivity of any other controller $C'$ on the same
+plant, so a tuner can check $C'$ before applying it. Let
+$\rho=C'/C-1$ be the relative change of the controller. Then
+$L'=L(1+\rho)$, so $1+L'=1+L+L\rho=(1+L)(1+T\rho)$, and
+\begin{equation}
+S'=\frac{S}{1+T\rho}.
+\label{eq:predict}
+\end{equation}
+The record gives $\hat S$ and $\hat T=1-\hat S$, each within $\tau$.
 
 \begin{theorem}[Certify before applying]
 \label{thm:ahead}
-Let the record of $C$ meet the conditions of Lemma~\ref{lem:record} and
-Assumption~\ref{ass:tail}, with $C$ as in Theorem~\ref{thm:spin}, and
-let $C'$ be such a controller with the same $T_s$, with $K_i'>0$ and
-$\Delta=C'/C-1$ bounded on the unit circle. Let $\hat T=1-\hat S$. Then
-$S'=S/(1+T\Delta)$ exactly, with $T=1-S$, and if, for all
-$\theta\in(0,\pi]$,
+Let $C$ and $C'$ be controllers as in Theorem~\ref{thm:spin} with the
+same $T_s$, let $\rho$ be bounded on the unit circle, and let the record
+of $C$ meet Lemma~\ref{lem:record} and Assumption~\ref{ass:tail}. If, for
+all $\theta\in(0,\pi]$,
 \begin{equation}
-d(\theta)=\min_{0\le\lambda\le1}|1+\lambda\hat T\Delta|-\tau|\Delta|>0,
+d(\theta)=\min_{0\le\lambda\le1}|1+\lambda\hat T\rho|-\tau|\rho|>0,
 \label{eq:ahead}
 \end{equation}
 then $C'$ stabilizes the plant, and
 \begin{equation}
-M_s(C')\le\sup_{0<\theta\le\pi}\frac{|\hat S|+\tau}{|1+\hat T\Delta|-\tau|\Delta|}.
+M_s(C')\le\sup_{0<\theta\le\pi}\frac{|\hat S|+\tau}{|1+\hat T\rho|-\tau|\rho|}.
 \label{eq:aheadbound}
 \end{equation}
 \end{theorem}
 
+The minimum in \eqref{eq:ahead} is the distance from $0$ to the segment
+between $1$ and $1+\hat T\rho$.
+
 \begin{proof}
-$L'=L(1+\Delta)$ gives $1+L'=(1+L)(1+T\Delta)$. Let
-$C_\lambda=C(1+\lambda\Delta)=(1-\lambda)C+\lambda C'$, $\lambda\in[0,1]$.
-Its integral gain is positive and its other poles are those of $C_0$
-and $C_0'$, inside the unit disc, so $L_\lambda$ has no poles outside the unit disc and is
-large on a small indentation around $z=1$. Since
-$|T-\hat T|=|S-\hat S|\le\tau$, $|1+\lambda T\Delta|\ge d>0$, so
-$1+L_\lambda\neq0$ on the indented circle for every $\lambda$. The
-winding number of $1+L_\lambda$ about $0$ is thus constant in $\lambda$,
-and at $\lambda=0$ the loop is stable. The bound follows from $|S|\le|\hat S|+\tau$ and
-$|1+T\Delta|\ge|1+\hat T\Delta|-\tau|\Delta|$.
+The controllers $C_\lambda=C(1+\lambda\rho)=(1-\lambda)C+\lambda C'$ move
+from $C$ to $C'$ as $\lambda$ goes from $0$ to $1$. Each has a positive
+integral gain, and its other poles are those of $C_0$ and $C_0'$, inside
+the unit disc. So $L_\lambda=C_\lambda P$ has no poles outside the
+indented circle of Theorem~\ref{thm:spin}, and on the indentation it has
+a large positive real part. By \eqref{eq:predict} with $\lambda\rho$ in
+place of $\rho$, $1+L_\lambda=(1+L)(1+\lambda T\rho)$. Here $1+L\neq0$,
+and since $|T-\hat T|=|S-\hat S|\le\tau$,
+$|1+\lambda T\rho|\ge|1+\lambda\hat T\rho|-\lambda\tau|\rho|\ge d>0$. So
+$1+L_\lambda\neq0$ on the indented circle for every $\lambda$, and the
+number of times its Nyquist curve encircles $0$ cannot change with
+$\lambda$. The loop is stable at $\lambda=0$, hence at $\lambda=1$. The
+bound \eqref{eq:aheadbound} follows from \eqref{eq:predict},
+$|S|\le|\hat S|+\tau$ and $|1+T\rho|\ge|1+\hat T\rho|-\tau|\rho|$.
 \end{proof}
 
-Like \eqref{eq:bound}, \eqref{eq:ahead} and \eqref{eq:aheadbound} are
-checked on a grid with Lipschitz margins; above $\bar\theta$, the bound
+In practice, \eqref{eq:ahead} and \eqref{eq:aheadbound} are checked on
+the grid of Theorem~\ref{thm:cert}, with margins that bound how much
+each term can change between grid points. Above $\bar\theta$, the bound
 $|S-1|\le r=B/\sin(\theta/2)$ from the proof of Theorem~\ref{thm:cert}
-replaces the record, and \eqref{eq:ahead} holds if $r|\Delta|<1$, with
-$|S'|\le(1+r)/(1-r|\Delta|)$. As $\tau\to0$, \eqref{eq:aheadbound}
-becomes the exact prediction $\max|\hat S/(1+\hat T\Delta)|$, and a
-back-off is the case $\Delta=\lambda-1$.
+replaces $\hat S$: then $|T|\le r$ and $|S|\le1+r$, so \eqref{eq:ahead}
+holds if $r|\rho|<1$, and $|S'|\le(1+r)/(1-r|\rho|)$. Since
+\eqref{eq:predict} is exact, Theorem~\ref{thm:ahead} needs no small-step
+assumption; a larger change only widens the bound through $\tau|\rho|$.
+As $\tau\to0$, \eqref{eq:aheadbound} becomes
+$\max_\theta|\hat S/(1+\hat T\rho)|$, which we call the
+\emph{prediction} of $M_s(C')$. A uniform back-off is the case
+$\rho=-\beta$.
 
 \section{Application to \spin}
 \label{sec:app}
 
 \subsection{The \spin method}
 
-\spin \cite{SPIN} tunes an I, PI or PID controller with the gains
-$K_i,K_p,K_d$. In each iteration, it applies one setpoint step, records
-the error $e$, and forms three phase portraits,
+\spin \cite{SPIN} tunes an I, PI or PID controller with the integral,
+proportional and derivative gains $K_i$, $K_p$, $K_d$. In each
+iteration, it applies one setpoint step, records the error $e_n$, and
+forms three phase portraits, curves in the plane traced as $n$ grows:
 \begin{equation}
-\Gamma_0:(e,\textstyle\sum e),\quad \Gamma_1:(\Delta e,e),\quad
-\Gamma_2:(\Delta^2e,\Delta e),
+\begin{aligned}
+\Gamma_0&:\big(e_n,\textstyle\sum_{m\le n}e_m\big),\qquad
+\Gamma_1:(\Delta e_n,e_n),\\
+\Gamma_2&:(\Delta^2e_n,\Delta e_n),
+\end{aligned}
 \label{eq:portraits}
 \end{equation}
-where $\sum e$ is the running sum of $e$ and $\Delta$ the difference of
-consecutive samples. They correspond to the frequency bands of $K_i$,
-$K_p$ and $K_d$, which we call bands $0$, $1$ and $2$. Each axis is
-divided by its peak, and the count $N_k$ is the number of turns that
-$\Gamma_k$ makes around its end point before the error stays within
-$\pm\delta$ ($2\%$ of the step). Algorithm~1 states the rule.\footnote{An
-online simulator: \url{https://robopid-simulator.uceeb.cvut.cz}}
+with the differences $\Delta e_n=e_n-e_{n-1}=a_n$ and
+$\Delta^2e_n=\Delta e_n-\Delta e_{n-1}$. $\Gamma_0$, $\Gamma_1$ and
+$\Gamma_2$ emphasize low, middle and high frequencies, where the
+integral, proportional and derivative actions dominate the controller;
+we call them bands $0$, $1$ and $2$. Each axis is divided by its peak,
+and the count $N_k$ is the number of turns that $\Gamma_k$ makes around
+its end point until the error stays within $\pm\delta$ of the setpoint
+($\delta$ is $2\%$ of the step). Algorithm~1 states how the counts
+change the gains.\footnote{An online simulator:
+\url{https://robopid-simulator.uceeb.cvut.cz}}
 
 \begin{figure}[t]
 \small
@@ -340,165 +393,177 @@ with lines 7a--7c in bold instead of line 7, of certified \spin
 7: & \quad\quad raise all gains by one increment \hfill (accept)\\
 \textbf{7a:} & \quad\quad \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert})}\\
 \textbf{7b:} & \quad\quad \textbf{if $\overline M\le M^*$ then} raise all gains \hfill (accept)\\
-\textbf{7c:} & \quad\quad \textbf{else lower the gains:} the band move that\\
-    & \quad\quad\quad Thm.~\ref{thm:ahead} predicts to lower $M_s$ (highest\\
-    & \quad\quad\quad such band, at most $n_{\max}$ in a row), else a\\
-    & \quad\quad\quad uniform back-off \hfill (reject)\\
+\textbf{7c:} & \quad\quad \textbf{else lower the gains:} the move of line 10\\
+    & \quad\quad\quad for the highest band whose move is predicted\\
+    & \quad\quad\quad (Thm.~\ref{thm:ahead}) to lower $M_s$, at most $n_{\max}$ in\\
+    & \quad\quad\quad a row; else a uniform back-off \hfill (reject)\\
 8: & \quad \textbf{else}\\
 9: & \quad\quad $k\leftarrow$ lowest band with $N_k>\bar N_k$\\
 10: & \quad\quad lower the gain of band $k$ by one increment and\\
     & \quad\quad raise the gains of the bands below $k$ by one\\
 \end{tabular}
 \smallskip\hrule\smallskip
-\noindent An increment scales a gain by $1/(1-\beta)$. Defaults:
-$\bar N=(0.5,0.75,1.0)$, $\delta=0.02$, $\beta=0.1$; gains stay within
+\noindent An increment scales a gain by $1/(1-\beta)$. Defaults: limits
+$\bar N_k=(0.5,0.75,1.0)$, $\delta=0.02$, $\beta=0.1$; gains stay within
 $[0.001,10]$ times their initial values (the gain box); the result is the
-last accepted tuning. Certified \spin: $\bar\theta$ and $h$ as in
-Section~\ref{sec:accept}; $M^*=1.7$, $\tau=10^{-3}$, $\eta=2\cdot10^{-3}$,
-$n_{\max}=10$.
+last accepted tuning. Certified \spin: $M^*=1.7$, $\tau=10^{-3}$,
+$\eta=2\cdot10^{-3}$, $n_{\max}=10$, $\bar\theta$ and $h$ as in
+Section~\ref{sec:accept}.
 \smallskip\hrule
 \end{figure}
 
 \subsection{Why the turn counts cannot certify}
 \label{sec:count}
 
-In each portrait \eqref{eq:portraits}, the second coordinate $q$ is the
-running sum of the first coordinate $p$. The count is the net
-counterclockwise angle around the end point, placed at the origin,
-divided by $2\pi$; we state the results in continuous time, where
-$\dot q=p$. For $\Gamma_0$, the zeros of $p=e$ are the setpoint
-crossings.
+Why should turn counts relate to $M_s$? Write a portrait
+\eqref{eq:portraits} as $(p,q)$, with $q$ the running sum of $p$,
+shifted so that the end point is the origin. The count is the net
+counterclockwise angle swept around the origin, divided by $2\pi$. We
+state the results in continuous time, where $\dot q=p$. For $\Gamma_0$,
+$p=e$, and its zeros are the setpoint crossings.
 
 \begin{lemma}[Half turns]
 \label{lem:half}
 Let $\dot q=p$ with $p$ continuous, let $p(t_1)=p(t_2)=0$ with
-$q(t_1)q(t_2)<0$, and let $p$ not change sign on $(t_1,t_2)$. Then, on
+$q(t_1)q(t_2)<0$, and let $p\neq0$ on $(t_1,t_2)$. Then, on
 $[t_1,t_2]$, the curve $(p,q)$ turns counterclockwise around the origin
 by exactly half a turn, and so does its image under any linear map with
-a positive determinant, such as the per-axis normalization of \spin.
+a positive determinant, such as the per-axis scaling of \spin.
 \end{lemma}
 
 \begin{proof}
-On $(t_1,t_2)$, $p$ keeps one sign, so the curve stays in one closed
-half-plane bounded by the $q$-axis, and $q$ moves monotonically from one
-ray of the $q$-axis to the opposite ray; it avoids the origin, since
-$q=0$ only where $p\neq0$. The angle thus changes by exactly $\pi$, and
-counterclockwise, since $q$ increases where $p>0$ and decreases where
-$p<0$. A linear map with a positive determinant maps half-planes to
-half-planes and opposite rays to opposite rays, and keeps the
-orientation.
+On $(t_1,t_2)$, $p$ keeps one sign, so the curve stays in one half-plane
+bounded by the $q$-axis, and $q$ moves monotonically from one ray of the
+$q$-axis to the opposite ray. The curve avoids the origin, since $p=0$
+only at $t_1$ and $t_2$, where $q\neq0$. The angle thus changes by
+exactly $\pi$, counterclockwise, since $q$ increases where $p>0$ and
+decreases where $p<0$. A linear map with a positive determinant maps
+half-planes to half-planes and opposite rays to opposite rays, and keeps
+the orientation.
 \end{proof}
 
-So each setpoint crossing adds half a turn to $N_0$, and how many
-crossings a count sees depends on how many rise above $\delta$. Whether
-crossings reveal $M_s$ depends on the loop. Lambda, IMC and SIMC tunings
-cancel the plant lags \cite{Skogestad2003}, e.g., PI with $T_i=T$ on
-$Ke^{-sL_d}/(Ts+1)$; the loop is then
+So each setpoint crossing adds half a turn to $N_0$, and a count sees
+the crossings that rise above $\delta$. Whether crossings reveal $M_s$
+depends on the loop. We first study a loop where they do. Lambda, IMC
+and SIMC tuning rules cancel the plant lag by the controller zero
+\cite{Skogestad2003}, e.g., PI with the integral time $T_i=T_1$ on the
+plant $Ke^{-sL_d}/(T_1s+1)$. The loop is then
 \begin{equation}
-L(s)=\frac{k\,e^{-sL_d}}{sL_d},\qquad k=\frac{KK_cL_d}{T_i}.
+L(s)=\frac{\kappa\,e^{-sL_d}}{sL_d},\qquad \kappa=\frac{KK_pL_d}{T_i}.
 \label{eq:loop}
 \end{equation}
 
 \begin{proposition}[Crossings on lag-cancelled loops]
 \label{prop:exact}
-The loop \eqref{eq:loop} is stable for $0<k<\pi/2$, and its $M_s$
-strictly increases with $k$, as given by
+The loop \eqref{eq:loop} is stable for $0<\kappa<\pi/2$. Its $M_s$
+strictly increases with $\kappa$ and is given by
 \begin{equation}
-k=x\sin x-x^2\cos x,\qquad
-\frac{1}{M_s^2}=1-\frac{2k\sin x}{x}+\frac{k^2}{x^2},
+\kappa=x\sin x-x^2\cos x,\qquad
+\frac{1}{M_s^2}=1-\frac{2\kappa\sin x}{x}+\frac{\kappa^2}{x^2},
 \label{eq:param}
 \end{equation}
-with $x\in(0,\pi/2)$ the normalized peak frequency. The error after a
-setpoint step never crosses the setpoint if and only if
-$k\le1/\mathrm{e}$, that is, $M_s\le1.394$; otherwise it crosses
-infinitely often.
+where $x\in(0,\pi/2)$ is the peak frequency normalized as $x=\omega L_d$.
+The error after a unit setpoint step never crosses the setpoint if and
+only if $\kappa\le1/\mathrm{e}$, that is, $M_s\le1.394$; otherwise it
+crosses infinitely often.
 \end{proposition}
 
 \begin{proof}
-The phase of $L$ is $-\pi/2-x$ at $x=\omega L_d$; it reaches $-\pi$ first
-at $x=\pi/2$, where $|L|=2k/\pi<1$, and $|L|=k/x$ decreases, so the loop
-is stable. Let $h(x)=|1+L|^2=1-2k\sin x/x+k^2/x^2$. Then
-$h'(x)=2k(\varphi(x)-k)/x^3$ with $\varphi(x)=x\sin x-x^2\cos x$
-increasing on $(0,\pi)$ and $\varphi(\pi/2)>k$, so $h$ has one minimum
-$x^*\in(0,\pi/2)$ on $(0,\pi)$; on $[\pi,2\pi]$, $h\ge1$, and for
-$x\ge2\pi$, $h\ge(1-k/x)^2>h(\pi/2)$. This gives \eqref{eq:param}, and by
-the envelope theorem $\frac{d}{dk}h(x^*)=-2\cos x^*<0$. The error obeys
-$\dot e(t)=-(k/L_d)e(t-L_d)$ with $e=1$ on $[0,L_d]$; it stays positive
-if and only if the characteristic equation $s+(k/L_d)e^{-sL_d}=0$ has a
-real root, that is, if $k\le1/\mathrm{e}$, and otherwise all solutions
-oscillate \cite{GyoriLadas1991}.
+At $x=\omega L_d$, $L$ has the phase $-\pi/2-x$ and the gain $\kappa/x$.
+The phase first reaches $-\pi$ at $x=\pi/2$, where the gain is
+$2\kappa/\pi<1$, so the loop is stable. Let
+$f(x)=|1+L|^2=1-2\kappa\sin x/x+\kappa^2/x^2$, so that
+$M_s^2=1/\min_xf$. Then $f'(x)=2\kappa(\varphi(x)-\kappa)/x^3$ with
+$\varphi(x)=x\sin x-x^2\cos x$, which increases on $(0,\pi)$ and has
+$\varphi(\pi/2)=\pi/2>\kappa$. So $f$ has one minimum on $(0,\pi)$, at
+the $x^*\in(0,\pi/2)$ with $\varphi(x^*)=\kappa$. Elsewhere, $f$ is
+larger: $f\ge1$ on $[\pi,2\pi]$, where $\sin x\le0$, and for $x\ge2\pi$,
+$f\ge(1-\kappa/x)^2>(1-2\kappa/\pi)^2=f(\pi/2)$. This gives
+\eqref{eq:param}. As $\kappa$ grows, $f(x^*)$ falls, since its
+derivative is $\partial f/\partial\kappa=-2\cos x^*<0$ (envelope
+theorem). For the crossings, the output obeys
+$\dot y(t)=(\kappa/L_d)\,e(t-L_d)$, so the error obeys
+$\dot e(t)=-(\kappa/L_d)\,e(t-L_d)$ with $e=1$ on $[0,L_d]$. It stays
+positive if and only if its characteristic equation
+$s+(\kappa/L_d)e^{-sL_d}=0$ has a real root; with $w=sL_d$, this reads
+$-we^w=\kappa$, and $-we^w$ has the maximum $1/\mathrm{e}$ over real $w$.
+Otherwise all solutions oscillate \cite{GyoriLadas1991}.
 \end{proof}
 
-At $\delta=0.02$ the counts of the loop \eqref{eq:loop} therefore form a
-staircase in $M_s$ (Fig.~\ref{fig:stair}(a)). With $n$ crossings above
-$\delta$, the computed $N_0$ and $N_1$ lie within a quarter turn above
-$n/2$, and $N_2$ is $n/2-1/4$ within $0.01$: on this ideal loop $\dot e$
-jumps at $t=L_d$, so $\Gamma_2$ starts with a quarter turn clockwise. The published limits lie in
-the gaps: $\bar N_0=1/2$, $\bar N_1=3/4$ and $\bar N_2=1$ allow $0$, $1$
-and $2$ crossings above $\delta$, that is, $M_s\le1.534$, $1.842$ and
-$2.210$, where the $(n+1)$th extremum equals $\delta$. Each band allows
-one crossing more than the band below, which is why the limits grow;
-$\Gamma_0$ binds, so on these loops \spin stops at $M_s\le1.534$.
+At $\delta=0.02$, the counts of the loop \eqref{eq:loop} therefore rise
+in steps as $M_s$ grows (Fig.~\ref{fig:stair}(a)). With $n$ crossings
+larger than $\delta$, the computed $N_0$ and $N_1$ lie within a quarter
+turn above $n/2$, and $N_2$ is $n/2-1/4$ within $0.01$ (on this ideal
+loop, $\dot e$ jumps at $t=L_d$, so $\Gamma_2$ starts with a quarter
+turn clockwise). The published limits lie between the steps:
+$\bar N_0=1/2$, $\bar N_1=3/4$ and $\bar N_2=1$ allow $0$, $1$ and $2$
+crossings above $\delta$, that is, $M_s\le1.534$, $1.842$ and $2.210$,
+the values at which the next extremum of $e$ reaches $\delta$. Each band
+allows one crossing more than the band below, which is why the limits
+grow; $\Gamma_0$ binds first, so on these loops \spin stops at
+$M_s\le1.534$.
+% check_result1.py (Lemma 2 within 1e-6, (9) against a direct search), confirm_limits.py
 
-On general loops, this guarantee is lost. The counts leave the
-staircase: in the $3800$ count decisions of Section~\ref{sec:sim}, $N_0$
-and $N_2$ fell between $n/2+1/4$ and $(n+1)/2$ in $22$ and $67\%$ of
-them. And crossings do not bound $M_s$: a first-order plant with
-$T=0.3L_d$ under PI with $T_i=8T$ and a gain margin of $1.624$ has
-$M_s=2.62$, yet its error never crosses the setpoint by more than $2\%$
-(Fig.~\ref{fig:record}(a)), while a controller zero can cause crossings
-at a low $M_s$. The counts can shape a tuning, but only a certificate can
-certify it.
+On general loops, this guarantee is lost. The counts leave the steps: in
+the $3800$ count decisions of Section~\ref{sec:sim} ($19$ loops, $200$
+iterations), $N_0$ and $N_2$ lay between $n/2+1/4$ and $(n+1)/2$ in
+$22$ and $67\%$ of them. And crossings do not bound $M_s$: the loop of
+Fig.~\ref{fig:record}, with a gain margin of $1.624$, has $M_s=2.62$,
+yet its error never crosses the setpoint by more than $2\%$, while a
+controller zero can cause crossings at a low $M_s$. The counts can shape
+a tuning, but only a certificate can certify it.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_stair.pdf}
-\caption{The lag-cancelled loop \eqref{eq:loop}, \spin's counts. (a) At
-$\delta=0.02$, each count steps over its published limit (dotted) at
+\caption{\spin's counts on the lag-cancelled loop \eqref{eq:loop}. (a)
+At $\delta=0.02$, each count steps over its published limit (dotted) at
 $M_s=1.53$, $1.84$, $2.21$; $N_2$ and its limit are drawn a quarter turn
-up (see text). (b) A record with $M_s=2.00$ and two
-crossings. (c) Its portrait $\Gamma_0$ turns by exactly half a turn
-between them (Lemma~\ref{lem:half}); the radius is compressed, the angle
-is not.}
+up (see text). (b) A record with $M_s=2.00$ and two crossings. (c) Its
+portrait $\Gamma_0$ turns by exactly half a turn between them
+(Lemma~\ref{lem:half}); the scaling compresses the radius, not the
+angle.}
 \label{fig:stair}
 \end{figure}
 
-\subsection{Certified \spin}
+\subsection{Certified and safe \spin}
 \label{sec:spin}
 
 \emph{Certified \spin accepts a tuning that the counts accept only if the
 upper bound $\overline M$ of Theorem~\ref{thm:cert}, computed from the
-same record, is at most a target $M^*$.} In Algorithm~1, it replaces
-line 7 by the bold lines 7a--7c: the counts shape the tuning, and the
-certificate decides whether it is accepted. A rejected tuning is lowered
-by the band move that the prediction of Theorem~\ref{thm:ahead} expects
-to lower $M_s$, as in line 10, or by a uniform back-off, the reverse of
-an acceptance.
+same record, is at most $M^*$.} In Algorithm~1, it replaces line 7 by
+the bold lines 7a--7c: the counts shape the tuning, and the certificate
+decides whether it is accepted. A rejected tuning is lowered by a band
+move of line 10 that the prediction of Theorem~\ref{thm:ahead} expects
+to lower $M_s$, or by a uniform back-off, the reverse of an acceptance.
 
 \begin{corollary}[Certified \spin]
 \label{cor:spin}
 Under the conditions of Theorem~\ref{thm:spin}, the result of certified
-\spin has $M_s\le M^*$, whatever the limits $\bar N_k$. If no gain is
-clipped by the gain box, every run of rejections in line 7b ends in an
-acceptance or in a move of Algorithm~1 (line 3 or 10), after at most
-$n_{\max}$ band moves and at most $j^*$ back-offs in each stretch of
-back-offs.
+\spin has $M_s\le M^*$, whatever the limits $\bar N_k$. If no gain
+reaches the gain box, the test never traps \spin: after a rejection, at
+most $n_{\max}$ band moves and then at most $j^*$ back-offs
+(Theorem~\ref{thm:spin}(iii), for the tuning where they start) lead to
+an accepted tuning, unless line 3 or 10 moves the gains first.
 \end{corollary}
 
 \begin{proof}
-Line 7c allows at most $n_{\max}$ band moves in a row; the rest follows
-from Theorem~\ref{thm:spin}(i) and (iii), unless the counts reject first.
+The result is an accepted tuning, so Theorem~\ref{thm:spin}(i) applies.
+Line 7c makes at most $n_{\max}$ band moves in a row and then backs off
+uniformly, which ends in an acceptance by Theorem~\ref{thm:spin}(iii).
 \end{proof}
 
-So the test never traps \spin. It does not stop \spin from
-\emph{applying} fragile tunings: each is tested before it is rejected.
-\emph{Safe \spin} certifies every move before it is applied. It applies
-the move of Algorithm~1 only if Theorem~\ref{thm:ahead} certifies it
-with a bound \eqref{eq:aheadbound} at most $M^*$; otherwise the first so
-certified of the band moves $k=2,1,0$ and the uniform back-off; otherwise
-it keeps the current tuning. Until line 7b first accepts, it backs off
-uniformly; a tuning certified ahead that line 7b does not accept is
-replaced by the last accepted one.
+Certified \spin learns that a tuning is fragile only by applying it.
+\emph{Safe \spin certifies every move before applying it}, by
+Theorem~\ref{thm:ahead}. It proposes moves only from an accepted tuning,
+one that passes line 7b on its own record. It computes the move of
+Algorithm~1 (line 7 or 10) and applies it only if \eqref{eq:ahead} holds
+and the bound \eqref{eq:aheadbound} is at most $M^*$; otherwise it tries
+the band moves of line 10 for $k=2,1,0$ and then a uniform back-off, and
+applies the first one so certified; if there is none, it keeps the
+current tuning. Before its first accepted tuning, it backs off
+uniformly; if a tuning certified in advance fails line 7b, it returns to
+the last accepted tuning.
 
 \begin{corollary}[Safe \spin]
 \label{cor:safe}
@@ -510,29 +575,27 @@ has $M_s\le M^*$, whatever the limits $\bar N_k$.
 \begin{proof}
 Moves are proposed only from accepted tunings, so each applied tuning
 is certified by Theorem~\ref{thm:ahead} from the record of an accepted
-tuning, or was accepted itself (Theorem~\ref{thm:spin}(i)).
+tuning, or is accepted itself (Theorem~\ref{thm:spin}(i)).
 \end{proof}
 
-\begin{figure*}[t]
+\begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{fig_certified.pdf}
-\caption{Published vs.\ certified \spin, $M^*=1.7$. (a) The loops of
-Table~\ref{tab:spin}. (b) $P_3$ with PID: published tuning ($\overline
-M=1.81$, $\circ$), one band move lowering $K_i$ ($M_s=1.739$, as
-Theorem~\ref{thm:ahead} predicts), certified tuning ($1.689$).
-(c) $P_3$ with PID: $M_s$ of the tuning applied in each iteration
+\includegraphics[width=\columnwidth]{fig_certified.pdf}
+\caption{$P_3$ with PID, $M^*=1.7$. (a) The published tuning
+($\overline M=1.81$, $\circ$), one band move lowering $K_i$
+($M_s=1.739$, as predicted by \eqref{eq:predict}), and the certified
+tuning ($M_s=1.689$). (b) $M_s$ of the tuning applied in each iteration
 (fixed $T_s$); safe \spin stays below $M^*$ throughout.}
 \label{fig:certified}
-\end{figure*}
+\end{figure}
 
 \begin{table}[t]
 \centering
-\caption{$M_s$ of the digital loop for the most aggressive tuning that
-published and certified \spin accept, from the cautious and the bold
-start, and the change of the load-step IAE (cautious start; --: tuning
-unchanged).}
+\caption{$M_s$ of the most aggressive tuning that published and
+certified \spin accept, from the cautious and the bold start, and the
+change of the load-step IAE (cautious start; --: tuning unchanged).}
 \label{tab:spin}
-\small\setlength{\tabcolsep}{3.6pt}
+\footnotesize\setlength{\tabcolsep}{3.6pt}
 \begin{tabular}{llccccc}
 \toprule
 & & \multicolumn{2}{c}{published} & \multicolumn{2}{c}{certified} & \\
@@ -559,11 +622,13 @@ fast & PID & $\mathbf{1.89}$ & $\mathbf{1.98}$ & $1.66$ & $1.69$ & $0\%$ \\
 \section{Simulations}
 \label{sec:sim}
 
-\paragraph*{Setup} We compare published and certified \spin. Both run
-$200$ iterations with a derivative filter ratio of $10$ and the gain box
-of \cite{SPIN}. Since the box ties the result to the start, every loop
-runs from SIMC on a half-rule model with $\tau_c$ three times its dead
-time (cautious start) and from the same tuning with all gains doubled
+\paragraph*{Setup} Each run has $200$ iterations of Algorithm~1 with its
+defaults. The derivative has a first-order filter with the time
+constant $T_f=T_d/10$, where $T_d=K_d/K_p$. Since the gain box ties the
+result to the start, every loop runs from two starts: SIMC
+\cite{Skogestad2003} on a first-order-plus-dead-time model obtained by
+the half rule, with the closed-loop time constant three times the model
+dead time (cautious start), and the same tuning with all gains doubled
 (bold start). The $19$ test loops are (1) the four plants of
 \cite{SPIN}, $P_1=e^{-s}/((10s+1)(s+1)^3)$, $P_2=1.25e^{-8s}/(5s+1)^4$,
 $P_3=e^{-10s}/((2s+1)(s+1)^3)$ and $P_4=e^{-4s}/(8s+1)^6$, with PI and
@@ -572,87 +637,77 @@ the delay-dominant $e^{-5s}/(s+1)$ and the lag-dominant $e^{-s}/(10s+1)$
 and $e^{-0.5s}/((10s+1)(s+1))$ with PI, and the fast
 $e^{-0.1s}/((s+1)(0.5s+1))$ with PID; (3) the family
 $e^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$ with PID and
-$L_d\in\{0.25,0.5,1,\dots,16\}$ (dead-time share $0.125$ to $0.90$).
-P, I and D act on the error. Let $T_a$ be the dead time plus the lag
-time constants and $T_f$ the derivative filter time constant; the
-controller runs at $T_s=\min(T_a/100,T_f/20)$ for PID and $T_a/1000$ for
-PI, with exactly discretized lags and the delay rounded to whole samples.
+$L_d\in\{0.25,0.5,1,\dots,16\}$. P, I and D act on the error. Let $T_a$
+be the dead time plus the lag time constants (the dead-time share
+$L_d/T_a$ of the family runs from $0.125$ to $0.90$). The controller
+runs at $T_s=\min(T_a/100,T_f/20)$ for PID and $T_a/1000$ for PI, with
+exactly discretized lags and the dead time rounded to whole samples.
 Each record covers $15\,T_a$. All values of $M_s$ are those of this
-digital loop, computed from its exact $L$. Because \spin ends in a cycle
-between a few tunings, we report the most aggressive tuning accepted in
-the last $60$ iterations.
+digital loop, computed from its exact $L$. Performance is measured by
+the load-step IAE, the integral of $|y|$ after a unit step disturbance
+at the plant input. Because \spin ends in a cycle between a few tunings,
+we report the most aggressive tuning accepted in the last $60$
+iterations.
 
 \paragraph*{The certificate (Section~\ref{sec:cert})} For all $146$
-tunings accepted below, a four times longer record showed a remaining
-variation $\le2.8\cdot10^{-5}$, so Assumption~\ref{ass:tail} held with
-$\tau=10^{-3}$; \eqref{eq:srecord} held up to this variation, and every
-$M_s$ lay within its bounds, with $\overline M-M_s\le\eta+\tau+2.8\cdot
-10^{-5}$. Short records give wider bounds that still contain $M_s$
-(Fig.~\ref{fig:record}(b)).
+tunings accepted in the runs of Table~\ref{tab:spin}, a four times
+longer record gave a true remaining variation $\sum_{n>N}|a_n|\le
+2.8\cdot10^{-5}$, so Assumption~\ref{ass:tail} held with $\tau=10^{-3}$,
+and every $M_s$ lay between its bounds, with $\overline M-M_s\le\eta+\tau+2.8\cdot10^{-5}$.
 % confirm_thm1.py, fig_record.py
 
-\paragraph*{The counts (Section~\ref{sec:count})} On the lag-cancelled
-loop, $\Gamma_0$ turned by half a turn between crossings within
-$10^{-6}$, also after a linear map, and \eqref{eq:param} matched a
-direct search for $M_s$ to six digits.
-% check_result1.py, confirm_limits.py
-
-\paragraph*{Certified \spin (Section~\ref{sec:spin}; Table~\ref{tab:spin}, Fig.~\ref{fig:certified})}
+\paragraph*{Certified \spin (Corollary~\ref{cor:spin}, Table~\ref{tab:spin}, Fig.~\ref{fig:certified}(a))}
 \begin{itemize}
 \item \emph{Safety.} Published \spin ended above $M^*=1.7$ on $9$ of the
 $19$ loops from the cautious start (up to $2.01$), on $8$ from the bold
-start (up to $2.09$) and, without the gain box, on $12$ of $18$ (up to
-$2.05$); certified \spin on none (at most $1.69$), as
+start (up to $2.09$) and, without the gain box, on $12$ of $18$;
+certified \spin on none (at most $1.69$), as
 Theorem~\ref{thm:spin}(i) guarantees.
 \item \emph{No trapping.} \eqref{eq:backoff} held along each back-off,
-predicted and true $M_s$ after every band move agreed within $10^{-7}$,
-and runs of rejections had at most $4$ band moves; every loop kept
-accepting, except $L_d=16$ without the box, where the counts lower $K_d$
-every round under either rule.
+and predicted and true $M_s$ agreed within $10^{-7}$ after every band
+move. Every loop kept accepting tunings, except $L_d=16$ without the
+box, where the counts lower $K_d$ in every round under either rule.
 \item \emph{Cost.} The load-step IAE rose by $7.8\%$ on average ($6.4\%$
 from the bold start).
 \end{itemize}
 % designed.py (cert-shape), confirm_thm2.py, analyze_cert.py
 
-\paragraph*{Safety during tuning (Corollary~\ref{cor:safe}, Fig.~\ref{fig:certified}(c))}
-Theorem~\ref{thm:ahead} needs one $T_s$, so we reran all three variants
-with $T_s$ fixed at its value for the start tuning (published \spin then
-ended above $M^*$ on $9$ and $7$ loops). In the $7600$ iterations of the
-$38$ runs, published \spin applied a tuning with $M_s>M^*$ in $4371$
-(up to $M_s=2.38$), certified \spin, which must apply a tuning to reject
-it, in $3398$ (up to $1.98$), and safe \spin in none: all its tunings
-were stable, with $M_s\le1.696$. Every start tuning was accepted. Safe
-\spin ended with $M_s\le1.694$ and the same median load-step IAE as
-certified \spin, but up to twice as large on the fast PID loop. On $456$
-random moves (gains scaled by up to $8$) from accepted tunings,
-\eqref{eq:ahead} held for $339$, all stable, and failed for $117$, all
-unstable; \eqref{eq:aheadbound} exceeded $M_s$ by a median of $0.011$
-and certified $116$ of the $118$ moves with $M_s\le M^*$.
+\paragraph*{Safety during tuning (Corollary~\ref{cor:safe}, Fig.~\ref{fig:certified}(b))}
+Theorem~\ref{thm:ahead} compares controllers at one $T_s$, so here all
+three variants ran with $T_s$ fixed at its value for the start tuning,
+as in a real controller. In the $7600$ iterations of the $38$ runs, published
+\spin applied a tuning with $M_s>M^*$ in $4371$ (up to $M_s=2.38$),
+certified \spin, which must apply a tuning to reject it, in $3398$ (up
+to $1.98$), and safe \spin in none: all its tunings were stable, with
+$M_s\le1.696$. Every start tuning was accepted. Safe \spin ended with
+$M_s\le1.694$ and the same median load-step IAE as certified \spin, but
+up to twice as large on the fast PID loop. On $456$ random moves (gains
+scaled by up to $8$) from accepted tunings, \eqref{eq:ahead} held for
+$339$, all stable, and failed for $117$, all unstable;
+\eqref{eq:aheadbound} exceeded $M_s$ by a median of $0.011$ and
+certified $116$ of the $118$ moves with $M_s\le M^*$.
 % run_safe.sh, analyze_safe.py, confirm_thm3.py
 
-\paragraph*{Limit values under the certificate} With every limit $1/2$,
-certified \spin still stayed below $M^*$ (at most $1.68$), but the counts
-did the rejecting (the certificate $14$ and $8$ times in the last $60$
-iterations, against $151$ and $172$): $2$ and $3$ loops accepted no
-tuning, and the load-step IAE rose by a median of $11$ and $16\%$, up to
-sixteenfold (fast PID, $M_s=1.21$). Raising $\bar N_1$ to $1$ changed
-nothing, since $N_1$ never lay in $(3/4,1]$. Under the certificate, the
-limits set performance, not robustness.
+\paragraph*{Limit values under the certificate} With every limit
+$\bar N_k=1/2$, certified \spin still ended below $M^*$, but the counts
+did most of the rejecting: $2$ and $3$ loops (cautious, bold start)
+accepted no tuning, and the median load-step IAE rose by $11$ and $16\%$. Under the certificate, the limits set
+performance, not robustness.
 % run_limits.sh, analyze_limits.py
 
 \section{Conclusion}
 
 The setpoint step that a model-free tuner applies anyway certifies the
-robustness of the loop it tests: one finite record gives two-sided bounds
-on $M_s$ without a model and without a dedicated experiment, and so does
-every logged setpoint change made from rest. As an acceptance test, the
-certificate makes any iterative tuner accept only tunings with $M_s\le
-M^*$, a uniform back-off always restores acceptance, and certifying each
-move before it is applied keeps every applied tuning below $M^*$. For \spin, the
-turn counts measure setpoint crossings and bound $M_s$ only on special
-loops; with the certificate they keep shaping the tuning, and the
-certificate decides what is accepted. The theorems assume a linear loop
-and a long enough record; noise and real loops are left to a follow-up.
+robustness of the loop it tests: one finite record gives two-sided
+bounds on $M_s$ without a model or a dedicated experiment, and so does
+every logged setpoint change made from rest. The same record certifies
+the stability and $M_s$ of the next tuning before it is applied. With
+these certificates, any iterative tuner accepts only tunings with
+$M_s\le M^*$, a uniform back-off always restores acceptance, and no
+applied tuning exceeds $M^*$. For \spin, the turn counts bound $M_s$
+only on special loops; they keep shaping the tuning, and the
+certificates decide what is accepted and applied. The theorems assume a linear loop and a
+long enough record; noise and real loops are left to a follow-up.
 Scripts: \url{https://github.com/ottapav/robopid-simulator}.
 
 {\footnotesize
@@ -709,12 +764,12 @@ vol.~48, no.~11, pp.~2776--2790, 2012.
 
 \bibitem{vanHeusden2007} K.~van Heusden, A.~Karimi, and D.~Bonvin,
 ``Data-driven estimation of the infinity norm of a dynamical system,'' in
-\emph{Proc. 46th IEEE Conf. Decision and Control}, New Orleans, 2007.
+\emph{Proc. 46th IEEE Conf. Decision and Control}, 2007.
 
 \bibitem{Garcia2003} D.~Garcia, A.~Karimi, and R.~Longchamp, ``Infinity norm
 measurement of sensitivity function based on limit cycles in a
 closed-loop experiment,'' in \emph{Proc. European Control Conf.},
-Cambridge, UK, 2003, pp.~2073--2078.
+2003, pp.~2073--2078.
 
 \bibitem{Tu2017} S.~Tu, R.~Boczar, and B.~Recht, ``On the approximation of
 Toeplitz operators for nonparametric $\mathcal H_\infty$-norm
@@ -735,7 +790,7 @@ pp.~1523--1527, 1993.
 
 \bibitem{Berkenkamp2016} F.~Berkenkamp, A.~P.~Schoellig, and A.~Krause,
 ``Safe controller optimization for quadrotors with Gaussian processes,''
-in \emph{Proc. IEEE Int. Conf. Robotics and Automation}, Stockholm, 2016,
+in \emph{Proc. IEEE Int. Conf. Robotics and Automation}, 2016,
 pp.~491--496.
 
 \bibitem{GyoriLadas1991} I.~Gy\H{o}ri and G.~Ladas, \emph{Oscillation

@@ -30,7 +30,7 @@ figures and tables rebuild without rerunning SPIN.
 | Theorem 2(ii) along the uniform back-off; Prop. 2 | `python3 confirm_thm2.py` -> `thm2_points.json` |
 | Table I, numbers of Section IV, load-step IAE | `python3 analyze_cert.py` -> `summary_cert.json` |
 | Fig. 1 | `python3 fig_record.py` |
-| Fig. 3 | `python3 fig_certified.py` (panel (c) from `traj_P3PID.json`, `python3 traj_P3PID.py`) |
+| Fig. 3 | `python3 fig_certified.py` (panel (b) from `traj_P3PID.json`, `python3 traj_P3PID.py`) |
 | Safety during tuning (Sec. 5, Corollary 2): published, certified and safe SPIN, gain box, fixed T_s, both starts | `bash run_safe.sh` -> `safe1_*.jsonl`, `safe2_*.jsonl`; then `python3 analyze_safe.py` -> `summary_safe.json` |
 | Theorem 3 on 456 random moves from the accepted tunings of safe SPIN | `python3 confirm_thm3.py` -> `thm3_points.json` |
 | Owner of the peak | `owner_box.json` (`OWN_IN=box python3 owner_designed.py`) |

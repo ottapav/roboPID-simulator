@@ -30,8 +30,8 @@ for c0 in range(0, len(ks), 40):
     for j in range(len(kk)):
         N2[c0 + j] = counts_old(E[::step, j], DT, DELTA)
 
-fig = plt.figure(figsize=(3.45, 3.3))
-gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.0], hspace=0.62, wspace=0.42)
+fig = plt.figure(figsize=(3.45, 2.65))
+gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.0], hspace=0.8, wspace=0.42)
 a = fig.add_subplot(gs[0, :]); b = fig.add_subplot(gs[1, 0]); c = fig.add_subplot(gs[1, 1])
 
 # (a) robustness from the limits: the counts at delta = 0.02 in turns, each band with its published limit
@@ -84,15 +84,14 @@ c.text(Z[0, k1] + 0.1, Z[1, k1], "start", fontsize=6.3, color=INK2, va="center")
 c.plot(0, 0, "+", color=INK, ms=6, mew=1.0)
 for n, i in enumerate(zc, 1):
     c.plot(*Z[:, i], "o", ms=4.5, color=INK, zorder=4)
-    c.text(Z[0, i] + (0.16 if n == 1 else -0.16), Z[1, i], f"{n}", fontsize=7, color=INK, ha="center", va="center")
+    c.text(Z[0, i] + 0.2, Z[1, i] + (0.12 if n == 1 else -0.12), f"{n}", fontsize=7, color=INK, ha="center", va="center")
 m = (zc[0] + zc[1]) // 2; u = Z[:, m] / np.hypot(*Z[:, m])
 c.text(*(Z[:, m] + 0.25 * u), "$\\frac{1}{2}$ turn", fontsize=6.5, color=INK, ha="center", va="center")
 Nk = counts_old(e, DT, DELTA)
-c.text(0.0, 0.98, f"count\n$N_0={Nk[0]:.2f}$", transform=c.transAxes, fontsize=6.5, color=INK2, va="top")
 c.set_aspect("equal"); c.set_xlim(-1.15, 1.15); c.set_ylim(-1.15, 1.15); c.axis("off")
-c.set_title("(c) portrait $\\Gamma_0$", fontsize=8, color=INK)
+c.set_title(f"(c) $\\Gamma_0$, $N_0={Nk[0]:.2f}$", fontsize=8, color=INK)
 
-fig.subplots_adjust(left=0.14, right=0.98, bottom=0.125, top=0.9)
+fig.subplots_adjust(left=0.14, right=0.98, bottom=0.14, top=0.9)
 fig.savefig("fig_stair.pdf"); fig.savefig("fig_stair.png", dpi=200)
 print("crossings in (b):", len(zc), " N0 =", round(Nk[0], 3))
 ang = np.unwrap(np.arctan2(Y[1], Y[0]))
