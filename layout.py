@@ -18,6 +18,7 @@ GAIN_LOG_MIN = math.log10(GAIN_BOX[0])
 GAIN_LOG_MAX = math.log10(GAIN_BOX[1])
 SLIDER_MARKS = gain_slider_marks(*GAIN_BOX)
 GRAPH_STYLE = {'height': '300px'}
+HISTORY_GRAPH_STYLE = {'height': '260px'}
 GRAPH_CONFIG = {
     'displayModeBar': True,
     'displaylogo': False,
@@ -381,12 +382,11 @@ def _gains_history_card() -> dbc.Card:
     return dbc.Card([
         dbc.CardHeader(html.Strong('Tuning History', style=CARD_TITLE_STYLE), style=CARD_HEADER_STYLE),
         dbc.CardBody([
-            dbc.Row([
-                dbc.Col(dcc.Graph(id='graph-gains-history', style=GRAPH_STYLE,
-                                  config=GRAPH_CONFIG), width=12, md=6),
-                dbc.Col(dcc.Graph(id='graph-ms-history', style=GRAPH_STYLE,
-                                  config=GRAPH_CONFIG), width=12, md=6),
-            ]),
+            # One below the other, on the same x range (iteration), so that zooming or
+            # panning one plot moves the other (clientside callback in callbacks.py).
+            dcc.Graph(id='graph-gains-history', style=HISTORY_GRAPH_STYLE, config=GRAPH_CONFIG),
+            dcc.Graph(id='graph-ms-history', style=HISTORY_GRAPH_STYLE, config=GRAPH_CONFIG),
+            html.Div(id='history-sync-dummy', style={'display': 'none'}),
         ]),
     ])
 

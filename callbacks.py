@@ -584,6 +584,14 @@ def _build_time_fig(sigs: dict, ref: dict | None = None,
     return fig
 
 
+def _iteration_range(it):
+    """The same x range for both history plots, so that their axes line up."""
+    it = list(it) if it is not None else []
+    if not it:
+        return None
+    return [min(it) - 0.02 * (max(it) - min(it)) - 0.5, max(it) + 0.02 * (max(it) - min(it)) + 0.5]
+
+
 def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
     """Gain trajectory plot. A trajectory passed as None is omitted entirely —
     gains the selected controller structure doesn't use have a base of 0, which
@@ -603,6 +611,7 @@ def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
     fig.update_layout(
         title={'text': 'Tuning History', 'font': {'size': 11}},
         xaxis_title='iteration', yaxis_title='gain value', yaxis_type='log',
+        xaxis_range=_iteration_range(it),
         margin={'l': 40, 'r': 8, 't': 38, 'b': 50},
         legend={'font': {'size': 10}, 'orientation': 'h', 'y': -0.3, 'x': 0},
         plot_bgcolor='white',
@@ -614,7 +623,7 @@ VARIANT_LABEL = {'basic': 'SPIN', 'certified': 'certified SPIN', 'safe': 'safe S
 
 
 def _build_ms_history_fig(it=None, ms=None, upper=None, Mstar=MSTAR,
-                          variant='basic', accepted=None, cap: float = 4.0) -> go.Figure:
+                          variant='basic', accepted=None, cap: float = 4.0, x_range=None) -> go.Figure:
     """Robustness of the tuning applied in each iteration.
 
     ms: the exact M_s of the simulated loop, inf when it is unstable (the
@@ -665,6 +674,7 @@ def _build_ms_history_fig(it=None, ms=None, upper=None, Mstar=MSTAR,
     fig.update_layout(
         title={'text': title, 'font': {'size': 11}},
         xaxis_title='iteration', yaxis_title='M_s',
+        xaxis_range=x_range if x_range is not None else _iteration_range(it),
         yaxis_range=[0.9, cap + 0.15],
         margin={'l': 40, 'r': 8, 't': 52, 'b': 50},
         legend={'font': {'size': 9}, 'orientation': 'h', 'y': -0.3, 'x': 0},
@@ -676,6 +686,37 @@ def _build_ms_history_fig(it=None, ms=None, upper=None, Mstar=MSTAR,
 # ── Callbacks registration ────────────────────────────────────────────────────
 
 def register_callbacks(app):
+
+    # ── Tuning-history plots share the iteration axis ────────────────────
+    # The two plots are stacked; a zoom, pan or autorange on one is copied to the other.
+    # The range is set only if it differs, which stops the two from echoing each other.
+    app.clientside_callback(
+        """
+        function(a, b) {
+            var trig = window.dash_clientside.callback_context.triggered;
+            if (!trig || !trig.length) { return window.dash_clientside.no_update; }
+            var from = trig[0].prop_id.split('.')[0];
+            var to = (from === 'graph-gains-history') ? 'graph-ms-history' : 'graph-gains-history';
+            var ev = (from === 'graph-gains-history') ? a : b;
+            var q = function(i) { return document.querySelector('#' + i + ' .js-plotly-plot'); };
+            var src = q(from), dst = q(to);
+            if (!ev || !src || !dst || !window.Plotly || !dst.layout) {
+                return window.dash_clientside.no_update;
+            }
+            var changed = Object.keys(ev).some(function(k) { return k.indexOf('xaxis.') === 0; });
+            if (!changed || !src.layout.xaxis.range) { return window.dash_clientside.no_update; }
+            var r = src.layout.xaxis.range, d = dst.layout.xaxis.range || [];
+            if (d[0] !== r[0] || d[1] !== r[1]) {
+                window.Plotly.relayout(dst, {'xaxis.range': [r[0], r[1]]});
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output('history-sync-dummy', 'children'),
+        Input('graph-gains-history', 'relayoutData'),
+        Input('graph-ms-history', 'relayoutData'),
+        prevent_initial_call=True,
+    )
 
     # ── 0a. Battery preset buttons ───────────────────────────────────────
     # Fills tau/K/L from docs/JPC26_basic/main.tex's P1-P4 battery; the
@@ -1234,7 +1275,8 @@ def register_callbacks(app):
                           f'Tuning… iter {i}/{n_iter} — {MANUAL_READING[row]}',
                           p_time, p_f1, p_f2, p_f3, p_gains_hist,
                           warn_children,
-                          _build_ms_history_fig(ms_iter, ms_true, ms_upper, Mstar, variant, ms_acc)))
+                          _build_ms_history_fig(ms_iter, ms_true, ms_upper, Mstar, variant, ms_acc,
+                                                x_range=_iteration_range(hist_iter))))
 
         # The multiplier box, kept in one place: pid_tuning searches it and
         # diagnose_run reads which of its bounds the run ended on.
@@ -1302,4 +1344,5 @@ def register_callbacks(app):
         return (out_Kp_log, _log_gain(Ki_traj[-1]), out_Kd_log, status,
                 fig_gains_hist, False, no_update,
                 _render_findings(gate_warnings + run_findings),
-                _build_ms_history_fig(ms_iter, ms_true, ms_upper, Mstar, variant, ms_acc))
+                _build_ms_history_fig(ms_iter, ms_true, ms_upper, Mstar, variant, ms_acc,
+                                                x_range=_iteration_range(range(len(Ki_traj)))))
