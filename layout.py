@@ -278,6 +278,42 @@ def _controller_card(default_ctype, default_limits, default_niter,
                       ('Kmin', _box_input('input-kmin', default_kmin)),
                       ('Kmax', _box_input('input-kmax', default_kmax))),
 
+            # SPIN variant (docs/ECC27_certified_SPIN): published SPIN, or the
+            # certified variants that read a bound on M_s from each step record.
+            dbc.Row([
+                dbc.Col(html.Small('Variant:', style={'color': '#777'}),
+                        width='auto', style={'width': PARAM_GROUP_LABEL_WIDTH}),
+                dbc.Col(dcc.Dropdown(
+                    id='dropdown-variant',
+                    options=[
+                        {'label': 'Basic SPIN', 'value': 'basic',
+                         'title': 'SPIN as published: the turn counts alone decide.'},
+                        {'label': 'Certified SPIN', 'value': 'certified',
+                         'title': 'Accept a tuning only if the bound on M_s certified '
+                                  'from its own step record is at most M*.'},
+                        {'label': 'Safe SPIN', 'value': 'safe',
+                         'title': 'Certify every move before applying it: no tuning '
+                                  'with M_s above M* is ever applied.'},
+                    ],
+                    value='basic', clearable=False, searchable=False,
+                    style={'minWidth': '150px', 'fontSize': '12px'},
+                ), width='auto'),
+                dbc.Col(html.Div([
+                    html.Small('M*', style={'color': '#777'},
+                               title='Target sensitivity peak of certified and safe SPIN'),
+                    dcc.Input(id='input-mstar', type='number', value=1.7,
+                              debounce=True, step=0.05, min=1.05, max=5.0,
+                              style={'width': '60px'}),
+                ], className='d-flex align-items-center', style={'gap': '4px'}),
+                        width='auto'),
+                dbc.Col(html.Small('ⓘ', style={'color': '#777', 'cursor': 'help'},
+                                   title='Certified and safe SPIN put the derivative on the '
+                                         'error, so that the step record is the step response '
+                                         'of the sensitivity function; the bound on M_s is read '
+                                         'from that record alone, without a model.'),
+                        width='auto'),
+            ], align='center', className='mb-2 g-2'),
+
             # Tuner settings
             _param_row('Settings',
                       ('Trunc ε', _tuner_param_input('input-eps', default_eps, 0.01)),
@@ -345,8 +381,12 @@ def _gains_history_card() -> dbc.Card:
     return dbc.Card([
         dbc.CardHeader(html.Strong('Tuning History', style=CARD_TITLE_STYLE), style=CARD_HEADER_STYLE),
         dbc.CardBody([
-            dcc.Graph(id='graph-gains-history', style=GRAPH_STYLE,
-                      config=GRAPH_CONFIG),
+            dbc.Row([
+                dbc.Col(dcc.Graph(id='graph-gains-history', style=GRAPH_STYLE,
+                                  config=GRAPH_CONFIG), width=12, md=6),
+                dbc.Col(dcc.Graph(id='graph-ms-history', style=GRAPH_STYLE,
+                                  config=GRAPH_CONFIG), width=12, md=6),
+            ]),
         ]),
     ])
 

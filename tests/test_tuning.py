@@ -8,7 +8,7 @@ import pytest
 from conftest import ATOL, RTOL, golden
 
 from core.features import standard_pid_features
-from core.tuning import MANUAL_READING, pid_tuning, triangular_rule
+from core.tuning import MANUAL_READING, CERT_ROWS, pid_tuning, triangular_rule
 
 
 def _feats(n0, n1, n2):
@@ -73,7 +73,9 @@ def test_every_rule_row_has_a_manual_reading():
     rows = {_rule(_feats(9, 9, 9), True)[3], _rule(_feats(9, 9, 9), False)[3],
             _rule(_feats(0, 9, 9), False)[3], _rule(_feats(0, 0, 9), False)[3],
             _rule(_feats(0, 0, 0), False)[3]}
-    assert rows == set(MANUAL_READING)
+    # The rule's rows plus the rows only certified / safe SPIN emit.
+    assert rows | CERT_ROWS == set(MANUAL_READING)
+    assert not rows & CERT_ROWS
 
 
 def test_rule_respects_its_bounds():

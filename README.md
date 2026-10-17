@@ -51,6 +51,36 @@ RoboPID is built as an educational algorithm simulator for exploring PID
 tuning behavior interactively, making the effect of each gain and each
 tuning pass visible in real time.
 
+## SPIN variants: basic, certified, safe
+
+The **Variant** selector in the Controller card chooses how a tuning is
+accepted (method: [`docs/ECC27_certified_SPIN`](docs/ECC27_certified_SPIN)):
+
+- **Basic SPIN**: the method as published; the turn counts alone decide.
+- **Certified SPIN**: the setpoint step the tuner applies anyway certifies the
+  sensitivity peak M_s. The error increments after a unit step are the impulse
+  response of S, so each record gives a certified upper bound on M_s without a
+  model. A tuning the counts accept is accepted only if that bound is at most
+  the target **M\*** (default 1.7); otherwise the gains are lowered (the band
+  move predicted to lower M_s, else a uniform back-off). The result ends with
+  M_s ≤ M\*, but fragile tunings are still applied before they are rejected.
+- **Safe SPIN**: every move is certified *before* it is applied: the record of
+  the running controller certifies that the proposed one stabilizes the plant
+  with M_s ≤ M\*. From the first certified tuning on, no applied tuning has
+  M_s above M\*.
+
+Certified and safe SPIN put the derivative on the error (Basic keeps it on the
+output), since only then is the error record the step response of S. They
+assume a linear, noise-free record: a record with actuator saturation or output
+noise is not certified. The unrecorded tail is bounded by τ = 10⁻³, raised to
+twice the variation of the last tenth of the record when that is larger.
+
+The **Robustness** plot next to the Tuning History shows, for every iteration,
+the exact M_s of the applied tuning (computed from the model, which only a
+simulator knows), the bound certified from the record, and the target M\*; it
+counts the iterations that applied a tuning above M\*. The logic lives in
+`core/certificate.py` and `pid_tuning(..., variant=...)` in `core/tuning.py`.
+
 ## Scope: what the method can tune
 
 The tuner searches for a stability boundary — it raises gains until a band
@@ -141,7 +171,9 @@ says so.
 - Interactive Dash GUI: plant/controller inputs, Kp/Ki/Kd log-scale gain
   sliders (0.001-10, only the gains relevant to the selected controller
   type are shown), live step-response plot, the three Pachner-plot
-  (Γ0/Γ1/Γ2) phase planes, and a gain-history plot of the last Tune run
+  (Γ0/Γ1/Γ2) phase planes, a gain-history plot of the last Tune run, and a
+  robustness plot (M_s of every applied tuning against the target M\*)
+- Three SPIN variants: basic, certified and safe (see *SPIN variants*)
 - The paper's four battery plants P1–P4 as one-click presets in the Plant
   card; they fill τ/K/L and leave the controller alone
 - Live-editable tuning constants next to Tune: the Γ0/Γ1/Γ2 limits, the gain
@@ -263,7 +295,8 @@ roboPID-simulator/
 │   ├── params.py           # Shared constants + plant-parameter parsing
 │   ├── plant.py            # FOPTD plant transfer function + step response
 │   ├── pid.py              # Closed-loop PID simulation (linear + anti-windup)
-│   ├── tuning.py           # Triangular tuning rule (paper Table 1)
+│   ├── tuning.py           # Triangular tuning rule (paper Table 1) + certified/safe variants
+│   ├── certificate.py      # Certified M_s from one step record; certify a tuning before applying it
 │   ├── features.py         # Pachner plots Γ0/Γ1/Γ2 + encirclement counts
 │   ├── signals.py          # Loop signals, settling guard, stability screen
 │   ├── admissibility.py    # Pre-run gates + post-run diagnostics (see Scope)

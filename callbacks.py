@@ -39,6 +39,7 @@ from core.params import (
 from core.pid import pid_response_awup, pid_response_linear
 from core.signals import auto_grid
 from core.tuning import pid_tuning, MANUAL_READING
+from core.certificate import true_Ms, MSTAR
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'robopid.config')
 
@@ -269,19 +270,24 @@ class SimParams:
     dist_a: float
     dist_b: float
     warning: str
+    # Derivative on the output ('y', the app's default) or on the error ('e',
+    # which certified and safe SPIN need: only then is the error record the
+    # step response of the sensitivity function).
+    dtype: str = 'y'
 
     @property
     def sim_args(self) -> tuple:
         """Positional arguments for _simulate/_patch_figures."""
         return (self.tau, self.K, self.L, self.Tsim, self.Ts,
                 self.Kp, self.Ki, self.Kd, self.ctype, *self.Nbar,
-                self.delta, self.eps, self.cfg, self.dist_a, self.dist_b)
+                self.delta, self.eps, self.cfg, self.dist_a, self.dist_b, self.dtype)
 
 
 def _read_inputs(grid_store, ctype, tau_str, K_val, L_val,
                  Kp_log, Ki_log, Kd_log,
                  nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
-                 noise_enabled, noise_std_raw, noise_tau_raw) -> SimParams:
+                 noise_enabled, noise_std_raw, noise_tau_raw,
+                 variant: str | None = None) -> SimParams:
     tau, tau_notes = parse_tau(tau_str)
     K = _f(K_val, 1.0)
     L = _deadtime(L_val)
@@ -298,11 +304,17 @@ def _read_inputs(grid_store, ctype, tau_str, K_val, L_val,
                    _noise_coeffs(noise_enabled, noise_std_raw, noise_tau_raw, Ts))),
         warning=_build_warning(tau_notes, grid.get('notes', ()), K_val, L_val,
                                nbar0_raw, nbar1_raw, nbar2_raw),
+        dtype=_dtype_for(variant),
     )
 
 
+def _dtype_for(variant) -> str:
+    """Certified and safe SPIN put the derivative on the error (see SimParams)."""
+    return 'e' if variant in ('certified', 'safe') else 'y'
+
+
 def _simulate(tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
-             delta, eps, cfg, dist_a, dist_b):
+             delta, eps, cfg, dist_a, dist_b, dtype='y'):
     """Run simulation and return (feats, sigs)."""
     Kd_eff = 0.0 if ctype in ('I', 'PI') else Kd
     Ki_eff = Ki  # I is active in I, PI, and PID
@@ -311,7 +323,7 @@ def _simulate(tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
     desc = standard_pid_features(Nbar=(Nbar0, Nbar1, Nbar2))
     feats, _, _, sigs = loop_response_features(
         desc,
-        tau, K, L, Ts, Kp_eff, Ki_eff, Kd_eff, dtype='y', Tsim=Tsim,
+        tau, K, L, Ts, Kp_eff, Ki_eff, Kd_eff, dtype=dtype, Tsim=Tsim,
         simtype=int(cfg.get('simtype', 0)),
         minu=float(cfg.get('minu', -1.0)),
         maxu=float(cfg.get('maxu', 1.0)),
@@ -435,11 +447,11 @@ def _patches_from(feats, sigs, ref=None, spin_label=None):
 
 
 def _patch_figures(tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype, Nbar0, Nbar1, Nbar2,
-                   delta, eps, cfg, dist_a, dist_b):
+                   delta, eps, cfg, dist_a, dist_b, dtype='y'):
     """Simulate once and return (patch_f1, patch_f2, patch_f3, patch_time)."""
     feats, sigs = _simulate(
         tau, K, L, Tsim, Ts, Kp, Ki, Kd, ctype,
-        Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b)
+        Nbar0, Nbar1, Nbar2, delta, eps, cfg, dist_a, dist_b, dtype)
     ref = _amigo_reference(tau, K, L, Tsim, Ts, ctype, cfg)
     spin_label = _gains_label('SPIN', ctype, Kp, Ki, Kd)
     return _patches_from(feats, sigs, ref, spin_label)
@@ -598,6 +610,69 @@ def _build_gains_history_fig(Kp_traj, Ki_traj, Kd_traj, it=None) -> go.Figure:
     return _style_axes(fig)
 
 
+VARIANT_LABEL = {'basic': 'SPIN', 'certified': 'certified SPIN', 'safe': 'safe SPIN'}
+
+
+def _build_ms_history_fig(it=None, ms=None, upper=None, Mstar=MSTAR,
+                          variant='basic', accepted=None, cap: float = 4.0) -> go.Figure:
+    """Robustness of the tuning applied in each iteration.
+
+    ms: the exact M_s of the simulated loop, inf when it is unstable (the
+    simulator knows the plant; a real tuner would not). upper: the certified
+    bound on M_s that certified and safe SPIN read from each record, without the
+    model (None or inf where the record was not certified). accepted: per
+    iteration, whether the record certified M_s <= M*; safe SPIN guarantees
+    M_s <= M* from the first such iteration on, so the iterations before it
+    are shaded. Values above cap (and unstable loops) are drawn at cap.
+    """
+    it, ms = list(it or []), list(ms or [])
+    acc = list(accepted or [])
+    n_unst = sum(not np.isfinite(m) for m in ms)
+    n_above = sum(m > Mstar for m in ms)
+    first = next((k for k, a in enumerate(acc) if a), None)
+    clip = [min(m, cap) for m in ms]
+    data = [go.Scatter(x=it, y=clip, mode='lines', name='M_s (model)',
+                       line={'color': '#2a78d6', 'width': 2})]
+    above = [(x, c) for x, c, m in zip(it, clip, ms) if np.isfinite(m) and m > Mstar]
+    if above:
+        data.append(go.Scatter(x=[a[0] for a in above], y=[a[1] for a in above],
+                               mode='markers', name='above M*',
+                               marker={'color': '#d94f2a', 'size': 5}))
+    unst = [x for x, m in zip(it, ms) if not np.isfinite(m)]
+    if unst:
+        data.append(go.Scatter(x=unst, y=[cap] * len(unst), mode='markers', name='unstable',
+                               marker={'color': '#d94f2a', 'size': 8, 'symbol': 'x'}))
+    if variant != 'basic' and upper is not None:
+        data.append(go.Scatter(
+            x=it, y=[min(u, cap) if u is not None and np.isfinite(u) else None for u in upper],
+            mode='markers', name='certified bound',
+            marker={'color': '#333', 'size': 6, 'symbol': 'line-ew-open'}))
+    fig = go.Figure(data=data)
+    if variant == 'safe' and it and first is not None and first > 0:
+        fig.add_vrect(x0=it[0] - 0.5, x1=it[first] - 0.5, fillcolor='#bbb', opacity=0.25,
+                      line_width=0)
+    fig.add_hline(y=Mstar, line={'dash': 'dash', 'color': '#777', 'width': 1},
+                  annotation_text=f'M* = {fmt2(Mstar)}', annotation_position='top right',
+                  annotation_font_size=10)
+    title = f'Robustness · {VARIANT_LABEL.get(variant, "SPIN")}'
+    if ms:
+        line = f'applied M_s > M*: {n_above} of {len(ms)}'
+        if n_unst:
+            line += f' ({n_unst} unstable)'
+        if variant == 'safe' and first is not None:
+            line += f'; once certified: {sum(m > Mstar for m in ms[first:])}'
+        title += f'<br><span style="font-size:10px">{line}</span>'
+    fig.update_layout(
+        title={'text': title, 'font': {'size': 11}},
+        xaxis_title='iteration', yaxis_title='M_s',
+        yaxis_range=[0.9, cap + 0.15],
+        margin={'l': 40, 'r': 8, 't': 52, 'b': 50},
+        legend={'font': {'size': 9}, 'orientation': 'h', 'y': -0.3, 'x': 0},
+        plot_bgcolor='white',
+    )
+    return _style_axes(fig)
+
+
 # ── Callbacks registration ────────────────────────────────────────────────────
 
 def register_callbacks(app):
@@ -738,14 +813,18 @@ def register_callbacks(app):
         Output('input-niter', 'value', allow_duplicate=True),
         Output('guard-mode', 'value', allow_duplicate=True),
         Output('graph-gains-history', 'figure', allow_duplicate=True),
+        Output('graph-ms-history', 'figure', allow_duplicate=True),
+        Output('input-mstar', 'value', allow_duplicate=True),
         Input('btn-reset-tuner', 'n_clicks'),
         State('dropdown-ctype', 'value'),
+        State('dropdown-variant', 'value'),
         prevent_initial_call=True,
     )
-    def reset_tuner(n_clicks, ctype):
+    def reset_tuner(n_clicks, ctype, variant):
         niter = N_ITER_BY_CTYPE.get(ctype, N_ITER_BY_CTYPE['PID'])
         empty_history = _build_gains_history_fig([], [], [])
-        return (*NBAR, *GAIN_BOX, EPS, BETA, niter, True, empty_history)
+        return (*NBAR, *GAIN_BOX, EPS, BETA, niter, True, empty_history,
+                _build_ms_history_fig(variant=variant or 'basic'), MSTAR)
 
     # ── 0f. Gain slider range follows the gain box [Kmin, Kmax] ────────────
     # The Kp/Ki/Kd sliders are log-scale over [Kmin, Kmax] (paper Section 6's
@@ -819,15 +898,18 @@ def register_callbacks(app):
         # none of which move the grid. _resolve_grid's fallback is only there to
         # cover the initial paint, before commit_grid has written the store.
         State('grid-store', 'data'),
+        # The SPIN variant moves the derivative between output and error.
+        Input('dropdown-variant', 'value'),
         prevent_initial_call=False,
     )
     def update_figures_full(ctype, nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
                             Kp_log, Ki_log, Kd_log, tau_str, K_val, L_val,
-                            noise_enabled, noise_std_raw, noise_tau_raw, grid_store):
+                            noise_enabled, noise_std_raw, noise_tau_raw, grid_store,
+                            variant=None):
         p = _read_inputs(grid_store, ctype, tau_str, K_val, L_val,
                          Kp_log, Ki_log, Kd_log,
                          nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
-                         noise_enabled, noise_std_raw, noise_tau_raw)
+                         noise_enabled, noise_std_raw, noise_tau_raw, variant)
         feats, sigs = _simulate(*p.sim_args)
 
         figs_f = [_build_feature_fig(feats[i], i) for i in range(3)]
@@ -860,12 +942,13 @@ def register_callbacks(app):
         State('input-eps', 'value'),
         State('input-delta', 'value'),
         State('tuning-active', 'data'),
+        State('dropdown-variant', 'value'),
         prevent_initial_call=True,
     )
     def update_figures_patch(Kp_log, Ki_log, Kd_log, tau_str, K_val, L_val,
                              noise_enabled, noise_std_raw, noise_tau_raw, grid_store,
                              ctype, nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
-                             tuning_active):
+                             tuning_active, variant=None):
         # A Tune run streams slider values back through set_progress, and those
         # sliders are Inputs here. Without this gate every progress push would
         # trigger a full simulation in this process whose figure output then
@@ -888,7 +971,7 @@ def register_callbacks(app):
         p = _read_inputs(grid_store, ctype, tau_str, K_val, L_val,
                          Kp_log, Ki_log, Kd_log,
                          nbar0_raw, nbar1_raw, nbar2_raw, eps_raw, delta_raw,
-                         noise_enabled, noise_std_raw, noise_tau_raw)
+                         noise_enabled, noise_std_raw, noise_tau_raw, variant)
         return (*_patch_figures(*p.sim_args), p.warning)
 
     # ── 2. Controller-type gain-slider visibility ──────────────────────────
@@ -978,6 +1061,7 @@ def register_callbacks(app):
         Output('tune-error-modal', 'is_open'),
         Output('tune-error-body', 'children'),
         Output('tune-findings', 'children'),
+        Output('graph-ms-history', 'figure'),
         Input('btn-tune', 'n_clicks'),
         State('slider-kp', 'value'),
         State('slider-ki', 'value'),
@@ -999,6 +1083,8 @@ def register_callbacks(app):
         State('input-kmin', 'value'),
         State('input-kmax', 'value'),
         State('grid-store', 'data'),
+        State('dropdown-variant', 'value'),
+        State('input-mstar', 'value'),
         background=True,
         progress=[
             Output('slider-kp', 'value', allow_duplicate=True),
@@ -1011,6 +1097,7 @@ def register_callbacks(app):
             Output('graph-f3', 'figure', allow_duplicate=True),
             Output('graph-gains-history', 'figure', allow_duplicate=True),
             Output('tune-findings', 'children', allow_duplicate=True),
+            Output('graph-ms-history', 'figure', allow_duplicate=True),
         ],
         running=[
             (Output('btn-tune', 'disabled'), True, False),
@@ -1022,7 +1109,12 @@ def register_callbacks(app):
     def run_tune(set_progress, n_clicks, Kp_log, Ki_log, Kd_log,
                  tau_str, K_val, L_val, noise_enabled, noise_std_raw, noise_tau_raw,
                  ctype, Nbar0, Nbar1, Nbar2, niter_val, eps_val, delta_val, beta_val,
-                 kmin_val, kmax_val, grid_store):
+                 kmin_val, kmax_val, grid_store, variant='basic', mstar_val=None):
+        variant = variant or 'basic'
+        Mstar = _f(mstar_val, MSTAR)
+        if not (np.isfinite(Mstar) and Mstar > 1.0):
+            Mstar = MSTAR
+        dtype = _dtype_for(variant)
         tau, tau_notes = parse_tau(tau_str)
         # nan, not 1.0, as the fallback: an unreadable K is a thing to refuse,
         # not to substitute for. The figure callbacks can afford to draw
@@ -1055,12 +1147,16 @@ def register_callbacks(app):
             return (no_update, no_update, no_update,
                     _status_suffix(verdict.blocking).strip() or '⚠ Not tunable',
                     no_update, True, _render_findings(verdict.blocking, prefix=''),
-                    '')
+                    '', no_update)
 
         # Advisory findings ride along with the run: shown from the first
         # progress push, then re-emitted alongside whatever the run itself
         # turned out to say.
         gate_warnings = list(verdict.warnings)
+        if variant != 'basic' and noise_enabled:
+            gate_warnings.append(
+                'Certified/safe SPIN assume noise-free records: with output noise '
+                'the certificate is not guaranteed, and noisy records are not accepted.')
         warn_children = _render_findings(gate_warnings)
 
         # The grid the user is looking at, so a tuning run scores the same
@@ -1081,6 +1177,8 @@ def register_callbacks(app):
         MIN_PUSH_INTERVAL = 0.08  # seconds; well under interval=150ms poll above
         hist_iter, hist_kp, hist_ki, hist_kd = [], [], [], []
         last_feats = [None]
+        ms_iter, ms_true, ms_upper, ms_acc = [], [], [], []
+        simtype = int(cfg.get('simtype', 0))
 
         def on_iteration(i, n_iter, Fp_cur, Fi_cur, Fd_cur, row, feats, sigs):
             # Captured above the throttle, so the counts the run-diagnosis reads
@@ -1089,6 +1187,17 @@ def register_callbacks(app):
             # throttled (i == n_iter), so this always ends up holding the final
             # iteration's features.
             last_feats[0] = feats
+
+            # Robustness of the tuning this iteration applied, every iteration
+            # (above the throttle): the exact M_s from the model, and the bound
+            # the certified variants read from the record alone.
+            if i < n_iter:
+                ms_iter.append(i)
+                ms_true.append(true_Ms(tau, K, L, Ts, Fp_cur * Kp_base, Fi_cur * Ki,
+                                       Fd_cur * Kd_base, simtype=simtype))
+                cert = sigs.get('cert') or {}
+                ms_upper.append(cert.get('upper'))
+                ms_acc.append(bool(cert.get('accepted')))
 
             now = time.monotonic()
             if i < n_iter and (now - last_push[0]) < MIN_PUSH_INTERVAL:
@@ -1124,7 +1233,8 @@ def register_callbacks(app):
             set_progress((_log_gain(p_Kp), _log_gain(p_Ki), _log_gain(p_Kd),
                           f'Tuning… iter {i}/{n_iter} — {MANUAL_READING[row]}',
                           p_time, p_f1, p_f2, p_f3, p_gains_hist,
-                          warn_children))
+                          warn_children,
+                          _build_ms_history_fig(ms_iter, ms_true, ms_upper, Mstar, variant, ms_acc)))
 
         # The multiplier box, kept in one place: pid_tuning searches it and
         # diagnose_run reads which of its bounds the run ended on.
@@ -1137,7 +1247,7 @@ def register_callbacks(app):
         Fp_hist, Fi_hist, Fd_hist = pid_tuning(
             desc, tau, K, L, Ts,
             Kp_base, Ki, Kd_base,
-            dtype='y', Tsim=Tsim, n_iter=n_iter,
+            dtype=dtype, Tsim=Tsim, n_iter=n_iter,
             Fp_limits=limits['Kp'],
             Fi_limits=limits['Ki'],
             Fd_limits=limits['Kd'],
@@ -1149,6 +1259,7 @@ def register_callbacks(app):
             dist_a=dist_a, dist_b=dist_b,
             delta=delta_tune, eps=eps_tune,
             on_iteration=on_iteration,
+            variant=variant, Mstar=Mstar,
         )
 
         Kp_traj = np.clip(Fp_hist * Kp_base, Kmin, Kmax)
@@ -1179,8 +1290,16 @@ def register_callbacks(app):
             last_feats[0] or [],
             gain_box=(Kmin, Kmax),
         )
-        status = f'Tuned ({n_iter} iter)' + _status_suffix(run_findings)
+        n_above = sum(m > Mstar for m in ms_true)
+        first = next((k for k, a in enumerate(ms_acc) if a), None)
+        after = (f' ({sum(m > Mstar for m in ms_true[first:])}× once certified)'
+                 if variant == 'safe' and first is not None else '')
+        Ms_final = true_Ms(tau, K, L, Ts, float(Fp_hist[-1]) * Kp_base, float(Fi_hist[-1]) * Ki,
+                           float(Fd_hist[-1]) * Kd_base, simtype=simtype)
+        status = (f'Tuned ({n_iter} iter) · M_s {fmt2(Ms_final)}'
+                  f' · > M*: {n_above}×{after}' + _status_suffix(run_findings))
 
         return (out_Kp_log, _log_gain(Ki_traj[-1]), out_Kd_log, status,
                 fig_gains_hist, False, no_update,
-                _render_findings(gate_warnings + run_findings))
+                _render_findings(gate_warnings + run_findings),
+                _build_ms_history_fig(ms_iter, ms_true, ms_upper, Mstar, variant, ms_acc))

@@ -10,6 +10,21 @@ docs/JPC26_basic/main.tex (Table "the tuning rule at a glance", eq.
   frequency (Ki /2, Kp /4, Kd /8); otherwise the lowest violated band is
   cut and every band below it is raised; if none is violated, all bands
   are raised
+
+Three variants (docs/ECC27_certified_SPIN), chosen by pid_tuning(variant=...):
+- 'basic':     SPIN as published -- the counts alone decide.
+- 'certified': a tuning the counts accept is accepted only if the certified
+               upper bound on M_s from its own record (core.certificate,
+               Theorem 1) is at most M*; otherwise the gains are lowered by the
+               band move predicted to lower M_s (at most N_BAND_MAX in a row),
+               else by a uniform back-off. The result ends with M_s <= M*, but
+               fragile tunings are still applied, and only then rejected.
+- 'safe':      every move is certified *before* it is applied (Theorem 3):
+               from an accepted tuning, the move of the rule is applied only if
+               the record certifies that the new tuning stabilizes the plant
+               with M_s <= M*; otherwise the band moves (highest band first) and
+               a uniform back-off are tried, else the tuning is held. Before the
+               first accepted tuning it backs off uniformly.
 """
 
 from __future__ import annotations
@@ -21,6 +36,8 @@ from .features import (
     encirc, EncirclementMetric,
 )
 from .signals import find_index, StabilityScreen
+from .certificate import (certificate, certify_ahead, predict_Ms, check_record,
+                          tau_for, TAU_CERT, MSTAR)
 
 
 # Table 2's rightmost column, keyed by which row fired this iteration.
@@ -30,7 +47,18 @@ MANUAL_READING = {
     'N1': 'ringing: less gain',
     'N2': 'buzzing: less rate',
     'none': 'all quiet: tighten',
+    # certified / safe SPIN (docs/ECC27_certified_SPIN)
+    'cert_reject': 'certificate: M_s above target, lower gains',
+    'warm': 'not yet certified: back off',
+    'fallback': 'not confirmed: back to last certified tuning',
+    'hold': 'no move certified: hold',
+    'cert_band': 'certified band move',
+    'cert_back': 'certified back-off',
 }
+
+CERT_ROWS = frozenset({'cert_reject', 'warm', 'fallback', 'hold', 'cert_band', 'cert_back'})
+VARIANTS = ('basic', 'certified', 'safe')
+N_BAND_MAX = 10      # certified SPIN: band moves in a row before a uniform back-off
 
 
 # Swappable gain-update decisions: given the current features/gains, decide
@@ -113,6 +141,105 @@ TUNING_RULES: dict[str, TuningRule] = {
 }
 
 
+class _Certifier:
+    """
+    State of certified / safe SPIN across iterations. Multipliers are handled
+    in band order (Fi, Fp, Fd) = bands 0, 1, 2; a band move k lowers band k by
+    one notch and raises the active bands below it by one, as the rule does.
+    """
+
+    def __init__(self, variant, base, Ts, gamma, Mstar, tau, lo, hi,
+                 simtype, minu, maxu, noisy):
+        self.variant, self.base, self.Ts, self.g = variant, np.asarray(base, float), Ts, gamma
+        self.Mstar, self.tau = Mstar, tau
+        self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
+        self.simtype, self.minu, self.maxu, self.noisy = simtype, minu, maxu, noisy
+        self.bands = [k for k in range(3) if self.base[k] > 0]
+        self.streak = 0                  # certified: band moves in a row
+        self.safe = False                # safe: an accepted tuning has been seen
+        self.F_cert = None               # safe: last accepted multipliers
+        self.bad = set()                 # safe: tunings that failed their own record
+        self.last_accepted = None        # the result: last accepted multipliers (Fi, Fp, Fd)
+
+    def _clip(self, F):
+        return np.clip(F, self.lo, self.hi)
+
+    def _gains(self, F):
+        Ki, Kp, Kd = self.base * F
+        return (Kp, Ki, Kd)              # core.certificate order
+
+    def _band_move(self, F, k):
+        Fn = F.copy()
+        for b in self.bands:
+            if b < k:
+                Fn[b] *= self.g
+        Fn[k] /= self.g
+        return self._clip(Fn)
+
+    @staticmethod
+    def _key(F):
+        return tuple(np.round(np.log(np.maximum(F, 1e-300)), 6))
+
+    def step(self, sigs, unstable, row, F_cur, F_rule):
+        """Decide the next multipliers; returns (Fp, Fi, Fd, row)."""
+        F = np.asarray(F_cur, float)
+        e_r = -np.asarray(sigs['e'], float)          # the app's e is y - r
+        why = check_record(e_r, sigs.get('u') if self.simtype == 1 else None,
+                           self.minu, self.maxu, self.noisy)
+        if why is None and unstable:
+            why = 'record not settled'
+        tau = tau_for(e_r, self.tau)                  # Assumption 1, with a data-based floor
+        upper = certificate(e_r, tau)['upper'] if why is None else float('inf')
+        accepted = upper <= self.Mstar
+        info = {'upper': upper, 'why': why, 'accepted': accepted, 'U': None, 'tau': tau}
+        sigs['cert'] = info
+
+        if self.variant == 'certified':
+            Fn = np.asarray(F_rule, float)
+            if row == 'none':                         # the counts accept
+                if accepted:
+                    self.streak = 0
+                    self.last_accepted = F.copy()
+                else:
+                    row = 'cert_reject'
+                    move = None
+                    if why is None and self.streak < N_BAND_MAX:
+                        down = [k for k in self.bands
+                                if predict_Ms(e_r, self.Ts, self._gains(F),
+                                              self._gains(self._band_move(F, k))) < upper]
+                        move = max(down) if down else None
+                    if move is None:
+                        Fn, self.streak = self._clip(F / self.g), 0
+                    else:
+                        Fn, self.streak = self._band_move(F, move), self.streak + 1
+            else:
+                self.streak = 0
+            return float(Fn[1]), float(Fn[0]), float(Fn[2]), row
+
+        # safe SPIN
+        if not accepted:
+            if not self.safe:                         # before the first accepted tuning
+                Fn = np.asarray(F_rule, float) if unstable else self._clip(F / self.g)
+                return float(Fn[1]), float(Fn[0]), float(Fn[2]), ('unstable' if unstable else 'warm')
+            self.bad.add(self._key(F))                # certified ahead, not by its own record
+            Fn = self.F_cert.copy()
+            return float(Fn[1]), float(Fn[0]), float(Fn[2]), 'fallback'
+        self.safe, self.F_cert = True, F.copy()
+        self.last_accepted = F.copy()
+        cands = [(row, self._clip(np.asarray(F_rule, float)))]
+        cands += [('cert_band', self._band_move(F, k)) for k in sorted(self.bands, reverse=True)]
+        cands += [('cert_back', self._clip(F / self.g))]
+        for r, Fn in cands:
+            if np.allclose(Fn, F) or self._key(Fn) in self.bad:
+                continue
+            A = certify_ahead(e_r, self.Ts, self._gains(F), self._gains(Fn),
+                              tau, self.Mstar)
+            if A['stable'] and A['U'] <= self.Mstar:
+                info['U'] = A['U']
+                return float(Fn[1]), float(Fn[0]), float(Fn[2]), r
+        return float(F[1]), float(F[0]), float(F[2]), 'hold'
+
+
 def pid_tuning(
     description: list[FeatureDescription],
     tau, K: float, L: float, Ts: float,
@@ -136,6 +263,9 @@ def pid_tuning(
     stability_screen: StabilityScreen = find_index,
     metric: EncirclementMetric = encirc,
     seed: int | None = None,
+    variant: str = 'basic',
+    Mstar: float = MSTAR,
+    tau_cert: float = TAU_CERT,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Run n_iter iterations of the given tuning rule (default: the triangular rule).
@@ -160,6 +290,15 @@ def pid_tuning(
     stability_screen: swappable instability test, see StabilityScreen/STABILITY_SCREENS.
     metric: swappable trajectory-scoring algorithm used by the per-iteration
             feature evaluation, see EncirclementMetric/ENCIRCLEMENT_METRICS.
+    variant: 'basic' (published SPIN), 'certified' or 'safe' (see module
+             docstring). The certified variants read the error record of each
+             iteration; sigs['cert'] then carries the certified bound and the
+             decision for display. They need the derivative on the error
+             (dtype='e'), so that the record is the step response of S.
+    Mstar: target sensitivity peak of the certified variants.
+    tau_cert: least assumed bound on the unrecorded tail of the record
+              (Assumption 1); core.certificate.tau_for raises it when the end of
+              the record has not settled.
     seed: makes a run with output noise reproducible. Each iteration is given
           its own Generator derived from this seed, so iteration i always sees
           the same noise realization no matter how many iterations run --
@@ -181,6 +320,13 @@ def pid_tuning(
 
     row = 'none'
     seed_seq = None if seed is None else np.random.SeedSequence(seed)
+    if variant not in VARIANTS:
+        raise ValueError(f'unknown variant {variant!r}; expected one of {VARIANTS}')
+    cert_state = _Certifier(
+        variant, (Ki, Kp, Kd), Ts, gamma, Mstar, tau_cert,
+        lo=(Fi_min, Fp_min, Fd_min), hi=(Fi_max, Fp_max, Fd_max),
+        simtype=simtype, minu=minu, maxu=maxu, noisy=(dist_b != 0.0),
+    ) if variant != 'basic' else None
 
     for i in range(1, n_iter):
         Fp_cur = Fp_hist[i - 1]
@@ -206,6 +352,10 @@ def pid_tuning(
             Fp_min, Fp_max, Fi_min, Fi_max, Fd_min, Fd_max,
         )
 
+        if variant != 'basic':
+            Fp_new, Fi_new, Fd_new, row = cert_state.step(
+                sigs, unstable, row, (Fi_cur, Fp_cur, Fd_cur), (Fi_new, Fp_new, Fd_new))
+
         if on_iteration is not None:
             on_iteration(i, n_iter, float(Fp_cur), float(Fi_cur), float(Fd_cur),
                          row, feats, sigs)
@@ -213,6 +363,12 @@ def pid_tuning(
         Fp_hist[i] = Fp_new
         Fi_hist[i] = Fi_new
         Fd_hist[i] = Fd_new
+
+    # Certified variants return the last accepted tuning, the one their
+    # guarantee is about, rather than wherever the last move happened to land.
+    if cert_state is not None and cert_state.last_accepted is not None:
+        Fi_a, Fp_a, Fd_a = cert_state.last_accepted
+        Fp_hist[-1], Fi_hist[-1], Fd_hist[-1] = Fp_a, Fi_a, Fd_a
 
     if on_iteration is not None:
         on_iteration(n_iter, n_iter, float(Fp_hist[-1]), float(Fi_hist[-1]),
