@@ -142,7 +142,8 @@ S(\mathrm{e}^{j\theta})=\sum_{n\ge0}a_n\,\mathrm{e}^{-jn\theta}.
 \end{lemma}
 
 \begin{proof}
-The step has the $z$-transform $R=1/(1-z^{-1})$ and $E=SR$, so
+Let $R(z)$ and $E(z)$ be the $z$-transforms of the setpoint and the
+error. A unit step has $R=1/(1-z^{-1})$, and $E=SR$, so
 $S=(1-z^{-1})E$, whose coefficients are the increments $a_n$. In a
 stable loop, $a_n$ decays exponentially, so the series converges on the
 unit circle.
@@ -157,9 +158,8 @@ The loop is stable, and the record $e_0,\dots,e_N$ satisfies
 $\sum_{n>N}|a_n|\le\tau$ for a known $\tau$.
 \end{assumption}
 
-In a stable loop, $|a_n|$ decays exponentially, so a valid $\tau$ falls
-geometrically with the record length; Section~\ref{sec:sim} checks it
-with a longer record. No finite record can show that the loop is stable
+A valid $\tau$ falls geometrically with the record length
+(Section~\ref{sec:sim} checks it with a longer record). No finite record can show that the loop is stable
 or the tail small: an unstable or slow mode may appear only after it
 ends. Theorem~\ref{thm:cert} thus bounds $M_s$ of a loop assumed stable;
 Theorem~\ref{thm:ahead} then certifies the stability of each next
@@ -231,7 +231,9 @@ the true variation after $8L_d$).}
 \section{A Certified Acceptance Test}
 \label{sec:accept}
 
-An iterative tuner applies a controller $C$, records the error after a
+From here on, the plant is stable (so $P(1)$ is finite), as are the
+self-regulating processes that \spin targets; Lemma~\ref{lem:record} and
+Theorem~\ref{thm:cert} need only a stable closed loop. An iterative tuner applies a controller $C$, records the error after a
 setpoint step, and proposes the next controller from the record. We call
 a set of gains a \emph{tuning}, and say that a tuning is
 \emph{accepted} when the tuner keeps it as a candidate result.
@@ -305,7 +307,8 @@ The record gives $\hat S$ and $\hat T=1-\hat S$, each within $\tau$.
 
 \begin{theorem}[Certify before applying]
 \label{thm:ahead}
-Let $C$ and $C'$ be controllers as in Theorem~\ref{thm:spin} with the
+On a stable plant, let $C$ and $C'$ be controllers as in
+Theorem~\ref{thm:spin} with the
 same $T_s$, let $\rho$ be bounded on the unit circle, and let the record
 of $C$ meet Lemma~\ref{lem:record} and Assumption~\ref{ass:tail}. If, for
 all $\theta\in(0,\pi]$,
@@ -417,7 +420,7 @@ $\eta=2\cdot10^{-3}$, $\bar\theta$ and $h$ as in Section~\ref{sec:accept}.
 \subsection{Why the turn counts cannot certify}
 \label{sec:count}
 
-Why should turn counts relate to $M_s$? Write a portrait
+Write a portrait
 \eqref{eq:portraits} as $(p,q)$, with $q$ the running sum of $p$,
 shifted so that the end point is the origin. The count is the net
 counterclockwise angle swept around the origin, divided by $2\pi$. We
