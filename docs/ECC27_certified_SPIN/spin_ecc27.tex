@@ -59,7 +59,7 @@ only tunings with $M_s\le M^*$ and never apply one above $M^*$. For
 \spin, which tunes by counting the turns of the control error in phase
 portraits, the counts bound $M_s$ only on special loops. We add the
 certificates in two steps: certified \spin checks each tuning after
-applying it, safe \spin before. On $19$ simulated loops, published \spin
+applying it, safe \spin before. On $19$ simulated loops, basic \spin
 ended above $M^*=1.7$ on up to $9$ and applied tunings above it in $57\%$
 of its iterations; certified \spin ended below $M^*$ on all loops but
 still applied such tunings in $45\%$; safe \spin never applied one.
@@ -386,7 +386,7 @@ change the gains.\footnote{An online simulator:
 \begin{figure}[t]
 \small
 \hrule\smallskip
-\noindent\textbf{Algorithm 1:} one iteration. \emph{Published \spin}
+\noindent\textbf{Algorithm 1:} one iteration. \emph{Basic \spin}
 \cite{SPIN}: lines 1--10. \emph{Certified \spin}: adds layer A, the
 acceptance test. \emph{Safe \spin}: adds layers A and B.
 \smallskip\hrule\smallskip
@@ -504,7 +504,7 @@ in steps as $M_s$ grows (Fig.~\ref{fig:stair}(a)). With $n$ crossings
 larger than $\delta$, the computed $N_0$ and $N_1$ lie within a quarter
 turn above $n/2$, and $N_2$ is $n/2-1/4$ within $0.01$ (on this ideal
 loop, $\dot e$ jumps at $t=L_d$, so $\Gamma_2$ starts with a quarter
-turn clockwise). The published limits lie between the steps:
+turn clockwise). The limits of \cite{SPIN} lie between the steps:
 $\bar N_0=1/2$, $\bar N_1=3/4$ and $\bar N_2=1$ allow $0$, $1$ and $2$
 crossings above $\delta$, that is, $M_s\le1.534$, $1.842$ and $2.210$,
 the values at which the next extremum of $e$ reaches $\delta$. Each band
@@ -525,7 +525,7 @@ a tuning, but only a certificate can certify it.
 \centering
 \includegraphics[width=\columnwidth]{fig_stair.pdf}
 \caption{\spin's counts on the lag-cancelled loop \eqref{eq:loop}. (a)
-Each count steps over its published limit (dotted) at $M_s=1.53$,
+Each count steps over its limit (dotted) at $M_s=1.53$,
 $1.84$, $2.21$ ($N_2$ and its limit shifted up a quarter turn). (b) A
 record with $M_s=2.00$ and two crossings. (c) Its portrait $\Gamma_0$
 turns by exactly half a turn between them (Lemma~\ref{lem:half}); the
@@ -587,7 +587,7 @@ tuning, or is accepted itself (Theorem~\ref{thm:spin}(i)).
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_certified.pdf}
-\caption{$P_3$ with PID. (a) Published tuning ($\overline M=1.81$,
+\caption{$P_3$ with PID. (a) Basic tuning ($\overline M=1.81$,
 $\circ$), one band move lowering $K_i$ ($M_s=1.740$, as predicted by
 \eqref{eq:predict}), certified tuning ($1.690$). (b) $M_s$ of the tuning
 applied in each iteration.}
@@ -603,7 +603,7 @@ Bottom: totals over the $19$ loops, $3800$ iterations per start.}
 \footnotesize\setlength{\tabcolsep}{3.2pt}
 \begin{tabular}{llcccccc}
 \toprule
-& & \multicolumn{2}{c}{published} & \multicolumn{2}{c}{certified} & \multicolumn{2}{c}{safe}\\
+& & \multicolumn{2}{c}{basic} & \multicolumn{2}{c}{certified} & \multicolumn{2}{c}{safe}\\
 \cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}
 & & c & b & c & b & c & b \\
 \midrule
@@ -666,7 +666,7 @@ between its bounds, with $\overline M-M_s\le0.003\approx\eta+\tau$.
 % confirm_thm1.py (RUNS=safe1,safe2), fig_record.py
 
 \paragraph*{Ending below $M^*$ (Corollary~\ref{cor:spin}, Table~\ref{tab:spin})}
-Published \spin ended above $M^*=1.7$ on $9$ of the $19$ loops from the
+Basic \spin ended above $M^*=1.7$ on $9$ of the $19$ loops from the
 cautious start and on $7$ from the bold start (up to $M_s=2.07$);
 certified \spin on none (at most $1.69$), as Theorem~\ref{thm:spin}(i)
 guarantees, and every loop kept accepting tunings. On $P_3$ with PID,
@@ -675,7 +675,7 @@ the predicted band move matched the true $M_s$
 load-step IAE rose by $9\%$ and $8\%$ on average.
 
 \paragraph*{Staying below $M^*$ (Corollary~\ref{cor:safe}, Table~\ref{tab:spin}, Fig.~\ref{fig:certified}(b))}
-In the $7600$ iterations of the $38$ runs, published \spin applied a
+In the $7600$ iterations of the $38$ runs, basic \spin applied a
 tuning with $M_s>M^*$ in $4371$ (up to $M_s=2.38$), certified \spin,
 which must apply a tuning to reject it, in $3398$ (up to $1.98$), and
 safe \spin in none: all its tunings were stable, with $M_s\le1.696$.
@@ -743,7 +743,7 @@ overshoot method: a simple and fast closed-loop approach for PID tuning,''
 
 \bibitem{SPIN} D.~Pachner, P.~Otta, J.~Dost\'al, and V.~Havlena,
 ``Model-free PID tuning by step-response inspection,'' submitted to
-\emph{J. Process Control}, 2026.
+\emph{European J. Control}, 2026 (under review).
 
 \bibitem{Desborough2002} L.~Desborough and R.~Miller, ``Increasing
 customer value of industrial control performance monitoring---Honeywell's
