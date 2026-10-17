@@ -89,8 +89,7 @@ experiments \cite{Wahlberg2010,Rojas2012}, by data-driven estimation
 \cite{vanHeusden2007}, from limit cycles induced in closed loop
 \cite{Garcia2003}, or from impulse-response data under a decay
 assumption, with a one-sided guarantee \cite{Tu2017}; margins can be
-bounded from data \cite{Isoshima2023} or measured by relay tests and
-closed-loop identification \cite{WangHangBi1997,VandenHofSchrama1993}.
+bounded from data \cite{Isoshima2023}.
 These methods need dedicated experiments, give estimates or one-sided
 bounds, and are not built into a tuner. Safe Bayesian optimization tunes
 controllers without leaving a safe set \cite{Berkenkamp2016}, with
@@ -387,32 +386,39 @@ change the gains.\footnote{An online simulator:
 \begin{figure}[t]
 \small
 \hrule\smallskip
-\noindent\textbf{Algorithm 1:} one iteration of \spin \cite{SPIN} and,
-with lines 7a--7c in bold instead of line 7, of certified \spin
-(Section~\ref{sec:spin})
+\noindent\textbf{Algorithm 1:} one iteration of the three variants.
+\emph{Published \spin} \cite{SPIN}: lines 1--10. \emph{Certified \spin}:
+lines 1--10 with C7a--C7c instead of 7. \emph{Safe \spin}: lines 1--10
+with S1--S3 added.
 \smallskip\hrule\smallskip
 \noindent\begin{tabular}{@{}r@{\hspace{0.6em}}l@{}}
 1: & apply a setpoint step and record the error $e$\\
+\textbf{S1:} & \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert})}\\
+\textbf{S2:} & \textbf{if $\overline M>M^*$ then} back off uniformly (no accepted\\
+    & \quad tuning yet) or return to the last accepted one \hfill (reject)\\
 2: & \textbf{if} the record does not settle \textbf{then}\\
 3: & \quad divide $K_i$, $K_p$, $K_d$ by $2$, $4$, $8$ \hfill (retreat)\\
 4: & \textbf{else}\\
 5: & \quad count the turns $N_0$, $N_1$, $N_2$ of $\Gamma_0$, $\Gamma_1$, $\Gamma_2$\\
 6: & \quad \textbf{if} $N_k\le\bar N_k$ for every band $k$ \textbf{then}\\
 7: & \quad\quad raise all gains by one increment \hfill (accept)\\
-\textbf{7a:} & \quad\quad \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert})}\\
-\textbf{7b:} & \quad\quad \textbf{if $\overline M\le M^*$ then} raise all gains \hfill (accept)\\
-\textbf{7c:} & \quad\quad \textbf{else lower the gains} by a band move\\
+\textbf{C7a:} & \quad\quad \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert})}\\
+\textbf{C7b:} & \quad\quad \textbf{if $\overline M\le M^*$ then} raise all gains \hfill (accept)\\
+\textbf{C7c:} & \quad\quad \textbf{else} lower the gains by a band move\\
     & \quad\quad\quad (line 10) or a uniform back-off \hfill (reject)\\
 8: & \quad \textbf{else}\\
 9: & \quad\quad $k\leftarrow$ lowest band with $N_k>\bar N_k$\\
 10: & \quad\quad lower the gain of band $k$ by one increment and\\
     & \quad\quad raise the gains of the bands below $k$ by one\\
+\textbf{S3:} & \textbf{apply the move of lines 3--10 only if Theorem~\ref{thm:ahead}}\\
+    & \quad \textbf{certifies it}; else the first certified of the band moves\\
+    & \quad $k=2,1,0$ and a uniform back-off; else keep the tuning\\
 \end{tabular}
 \smallskip\hrule\smallskip
 \noindent An increment scales a gain by $1/(1-\beta)$. Defaults: limits
 $\bar N_k=(0.5,0.75,1.0)$, $\delta=0.02$, $\beta=0.1$; gains stay within
 $[0.001,10]$ times their initial values (the gain box); the result is the
-last accepted tuning. Certified \spin: $M^*=1.7$, $\tau=10^{-3}$,
+last accepted tuning. Certified and safe \spin: $M^*=1.7$, $\tau=10^{-3}$,
 $\eta=2\cdot10^{-3}$, $\bar\theta$ and $h$ as in Section~\ref{sec:accept}.
 \smallskip\hrule
 \end{figure}
@@ -532,14 +538,14 @@ radius is compressed for display.}
 \subsection{From certified to safe \spin}
 \label{sec:spin}
 
-We add the certificates to \spin in two steps. The first checks each
-tuning after it is applied, the second before.
+Algorithm~1 adds the certificates in two steps: certified \spin checks
+each tuning after applying it, safe \spin before.
 
 \emph{Certified \spin accepts a tuning that the counts accept only if the
 upper bound $\overline M$ of Theorem~\ref{thm:cert}, computed from the
 same record, is at most $M^*$.} In Algorithm~1, it replaces line 7 by
-the bold lines 7a--7c: the counts shape the tuning, and the certificate
-decides whether it is accepted. A rejected tuning is lowered by a band
+lines C7a--C7c: the counts shape the tuning, and the certificate decides
+whether it is accepted. A rejected tuning is lowered by a band
 move of line 10 that the prediction of Theorem~\ref{thm:ahead} expects
 to lower $M_s$, at most $10$ in a row, or else by a uniform back-off.
 
@@ -553,22 +559,17 @@ followed by an accepted tuning after finitely many moves.
 
 \begin{proof}
 The result is an accepted tuning, so Theorem~\ref{thm:spin}(i) applies.
-After at most $10$ band moves, line 7c backs off uniformly, which ends
+After at most $10$ band moves, line C7c backs off uniformly, which ends
 in an acceptance within $j^*$ steps by Theorem~\ref{thm:spin}(iii),
 unless line 3 or 10 moves the gains first.
 \end{proof}
 
 Certified \spin ends safe, but it learns that a tuning is fragile only
 by applying it. \emph{Safe \spin certifies every move before applying
-it}, by Theorem~\ref{thm:ahead}. It proposes moves only from an accepted
-tuning, one that passes line 7b on its own record. It computes the move
-of Algorithm~1 (line 7 or 10) and applies it only if \eqref{eq:ahead}
-holds and the bound \eqref{eq:aheadbound} is at most $M^*$; otherwise it
-tries the band moves of line 10 for $k=2,1,0$ and then a uniform
-back-off, and applies the first one so certified; if there is none, it
-keeps the current tuning. Before its first accepted tuning, it backs off
-uniformly; if a tuning certified in advance fails line 7b, it returns to
-the last accepted tuning.
+it}, by Theorem~\ref{thm:ahead} (lines S1--S3). It accepts a tuning when
+its own record gives $\overline M\le M^*$ (S2), and proposes moves only
+from accepted tunings. A tuning that was certified in advance but fails
+S2 is replaced by the last accepted one.
 
 \begin{corollary}[Safe \spin]
 \label{cor:safe}
@@ -779,15 +780,6 @@ estimation,'' arXiv:1709.10203, 2017.
 \bibitem{Isoshima2023} K.~Isoshima, M.~Tanemura, and Y.~Chida,
 ``Data-driven estimation of the lower bounds of gain and phase margins,''
 \emph{Automatica}, vol.~153, art.~111008, 2023.
-
-\bibitem{WangHangBi1997} Q.-G.~Wang, C.~C.~Hang, and Q.~Bi, ``Process
-frequency response estimation from relay feedback,'' \emph{Control Eng.
-Pract.}, vol.~5, no.~9, pp.~1293--1302, 1997.
-
-\bibitem{VandenHofSchrama1993} P.~M.~J.~Van den Hof and
-R.~J.~P.~Schrama, ``An indirect method for transfer function estimation
-from closed loop data,'' \emph{Automatica}, vol.~29, no.~6,
-pp.~1523--1527, 1993.
 
 \bibitem{Berkenkamp2016} F.~Berkenkamp, A.~P.~Schoellig, and A.~Krause,
 ``Safe controller optimization for quadrotors with Gaussian processes,''
