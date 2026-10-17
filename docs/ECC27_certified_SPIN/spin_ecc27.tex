@@ -53,8 +53,8 @@ apply certifies $M_s$: in a stable digital loop, the error increments
 after a unit setpoint step are the impulse response of the sensitivity
 function, so a finite record gives computable lower and upper bounds on
 $M_s$, under one assumption on the unrecorded rest of the response. The
-same record certifies the stability and bounds the $M_s$ of any other
-controller before it is applied. Any iterative tuner can thus accept
+same record, from a stable running loop, certifies the stability and
+bounds the $M_s$ of any other controller before it is applied. Any iterative tuner can thus accept
 only tunings with $M_s\le M^*$ and never apply one above $M^*$. For
 \spin, which tunes by counting the turns of the control error in phase
 portraits, the counts bound $M_s$ only on special loops. We add the
@@ -121,11 +121,11 @@ Section~\ref{sec:sim} confirms the results in simulation.
 A digital controller runs with the sampling period $T_s$. Seen at the
 sampling instants, the loop it closes is linear and time invariant, with
 transfer functions $C(z)$, $P(z)$, $L$, $S$ and $T$ as above. On the
-unit circle, $z=e^{j\theta}$ with the normalized frequency
+unit circle, $z=\mathrm{e}^{j\theta}$ with the normalized frequency
 $\theta=\omega T_s\in[0,\pi]$, and
-$M_s=\max_{\theta}|S(e^{j\theta})|$; we write $M_s(C)$ when the
+$M_s=\max_{\theta}|S(\mathrm{e}^{j\theta})|$; we write $M_s(C)$ when the
 controller matters. All these quantities refer to the digital loop, the
-loop that actually runs.
+loop that actually runs; $\mathrm{e}$ (upright) is Euler's number.
 
 \begin{lemma}[The step contains $S$]
 \label{lem:record}
@@ -136,7 +136,7 @@ $e_n$ be the error after a unit setpoint step at $n=0$, applied from
 rest and without disturbances, so that $e_{-1}=0$ and $e_0=1$, and let
 $a_n=e_n-e_{n-1}$. Then
 \begin{equation}
-S(e^{j\theta})=\sum_{n\ge0}a_n\,e^{-jn\theta}.
+S(\mathrm{e}^{j\theta})=\sum_{n\ge0}a_n\,\mathrm{e}^{-jn\theta}.
 \label{eq:srecord}
 \end{equation}
 \end{lemma}
@@ -159,8 +159,12 @@ $\sum_{n>N}|a_n|\le\tau$ for a known $\tau$.
 
 In a stable loop, $|a_n|$ decays exponentially, so a valid $\tau$ falls
 geometrically with the record length; Section~\ref{sec:sim} checks it
-with a longer record. By \eqref{eq:srecord}, the record gives the
-estimate $\hat S(\theta)=\sum_{n=0}^{N}a_ne^{-jn\theta}$ of $S$ at every
+with a longer record. No finite record can show that the loop is stable
+or the tail small: an unstable or slow mode may appear only after it
+ends. Theorem~\ref{thm:cert} thus bounds $M_s$ of a loop assumed stable;
+Theorem~\ref{thm:ahead} then certifies the stability of each next
+controller from the record of the current one. By \eqref{eq:srecord}, the record gives the
+estimate $\hat S(\theta)=\sum_{n=0}^{N}a_n\mathrm{e}^{-jn\theta}$ of $S$ at every
 frequency. Three errors separate the largest $|\hat S|$ on a frequency
 grid from $M_s$: the unrecorded tail, the gaps between grid points, and
 high frequencies, which a grid resolves only at great cost.
@@ -188,14 +192,14 @@ $M_s$ as $N\to\infty$ and $h\to0$ with $\bar\theta=\pi$.
 \end{theorem}
 
 \begin{proof}
-\emph{Tail.} By \eqref{eq:srecord}, $S-\hat S=\sum_{n>N}a_ne^{-jn\theta}$,
+\emph{Tail.} By \eqref{eq:srecord}, $S-\hat S=\sum_{n>N}a_n\mathrm{e}^{-jn\theta}$,
 so $|S-\hat S|\le\tau$ at every $\theta$. This gives $\underline M$ and
 the term $\tau$ in $\overline M$. \emph{Grid.} On $[0,\bar\theta]$,
-$|\hat S(\theta)|=|\sum_na_ne^{-j(n-n_c)\theta}|$, whose derivative with
+$|\hat S(\theta)|=|\sum_na_n\mathrm{e}^{-j(n-n_c)\theta}|$, whose derivative with
 respect to $\theta$ is at most $J$ in magnitude. Every $\theta$ lies
 within $h/2$ of a grid point, so $|\hat S|$ exceeds its largest grid
 value by at most $hJ/2$. \emph{High frequencies.} On
-$[\bar\theta,\pi]$, let $z=e^{-j\theta}$ and $Z_n=\sum_{m=1}^nz^m$, so
+$[\bar\theta,\pi]$, let $z=\mathrm{e}^{-j\theta}$ and $Z_n=\sum_{m=1}^nz^m$, so
 that $|Z_n|=|z(1-z^n)/(1-z)|\le2/|1-z|=1/\sin(\theta/2)$. Summation by
 parts gives $\sum_{n\ge1}a_nz^n=\sum_{n\ge1}(a_n-a_{n+1})Z_n$, and
 $\sum_{n\ge N}|a_n-a_{n+1}|\le|a_N|+2\sum_{n>N}|a_n|\le|a_N|+2\tau$. So
@@ -204,9 +208,8 @@ $|S-a_0|\le B/\sin(\theta/2)\le B/\sin(\bar\theta/2)$ with $a_0=1$.
 $N\to\infty$, so $hJ\to0$, and the remaining variation tends to zero.
 \end{proof}
 
-Everything in \eqref{eq:bound} except $\tau$ comes from the record. The
-choice of $n_c$ only affects how tight the bound is; the weighted median
-of $|a_n|$ keeps $J$ small. All grid values $\hat S$ follow from one
+Everything in \eqref{eq:bound} except $\tau$ comes from the record;
+$n_c$ only affects tightness (we take the weighted median of $|a_n|$). All grid values $\hat S$ follow from one
 chirp $z$-transform, an FFT-type algorithm. The grid term needs a fine
 grid where $|\hat S|$ changes fast; the high-frequency term needs no grid
 at all, and $B$ is small for a smooth record. Fig.~\ref{fig:record}
@@ -254,7 +257,7 @@ Assumption~\ref{ass:tail}.
 \item[(i)] Every accepted tuning has $M_s\le M^*$, whatever rule
 proposed it.
 \item[(ii)] For a controller $C$, let
-$\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(e^{j\theta})\}$, the
+$\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(\mathrm{e}^{j\theta})\}$, the
 leftmost real part of its Nyquist curve. For $0<\lambda<1/|\mu|$, the
 controller $\lambda C$ stabilizes the plant, and
 \begin{equation}
@@ -272,7 +275,7 @@ $M'=M^*-2\tau-\eta$.
 (i) Accepted means $\overline M\le M^*$, and $M_s\le\overline M$ by
 Theorem~\ref{thm:cert}. (ii) First, $\mu$ is finite: $L$ is bounded on
 the unit circle except near $z=1$, where the integral term has the real
-part $-K_iT_s/2$, since $\mathrm{Re}\,1/(e^{j\theta}-1)=-\frac12$, and
+part $-K_iT_s/2$, since $\mathrm{Re}\,1/(\mathrm{e}^{j\theta}-1)=-\frac12$, and
 $P$ is continuous at $z=1$. For every $\theta$,
 $|1+\lambda L|\ge1+\lambda\,\mathrm{Re}\,L\ge1-\lambda|\mu|>0$, which
 gives \eqref{eq:backoff}. For stability, we apply the Nyquist criterion
@@ -446,9 +449,9 @@ the crossings that rise above $\delta$. Whether crossings reveal $M_s$
 depends on the loop. We first study a loop where they do. Lambda, IMC
 and SIMC tuning rules cancel the plant lag by the controller zero
 \cite{Skogestad2003}, e.g., PI with the integral time $T_i=T_1$ on the
-plant $Ke^{-sL_d}/(T_1s+1)$. The loop is then
+plant $K\mathrm{e}^{-sL_d}/(T_1s+1)$. The loop is then
 \begin{equation}
-L(s)=\frac{\kappa\,e^{-sL_d}}{sL_d},\qquad \kappa=\frac{KK_pL_d}{T_i}.
+L(s)=\frac{\kappa\,\mathrm{e}^{-sL_d}}{sL_d},\qquad \kappa=\frac{KK_pL_d}{T_i}.
 \label{eq:loop}
 \end{equation}
 
@@ -484,8 +487,8 @@ theorem). For the crossings, the output obeys
 $\dot y(t)=(\kappa/L_d)\,e(t-L_d)$, so the error obeys
 $\dot e(t)=-(\kappa/L_d)\,e(t-L_d)$ with $e=1$ on $[0,L_d]$. It stays
 positive if and only if its characteristic equation
-$s+(\kappa/L_d)e^{-sL_d}=0$ has a real root; with $w=sL_d$, this reads
-$-we^w=\kappa$, and $-we^w$ has the maximum $1/\mathrm{e}$ over real $w$.
+$s+(\kappa/L_d)\mathrm{e}^{-sL_d}=0$ has a real root; with $w=sL_d$, this reads
+$-w\mathrm{e}^w=\kappa$, and $-w\mathrm{e}^w$ has the maximum $1/\mathrm{e}$ over real $w$.
 Otherwise all solutions oscillate \cite{GyoriLadas1991}.
 \end{proof}
 
@@ -504,8 +507,7 @@ $M_s\le1.534$.
 % check_result1.py (Lemma 2 within 1e-6, (9) against a direct search), confirm_limits.py
 
 On general loops, this guarantee is lost. The counts leave the steps: in
-the $3800$ count decisions of Section~\ref{sec:sim} ($19$ loops, $200$
-iterations), $N_0$ and $N_2$ lay between $n/2+1/4$ and $(n+1)/2$ in
+the $3800$ count decisions of certified \spin in Section~\ref{sec:sim}, $N_0$ and $N_2$ lay between $n/2+1/4$ and $(n+1)/2$ in
 $23$ and $69\%$ of them. And crossings do not bound $M_s$: the loop of
 Fig.~\ref{fig:record}, with a gain margin of $1.624$, has $M_s=2.62$,
 yet its error never crosses the setpoint by more than $2\%$, while a
@@ -516,12 +518,11 @@ a tuning, but only a certificate can certify it.
 \centering
 \includegraphics[width=\columnwidth]{fig_stair.pdf}
 \caption{\spin's counts on the lag-cancelled loop \eqref{eq:loop}. (a)
-At $\delta=0.02$, each count steps over its published limit (dotted) at
-$M_s=1.53$, $1.84$, $2.21$; $N_2$ and its limit are drawn a quarter turn
-up (see text). (b) A record with $M_s=2.00$ and two crossings. (c) Its
-portrait $\Gamma_0$ turns by exactly half a turn between them
-(Lemma~\ref{lem:half}); the scaling compresses the radius, not the
-angle.}
+Each count steps over its published limit (dotted) at $M_s=1.53$,
+$1.84$, $2.21$ ($N_2$ and its limit shifted up a quarter turn). (b) A
+record with $M_s=2.00$ and two crossings. (c) Its portrait $\Gamma_0$
+turns by exactly half a turn between them (Lemma~\ref{lem:half}); the
+radius is compressed for display.}
 \label{fig:stair}
 \end{figure}
 
@@ -582,20 +583,18 @@ tuning, or is accepted itself (Theorem~\ref{thm:spin}(i)).
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_certified.pdf}
-\caption{$P_3$ with PID, $M^*=1.7$. (a) The published tuning
-($\overline M=1.81$, $\circ$), one band move lowering $K_i$
-($M_s=1.740$, as predicted by \eqref{eq:predict}), and the certified
-tuning ($M_s=1.690$). (b) $M_s$ of the tuning applied in each iteration;
-safe \spin stays below $M^*$ throughout.}
+\caption{$P_3$ with PID. (a) Published tuning ($\overline M=1.81$,
+$\circ$), one band move lowering $K_i$ ($M_s=1.740$, as predicted by
+\eqref{eq:predict}), certified tuning ($1.690$). (b) $M_s$ of the tuning
+applied in each iteration.}
 \label{fig:certified}
 \end{figure}
 
 \begin{table}[t]
 \centering
-\caption{Published, certified and safe \spin, $M^*=1.7$: $M_s$ of the
-most aggressive tuning accepted in the last $60$ iterations (bold: above
-$M^*$), from the cautious (c) and the bold (b) start. Bottom: totals
-over all $19$ loops ($3800$ iterations per start).}
+\caption{Final $M_s$ (most aggressive tuning accepted in the last $60$
+iterations; bold: $>M^*=1.7$) from the cautious (c) and bold (b) start.
+Bottom: totals over the $19$ loops, $3800$ iterations per start.}
 \label{tab:spin}
 \footnotesize\setlength{\tabcolsep}{3.2pt}
 \begin{tabular}{llcccccc}
@@ -628,8 +627,8 @@ fast & PID & $\mathbf{1.89}$ & $\mathbf{1.98}$ & $1.63$ & $1.69$ & $1.47$ & $1.5
 \section{Simulations}
 \label{sec:sim}
 
-\paragraph*{Setup} We run published, certified and safe \spin, each for
-$200$ iterations of Algorithm~1 with its defaults. The derivative has a
+\paragraph*{Setup} Each variant runs $200$ iterations of Algorithm~1
+with its defaults. The derivative has a
 first-order filter with the time constant $T_f=T_d/10$, where
 $T_d=K_d/K_p$. Since the gain box ties the result to the start, every
 loop runs from two starts: SIMC \cite{Skogestad2003} on a
@@ -637,16 +636,15 @@ first-order-plus-dead-time model obtained by the half rule, with the
 closed-loop time constant three times the model dead time (cautious
 start), and the same tuning with all gains doubled (bold start). The
 $19$ test loops are (1) the four plants of \cite{SPIN},
-$P_1=e^{-s}/((10s+1)(s+1)^3)$, $P_2=1.25e^{-8s}/(5s+1)^4$,
-$P_3=e^{-10s}/((2s+1)(s+1)^3)$ and $P_4=e^{-4s}/(8s+1)^6$, with PI and
+$P_1=\mathrm{e}^{-s}/((10s+1)(s+1)^3)$, $P_2=1.25\mathrm{e}^{-8s}/(5s+1)^4$,
+$P_3=\mathrm{e}^{-10s}/((2s+1)(s+1)^3)$ and $P_4=\mathrm{e}^{-4s}/(8s+1)^6$, with PI and
 with PID; (2) four plants that place the oscillation in a chosen band:
-the delay-dominant $e^{-5s}/(s+1)$ and the lag-dominant $e^{-s}/(10s+1)$
-and $e^{-0.5s}/((10s+1)(s+1))$ with PI, and the fast
-$e^{-0.1s}/((s+1)(0.5s+1))$ with PID; (3) the family
-$e^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$ with PID and
+the delay-dominant $\mathrm{e}^{-5s}/(s+1)$ and the lag-dominant $\mathrm{e}^{-s}/(10s+1)$
+and $\mathrm{e}^{-0.5s}/((10s+1)(s+1))$ with PI, and the fast
+$\mathrm{e}^{-0.1s}/((s+1)(0.5s+1))$ with PID; (3) the family
+$\mathrm{e}^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$ with PID and
 $L_d\in\{0.25,0.5,1,\dots,16\}$. P, I and D act on the error. Let $T_a$
-be the dead time plus the lag time constants (the dead-time share
-$L_d/T_a$ of the family runs from $0.125$ to $0.90$). As in a real
+be the dead time plus the lag time constants. As in a real
 controller, $T_s$ stays fixed: $T_s=\min(T_a/100,T_f/20)$ for the PID
 start tuning and $T_a/1000$ for PI. The lags are discretized exactly and
 the dead time is rounded to whole samples. Each record covers $15\,T_a$.
@@ -667,9 +665,9 @@ between its bounds, with $\overline M-M_s\le0.003\approx\eta+\tau$.
 Published \spin ended above $M^*=1.7$ on $9$ of the $19$ loops from the
 cautious start and on $7$ from the bold start (up to $M_s=2.07$);
 certified \spin on none (at most $1.69$), as Theorem~\ref{thm:spin}(i)
-guarantees, and every loop kept accepting tunings. A rejected tuning was
-lowered by the band move that the prediction chose; on $P_3$ with PID,
-the prediction matched the true $M_s$ (Fig.~\ref{fig:certified}(a)). The
+guarantees, and every loop kept accepting tunings. On $P_3$ with PID,
+the predicted band move matched the true $M_s$
+(Fig.~\ref{fig:certified}(a)). The
 load-step IAE rose by $9\%$ and $8\%$ on average.
 
 \paragraph*{Staying below $M^*$ (Corollary~\ref{cor:safe}, Table~\ref{tab:spin}, Fig.~\ref{fig:certified}(b))}
@@ -687,11 +685,10 @@ unstable; \eqref{eq:aheadbound} exceeded $M_s$ by a median of $0.011$.
 % run_safe.sh, analyze_safe.py, confirm_thm3.py
 
 \paragraph*{Limit values under the certificate} With every limit
-$\bar N_k=1/2$, certified \spin still ended below $M^*$, but the counts
-did most of the rejecting: $2$ and $3$ loops (cautious, bold start)
-accepted no tuning, and the median load-step IAE rose by $11$ and
-$19\%$. It still applied tunings above $M^*$ in $1310$ and $1420$
-iterations. Under the certificate, the limits set performance, not
+$\bar N_k=1/2$, certified \spin still ended below $M^*$, but $2$ and $3$
+loops (cautious, bold start) accepted no tuning, the median load-step
+IAE rose by $11$ and $19\%$, and tunings above $M^*$ were still applied
+in $1310$ and $1420$ iterations. The limits set performance, not
 robustness; only certifying in advance keeps the tuning safe.
 % run_limits_fixed.sh, analyze_limits_fixed.py
 
@@ -699,8 +696,7 @@ robustness; only certifying in advance keeps the tuning safe.
 
 The setpoint step that a model-free tuner applies anyway certifies the
 robustness of the loop it tests: one finite record gives two-sided
-bounds on $M_s$ without a model or a dedicated experiment, and so does
-every logged setpoint change made from rest. The same record certifies
+bounds on $M_s$ without a model or a dedicated experiment. The same record certifies
 the stability and $M_s$ of the next tuning before it is applied. With
 these certificates, any iterative tuner accepts only tunings with
 $M_s\le M^*$, a uniform back-off always restores acceptance, and no
