@@ -414,12 +414,23 @@ moves $2,1,0$, back-off($C$) that Theorem~\ref{thm:ahead} certifies
 ($M_s\le M^*$); $C$ if none}
 \end{tabular}
 \smallskip\hrule\smallskip
-\noindent\emph{Moves}, with $g=1/(1-\beta)$ and bands $0$, $1$, $2$
-for $K_i$, $K_p$, $K_d$. \emph{Raise:} all gains times $g$. \emph{Band
-move $k$:} gain $k$ divided by $g$, the gains below it times $g$.
-\emph{Back-off:} all gains divided by $g$. \emph{Retreat:} $K_i$, $K_p$,
-$K_d$ divided by $2$, $4$, $8$. Gains stay within $[0.001,10]$ times
-their initial values (the gain box). $e$ \emph{does not decay} if
+\noindent\emph{Actions:} each multiplies the gains as listed, with
+$g=1/(1-\beta)$ ($\cdot$: unchanged). Bands $0$, $1$, $2$ belong to
+$K_i$, $K_p$, $K_d$; PI has bands $0$, $1$.\par\smallskip
+\centerline{\begin{tabular}{@{}lcccl@{}}
+\toprule
+action & $K_i$ & $K_p$ & $K_d$ & used in\\
+\midrule
+raise & $g$ & $g$ & $g$ & 5\\
+band move $0$ & $1/g$ & $\cdot$ & $\cdot$ & 6, A2, B2\\
+band move $1$ & $g$ & $1/g$ & $\cdot$ & 6, A2, B2\\
+band move $2$ & $g$ & $g$ & $1/g$ & 6, A2, B2\\
+back-off & $1/g$ & $1/g$ & $1/g$ & B1, A2, B2\\
+retreat & $1/2$ & $1/4$ & $1/8$ & 2\\
+\bottomrule
+\end{tabular}}\smallskip
+\noindent Gains stay within $[0.001,10]$ times their initial values (the
+gain box). $e$ \emph{does not decay} if
 $\max|e_n|$ over the last fifth of the record exceeds half of
 $\max|e_n|$. \emph{Details:} A2 takes the highest such band, and backs
 off after $10$ band moves without a pass; a tuning that failed B1 is
