@@ -2,8 +2,9 @@
 
 Authors: P. Otta, D. Pachner, J. Dostál, V. Havlena. Extends the SPIN method (`../SPIN_poster`).
 
-- `spin_ecc27.tex`: paper source (ieeeconf, 6 pages). `spin_ecc27_preview.pdf`: preview build
-  (article-class shim of ieeeconf; the final layout needs the real `ieeeconf.cls`).
+- `spin_ecc27.tex`: paper source (ieeeconf, 6 pages). `ieeeconf.cls`: the
+  PaperPlaza class from the ECC author kit. `spin_ecc27.pdf`: build with it
+  (`pdflatex` twice; 6 pages).
 - `fig_record.pdf`, `fig_stair.pdf`, `fig_certified.pdf`: figures 1-3.
 - `scripts/`: confirmation of every statement and all figures; see `scripts/README.md`.
 

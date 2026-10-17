@@ -15,6 +15,7 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{url}
+\let\labelindent\relax % ieeeconf defines it; enumitem redefines it
 \usepackage[inline]{enumitem}
 \setlist{nosep,leftmargin=*}
 
@@ -23,7 +24,7 @@
 \newtheorem{theorem}{Theorem}
 \newtheorem{corollary}{Corollary}
 \newtheorem{assumption}{Assumption}
-\newenvironment{proof}{\noindent\textit{Proof:}\ }{\hfill$\square$\par\smallskip}
+\renewenvironment{proof}{\noindent\textit{Proof:}\ }{\hfill$\square$\par\smallskip}
 \usepackage{xspace}
 \newcommand{\spin}{SPIN\xspace}
 
@@ -175,14 +176,14 @@ Let Lemma~\ref{lem:record} and Assumption~\ref{ass:tail} hold. Let $G$ be
 a uniform grid on $[0,\bar\theta]$, $0<\bar\theta\le\pi$, with spacing
 $h$ and containing both ends. For any integer $n_c$, let
 \begin{align*}
-J&=\textstyle\sum_{n=0}^N|n-n_c|\,|a_n|,\;\;
-B=\sum_{n=1}^{N-1}|a_{n+1}-a_n|+|a_N|+2\tau.
+J&=\textstyle\sum_{n=0}^N|n-n_c|\,|a_n|,\\
+B&=\textstyle\sum_{n=1}^{N-1}|a_{n+1}-a_n|+|a_N|+2\tau.
 \end{align*}
 Then $\underline M\le M_s\le\overline M$, where
 \begin{align}
 \underline M&=\textstyle\max_{\theta\in G}|\hat S(\theta)|-\tau,\nonumber\\
-\overline M&=\max\Big\{\textstyle\max_{\theta\in G}|\hat S(\theta)|+\frac{hJ}{2}+\tau,\;
-1+\frac{B}{\sin(\bar\theta/2)}\Big\},
+\overline M&=\max\Big\{\textstyle\max_{\theta\in G}|\hat S(\theta)|+\frac{hJ}{2}+\tau,
+\nonumber\\&\qquad\quad 1+\frac{B}{\sin(\bar\theta/2)}\Big\},
 \label{eq:bound}
 \end{align}
 and the second term is omitted if $\bar\theta=\pi$. If $\tau$ equals the
