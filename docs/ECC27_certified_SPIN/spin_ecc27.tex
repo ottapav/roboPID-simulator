@@ -386,31 +386,29 @@ change the gains.\footnote{An online simulator:
 \begin{figure}[t]
 \small
 \hrule\smallskip
-\noindent\textbf{Algorithm 1:} one iteration of the three variants.
-\emph{Published \spin} \cite{SPIN}: lines 1--10. \emph{Certified \spin}:
-lines 1--10 with C7a--C7c instead of 7. \emph{Safe \spin}: lines 1--10
-with S1--S3 added.
+\noindent\textbf{Algorithm 1:} one iteration. \emph{Published \spin}
+\cite{SPIN}: lines 1--10. \emph{Certified \spin}: adds layer A, the
+acceptance test. \emph{Safe \spin}: adds layers A and B.
 \smallskip\hrule\smallskip
 \noindent\begin{tabular}{@{}r@{\hspace{0.6em}}l@{}}
 1: & apply a setpoint step and record the error $e$\\
-\textbf{S1:} & \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert})}\\
-\textbf{S2:} & \textbf{if $\overline M>M^*$ then} back off uniformly (no accepted\\
-    & \quad tuning yet) or return to the last accepted one \hfill (reject)\\
+\textbf{A1:} & \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert});}\\
+    & \quad \textbf{the tuning is accepted iff $\overline M\le M^*$}\\
+\textbf{B1:} & \textbf{if not accepted:} back off uniformly (no accepted\\
+    & \quad tuning yet) or return to the last accepted one; stop\\
 2: & \textbf{if} the record does not settle \textbf{then}\\
 3: & \quad divide $K_i$, $K_p$, $K_d$ by $2$, $4$, $8$ \hfill (retreat)\\
 4: & \textbf{else}\\
 5: & \quad count the turns $N_0$, $N_1$, $N_2$ of $\Gamma_0$, $\Gamma_1$, $\Gamma_2$\\
 6: & \quad \textbf{if} $N_k\le\bar N_k$ for every band $k$ \textbf{then}\\
 7: & \quad\quad raise all gains by one increment \hfill (accept)\\
-\textbf{C7a:} & \quad\quad \textbf{compute $\overline M$ from the record (Theorem~\ref{thm:cert})}\\
-\textbf{C7b:} & \quad\quad \textbf{if $\overline M\le M^*$ then} raise all gains \hfill (accept)\\
-\textbf{C7c:} & \quad\quad \textbf{else} lower the gains by a band move\\
-    & \quad\quad\quad (line 10) or a uniform back-off \hfill (reject)\\
+\textbf{A2:} & \quad\quad \textbf{if not accepted:} lower the gains instead, by a\\
+    & \quad\quad\quad band move (line 10) or a uniform back-off\\
 8: & \quad \textbf{else}\\
 9: & \quad\quad $k\leftarrow$ lowest band with $N_k>\bar N_k$\\
 10: & \quad\quad lower the gain of band $k$ by one increment and\\
     & \quad\quad raise the gains of the bands below $k$ by one\\
-\textbf{S3:} & \textbf{apply the move of lines 3--10 only if Theorem~\ref{thm:ahead}}\\
+\textbf{B2:} & \textbf{apply the move of lines 3--10 only if Theorem~\ref{thm:ahead}}\\
     & \quad \textbf{certifies it}; else the first certified of the band moves\\
     & \quad $k=2,1,0$ and a uniform back-off; else keep the tuning\\
 \end{tabular}
@@ -543,9 +541,9 @@ each tuning after applying it, safe \spin before.
 
 \emph{Certified \spin accepts a tuning that the counts accept only if the
 upper bound $\overline M$ of Theorem~\ref{thm:cert}, computed from the
-same record, is at most $M^*$.} In Algorithm~1, it replaces line 7 by
-lines C7a--C7c: the counts shape the tuning, and the certificate decides
-whether it is accepted. A rejected tuning is lowered by a band
+same record, is at most $M^*$.} It adds layer A to Algorithm~1: the
+counts shape the tuning, and the certificate decides whether it is
+accepted (A2). A rejected tuning is lowered by a band
 move of line 10 that the prediction of Theorem~\ref{thm:ahead} expects
 to lower $M_s$, at most $10$ in a row, or else by a uniform back-off.
 
@@ -559,17 +557,19 @@ followed by an accepted tuning after finitely many moves.
 
 \begin{proof}
 The result is an accepted tuning, so Theorem~\ref{thm:spin}(i) applies.
-After at most $10$ band moves, line C7c backs off uniformly, which ends
+After at most $10$ band moves, line A2 backs off uniformly, which ends
 in an acceptance within $j^*$ steps by Theorem~\ref{thm:spin}(iii),
 unless line 3 or 10 moves the gains first.
 \end{proof}
 
 Certified \spin ends safe, but it learns that a tuning is fragile only
 by applying it. \emph{Safe \spin certifies every move before applying
-it}, by Theorem~\ref{thm:ahead} (lines S1--S3). It accepts a tuning when
-its own record gives $\overline M\le M^*$ (S2), and proposes moves only
-from accepted tunings. A tuning that was certified in advance but fails
-S2 is replaced by the last accepted one.
+it}: it adds layer B, which applies the acceptance test to every record
+(B1; A2 then never acts), so moves are proposed only from accepted
+tunings, and certifies
+each move by Theorem~\ref{thm:ahead} before applying it (B2). A tuning
+certified in advance but not accepted is replaced by the last accepted
+one.
 
 \begin{corollary}[Safe \spin]
 \label{cor:safe}
