@@ -21,7 +21,7 @@ Ms = json.load(open("traj_P3PID.json"))
 G = json.load(open("traj_P3PID_gains.json"))
 RULES = [("original", "basic"), ("cert-shape", "certified"), ("cert-ahead", "safe")]
 
-fig, ax = plt.subplots(2, 3, figsize=(3.45, 2.15), sharex=True, sharey="row",
+fig, ax = plt.subplots(2, 3, figsize=(3.45, 1.85), sharex=True, sharey="row",
                        gridspec_kw=dict(height_ratios=[1.15, 1], hspace=0.12, wspace=0.12))
 for j, (rule, name) in enumerate(RULES):
     g = np.array(G[rule]); m = np.array(Ms[rule]); it = np.arange(len(m))
@@ -45,7 +45,7 @@ for j, (rule, name) in enumerate(RULES):
     bot.set_xlabel("iteration" if j == 1 else "")
 ax[0, 2].legend(fontsize=6.0, frameon=False, loc="lower right", handlelength=1.0,
                 labelspacing=0.1, handletextpad=0.3, borderaxespad=0.0, ncol=3, columnspacing=0.6)
-fig.subplots_adjust(left=0.15, right=0.99, bottom=0.17, top=0.92)
+fig.subplots_adjust(left=0.15, right=0.99, bottom=0.19, top=0.92)
 fig.savefig("../fig_history.pdf"); fig.savefig("../fig_history.png", dpi=200)
 for rule, name in RULES:
     m = np.array(Ms[rule]); g = np.array(G[rule])

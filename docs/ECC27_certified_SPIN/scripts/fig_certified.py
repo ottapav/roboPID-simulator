@@ -23,7 +23,7 @@ LABEL = {"delay-dominant PI": "delay\nPI", "lag-dominant PI": "lag\nPI", "lag-do
          "fast PID": "fast\nPID"}
 LABEL.update({f"P{i} {c}": f"$P_{i}$\n{c}" for i in range(1, 5) for c in ("PI", "PID")})
 
-fig, b = plt.subplots(figsize=(3.45, 1.4))
+fig, b = plt.subplots(figsize=(3.45, 1.2))
 
 # (b) ----------------------------------------------------------------------------------------
 RUNS = [json.loads(l) for f in glob.glob("safe1_*.jsonl") for l in open(f)]       # fixed T_s, cautious start
@@ -59,5 +59,5 @@ b.legend(fontsize=6.3, frameon=False, loc="upper right", handlelength=1.3, label
 print("P3 PID: upper", round(ce["upper"], 4), "true before", round(S0.max(), 4), "pred", round(pred.max(), 5),
       "true after", round(S1.max(), 5))
 
-fig.subplots_adjust(left=0.12, right=0.99, bottom=0.27, top=0.97)
+fig.subplots_adjust(left=0.12, right=0.99, bottom=0.3, top=0.97)
 fig.savefig("../fig_certified.pdf"); fig.savefig("../fig_certified.png", dpi=200)

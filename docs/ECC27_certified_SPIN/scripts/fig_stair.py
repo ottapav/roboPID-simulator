@@ -30,7 +30,7 @@ for c0 in range(0, len(ks), 40):
     for j in range(len(kk)):
         N2[c0 + j] = counts_old(E[::step, j], DT, DELTA)
 
-fig = plt.figure(figsize=(3.45, 2.5))
+fig = plt.figure(figsize=(3.45, 2.25))
 gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.0], hspace=1.0, wspace=0.42)
 a = fig.add_subplot(gs[0, :]); b = fig.add_subplot(gs[1, 0]); c = fig.add_subplot(gs[1, 1])
 
@@ -91,7 +91,7 @@ Nk = counts_old(e, DT, DELTA)
 c.set_aspect("equal"); c.set_xlim(-1.15, 1.15); c.set_ylim(-1.15, 1.15); c.axis("off")
 c.set_title(f"(c) $\\Gamma_0$, $N_0={Nk[0]:.2f}$", fontsize=8, color=INK)
 
-fig.subplots_adjust(left=0.14, right=0.98, bottom=0.15, top=0.91)
+fig.subplots_adjust(left=0.14, right=0.98, bottom=0.16, top=0.88)
 fig.savefig("fig_stair.pdf"); fig.savefig("fig_stair.png", dpi=200)
 print("crossings in (b):", len(zc), " N0 =", round(Nk[0], 3))
 ang = np.unwrap(np.arctan2(Y[1], Y[0]))
