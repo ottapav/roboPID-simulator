@@ -30,8 +30,8 @@ for c0 in range(0, len(ks), 40):
     for j in range(len(kk)):
         N2[c0 + j] = counts_old(E[::step, j], DT, DELTA)
 
-fig = plt.figure(figsize=(3.45, 2.25))
-gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.0], hspace=1.0, wspace=0.42)
+fig = plt.figure(figsize=(3.45, 2.85))
+gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.25], hspace=0.75, wspace=0.3)
 a = fig.add_subplot(gs[0, :]); b = fig.add_subplot(gs[1, 0]); c = fig.add_subplot(gs[1, 1])
 
 # (a) robustness from the limits: the counts at delta = 0.02 in turns, each band with its published limit
@@ -58,13 +58,14 @@ kd = min(len(e), np.where(abs(e) > DELTA * abs(e).max())[0][-1] + 2)
 zc = [i for i in range(1, kd) if np.sign(e[i]) != np.sign(e[i - 1]) and e[i] != 0]
 
 b.axhline(0, color=RULE, lw=0.7)
-b.fill_between([0, tt[kd - 1]], -DELTA, DELTA, color=RULE, alpha=0.35, lw=0)
-b.plot(tt[:kd], e[:kd], color=BLUE, lw=1.2)
+b.fill_between([0, 12], -DELTA, DELTA, color=INK2, alpha=0.18, lw=0)
+b.plot(tt[:kd], e[:kd], color=BLUE, lw=1.4)
 b.plot(tt[kd:], e[kd:], color=RULE, lw=1.0)
 for n, i in enumerate(zc, 1):
-    b.plot(tt[i], 0, "o", ms=4.5, color=INK, zorder=4)
-    b.text(tt[i], 0.14 if n % 2 else -0.24, f"{n}", fontsize=7, color=INK, ha="center")
-b.set_xlim(0, 12); b.set_ylim(-0.45, 1.1)
+    b.plot(tt[i], 0, "o", ms=5, color=INK, zorder=4)
+    b.text(tt[i] + 0.35, 0.1, f"{n}", fontsize=7.5, color=INK, ha="left", va="bottom")
+b.text(11.8, -0.06, "$\\pm\\delta$", fontsize=6.5, color=INK2, ha="right", va="top")
+b.set_xlim(0, 12); b.set_ylim(-0.32, 1.08); b.set_yticks([0, 0.5, 1])
 b.set_xlabel("time $t/L_d$"); b.set_ylabel("error $e$")
 b.set_title(f"(b) error, $M_s={Ms(k0):.2f}$", fontsize=8, color=INK)
 
@@ -75,24 +76,27 @@ P0, Q0 = e[:kd], (I - I[-1])[:kd]
 Y = np.vstack([P0 / abs(P0).max(), Q0 / abs(Q0).max()]); R = np.hypot(*Y); Z = Y * R ** (0.3 - 1)
 k1 = np.where(R > 0.1)[0][0]                     # the count starts where the curve leaves the disc
 p = np.array([0.0, 1.0])                         # the setpoint line e = 0 is the vertical axis
-c.plot([0, 0], [-1.25, 1.25], color=INK2, lw=0.7, ls=(0, (3, 2)))
-c.text(0.06, 1.18, "$e=0$", fontsize=6.3, color=INK2, ha="left", va="center")
-c.plot(Z[0, :k1 + 1], Z[1, :k1 + 1], color=RULE, lw=1.2)
-c.plot(Z[0, k1:], Z[1, k1:], color=BLUE, lw=1.2)
+c.plot([0, 0], [-1.3, 1.3], color=INK2, lw=0.7, ls=(0, (3, 2)))
+c.text(0.06, 1.28, "$e=0$", fontsize=6.5, color=INK2, ha="left", va="center")
+c.plot(Z[0, :k1 + 1], Z[1, :k1 + 1], color=RULE, lw=1.0)
+c.plot(Z[0, k1:], Z[1, k1:], color=BLUE, lw=1.0, alpha=0.6)
+c.plot(Z[0, zc[0]:zc[1] + 1], Z[1, zc[0]:zc[1] + 1], color=BLUE, lw=2.4)   # Lemma 2: half a turn
 c.plot(*Z[:, k1], "o", ms=4, mfc="white", mec=INK, mew=0.9, zorder=4)
-c.text(Z[0, k1] + 0.1, Z[1, k1], "start", fontsize=6.3, color=INK2, va="center")
-c.plot(0, 0, "+", color=INK, ms=6, mew=1.0)
+c.text(Z[0, k1] + 0.12, Z[1, k1] - 0.05, "start", fontsize=6.5, color=INK2, va="center")
+c.plot(0, 0, "+", color=INK, ms=7, mew=1.1)
+c.text(0.12, 0.06, "end", fontsize=6.5, color=INK2, ha="left", va="top")
 for n, i in enumerate(zc, 1):
-    c.plot(*Z[:, i], "o", ms=4.5, color=INK, zorder=4)
-    c.text(Z[0, i] + 0.2, Z[1, i] + (0.12 if n == 1 else -0.12), f"{n}", fontsize=7, color=INK, ha="center", va="center")
+    c.plot(*Z[:, i], "o", ms=5, color=INK, zorder=4)
+    c.text(Z[0, i] + 0.13, Z[1, i] + (0.13 if n == 1 else -0.15), f"{n}", fontsize=7.5, color=INK,
+           ha="left", va="center")
 m = (zc[0] + zc[1]) // 2; u = Z[:, m] / np.hypot(*Z[:, m])
-c.text(*(Z[:, m] + 0.25 * u), "$\\frac{1}{2}$ turn", fontsize=6.5, color=INK, ha="center", va="center")
+c.text(*(Z[:, m] + 0.62 * u), "$\\frac{1}{2}$ turn", fontsize=7, color=BLUE, ha="center", va="center")
 Nk = counts_old(e, DT, DELTA)
-c.set_aspect("equal"); c.set_xlim(-1.15, 1.15); c.set_ylim(-1.15, 1.15); c.axis("off")
+c.set_aspect("equal"); c.set_xlim(-1.35, 1.35); c.set_ylim(-1.3, 1.35); c.axis("off")
 c.set_title(f"(c) $\\Gamma_0$, $N_0={Nk[0]:.2f}$", fontsize=8, color=INK)
 
-fig.subplots_adjust(left=0.14, right=0.98, bottom=0.16, top=0.88)
-fig.savefig("fig_stair.pdf"); fig.savefig("fig_stair.png", dpi=200)
+fig.subplots_adjust(left=0.13, right=0.98, bottom=0.135, top=0.91)
+fig.savefig("../fig_stair.pdf")
 print("crossings in (b):", len(zc), " N0 =", round(Nk[0], 3))
 ang = np.unwrap(np.arctan2(Y[1], Y[0]))
 print("turn between crossings:", [round((ang[zc[i + 1]] - ang[zc[i]]) / (2 * math.pi), 4) for i in range(len(zc) - 1)])

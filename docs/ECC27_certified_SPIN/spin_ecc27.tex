@@ -670,118 +670,130 @@ each iteration (bottom; dots: $M_s>M^*$).}
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_response.pdf}
-\caption{The tuned loops of Fig.~\ref{fig:history} (final tunings of
-Table~\ref{tab:spin}): output after (a) a unit setpoint step and (b) a
+\caption{The tuned loops of Fig.~\ref{fig:history} (final tunings):
+output after (a) a unit setpoint step and (b) a
 unit load step at the plant input.}
 \label{fig:response}
 \end{figure}
 
 \begin{table}[t]
 \centering
-\caption{Test loops and final $M_s$ (most aggressive tuning accepted
-in the last $60$ iterations; bold: $>M^*=1.7$), from the cautious (c)
-and bold (b) start. Family:
-$\mathrm{e}^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$, $L_d=0.25,0.5,1,\dots,16$;
-the largest final $M_s$ of its $7$ loops.}
-\label{tab:spin}
-\scriptsize\setlength{\tabcolsep}{1.7pt}
-\begin{tabular}{@{}llcccccc@{}}
+\caption{The 19 test loops}
+\label{tab:loops}
+\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llcc@{}}
 \toprule
-loop, plant $P(s)$ & & \multicolumn{2}{c}{basic} & \multicolumn{2}{c}{certified} & \multicolumn{2}{c}{safe}\\
-\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}
-& & c & b & c & b & c & b \\
+& plant $P(s)$ & controller & loops\\
 \midrule
-$P_1$: $\mathrm{e}^{-s}/((10s{+}1)(s{+}1)^3)$ & PI & $1.46$ & $1.46$ & $1.46$ & $1.46$ & $1.53$ & $1.53$ \\
- & PID & $1.66$ & $\mathbf{2.03}$ & $1.66$ & $1.62$ & $1.68$ & $1.68$ \\
-$P_2$: $1.25\mathrm{e}^{-8s}/(5s{+}1)^4$ & PI & $1.64$ & $1.67$ & $1.64$ & $1.67$ & $1.67$ & $1.67$ \\
- & PID & $1.60$ & $\mathbf{1.78}$ & $1.68$ & $1.66$ & $1.68$ & $1.69$ \\
-$P_3$: $\mathrm{e}^{-10s}/((2s{+}1)(s{+}1)^3)$ & PI & $1.67$ & $1.63$ & $1.67$ & $1.63$ & $1.65$ & $1.58$ \\
- & PID & $\mathbf{1.81}$ & $\mathbf{1.74}$ & $1.69$ & $1.66$ & $1.68$ & $1.69$ \\
-$P_4$: $\mathrm{e}^{-4s}/(8s{+}1)^6$ & PI & $1.55$ & $1.60$ & $1.55$ & $1.60$ & $1.56$ & $1.63$ \\
- & PID & $1.61$ & $1.55$ & $1.61$ & $1.55$ & $1.66$ & $1.63$ \\
+from \cite{SPIN} & $P_1=\mathrm{e}^{-s}/((10s+1)(s+1)^3)$ & PI, PID & $2$\\
+& $P_2=1.25\,\mathrm{e}^{-8s}/(5s+1)^4$ & PI, PID & $2$\\
+& $P_3=\mathrm{e}^{-10s}/((2s+1)(s+1)^3)$ & PI, PID & $2$\\
+& $P_4=\mathrm{e}^{-4s}/(8s+1)^6$ & PI, PID & $2$\\
 \midrule
-$\mathrm{e}^{-5s}/(s{+}1)$ & PI & $1.68$ & $1.63$ & $1.68$ & $1.63$ & $1.68$ & $1.67$ \\
-$\mathrm{e}^{-s}/(10s{+}1)$ & PI & $\mathbf{2.01}$ & $1.69$ & $1.67$ & $1.69$ & $1.67$ & $1.69$ \\
-$\mathrm{e}^{-0.5s}/((10s{+}1)(s{+}1))$ & PI & $1.44$ & $1.47$ & $1.44$ & $1.47$ & $1.49$ & $1.66$ \\
-fast: $\mathrm{e}^{-0.1s}/((s{+}1)(0.5s{+}1))$ & PID & $\mathbf{1.89}$ & $\mathbf{1.98}$ & $1.63$ & $1.69$ & $1.47$ & $1.50$ \\
+one band & $\mathrm{e}^{-5s}/(s+1)$ & PI & $1$\\
+& $\mathrm{e}^{-s}/(10s+1)$ & PI & $1$\\
+& $\mathrm{e}^{-0.5s}/((10s+1)(s+1))$ & PI & $1$\\
+& $\mathrm{e}^{-0.1s}/((s+1)(0.5s+1))$ (fast) & PID & $1$\\
 \midrule
-family ($7$ loops) & PID & $\mathbf{1.81}$ & $\mathbf{2.07}$ & $1.68$ & $1.69$ & $1.69$ & $1.69$ \\
+family & $\mathrm{e}^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$, & PID & $7$\\
+& $L_d=0.25,0.5,1,2,4,8,16$ & & \\
 \midrule
-\multicolumn{2}{@{}l}{all $19$ loops: loops ending $>M^*$} & $9$ & $7$ & $0$ & $0$ & $0$ & $0$ \\
-\multicolumn{2}{@{}l}{iterations applying $>M^*$ (of $3800$)} & $2146$ & $2225$ & $1623$ & $1775$ & $0$ & $0$ \\
-\multicolumn{2}{@{}l}{largest $M_s$ applied} & $2.35$ & $2.38$ & $1.93$ & $1.98$ & $1.696$ & $1.695$ \\
-\multicolumn{2}{@{}l}{load-step IAE, mean change} & -- & -- & $+9\%$ & $+8\%$ & $+15\%$ & $+22\%$ \\
+total & & & $19$\\
 \bottomrule
 \end{tabular}
+
+\smallskip
+\parbox{\columnwidth}{\footnotesize Fixed sampling period: $T_a/1000$ for
+PI; for PID, the smaller of $T_a/100$ and $T_f/20$ of the start tuning,
+where $T_a$ is the dead time plus the lag time constants and
+$T_f=T_d/10$, $T_d=K_d/K_p$, the derivative filter time constant.}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Results on the 19 loops, from the cautious (c) and bold (b)
+start}
+\label{tab:spin}
+\footnotesize\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+& \multicolumn{2}{c}{basic} & \multicolumn{2}{c}{certified} & \multicolumn{2}{c}{safe}\\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+& c & b & c & b & c & b \\
+\midrule
+\multicolumn{7}{@{}l}{\emph{final tuning}$^{a}$}\\
+\quad loops with $M_s>M^*$ & $9$ & $7$ & $0$ & $0$ & $0$ & $0$\\
+\quad largest $M_s$ & $2.01$ & $2.07$ & $1.69$ & $1.69$ & $1.69$ & $1.69$\\
+\quad load-step IAE$^{b}$ & -- & -- & $+9\%$ & $+8\%$ & $+15\%$ & $+22\%$\\
+\multicolumn{7}{@{}l}{\emph{while tuning} ($3800$ iterations)}\\
+\quad iterations with $M_s>M^*$ & $2146$ & $2225$ & $1623$ & $1775$ & $0$ & $0$\\
+\quad largest $M_s$ & $2.35$ & $2.38$ & $1.93$ & $1.98$ & $1.696$ & $1.695$\\
+\bottomrule
+\end{tabular}
+
+\smallskip
+\parbox{\columnwidth}{\footnotesize $^{a}$The most aggressive tuning
+accepted in the last $60$ iterations. $^{b}$Mean change from basic
+\spin.}
 \end{table}
 
 \section{Simulations}
 \label{sec:sim}
 
-\paragraph*{Setup}
-\begin{itemize}
-\item \emph{Runs.} Each variant runs $200$ iterations of Algorithm~1 with
-its defaults. The gain box ties the result to the start, so every loop
-runs from two starts: SIMC \cite{Skogestad2003} on a half-rule
+\paragraph*{Setup} We test the three variants on the $19$ loops of
+Table~\ref{tab:loops}. Each runs $200$ iterations of Algorithm~1 with its
+defaults. The gain box ties the result to the start, so every loop runs
+from two starts: SIMC \cite{Skogestad2003} on a half-rule
 first-order-plus-dead-time model, with the closed-loop time constant
 three times the model dead time (cautious), and the same tuning with all
-gains doubled (bold).
-\item \emph{Loops.} The $19$ loops of Table~\ref{tab:spin}: the four
-plants of \cite{SPIN} with PI and PID, four plants that place the
-oscillation in a chosen band, and a family with growing dead time.
-\item \emph{Digital loop.} P, I and D act on the error; the derivative
-filter has the time constant $T_f=T_d/10$, $T_d=K_d/K_p$. As in a real
-controller, $T_s$ stays fixed: for PID, the smaller of $T_a/100$ and
-$T_f/20$ of the start tuning; for PI, $T_a/1000$; $T_a$ is the dead time
-plus the lag time constants. Lags are discretized exactly, the dead time
-is rounded to whole samples, and each record covers $15\,T_a$.
-\item \emph{Measures.} $M_s$ of this digital loop, from its exact $L$;
-performance by the load-step IAE, the integral of $|y|$ after a unit
-step disturbance at the plant input.
-\end{itemize}
+gains doubled (bold). P, I and D act on the error. As in a real
+controller, the sampling period stays fixed, and each record covers $15$
+times the dead time plus the lag time constants. $M_s$ is that of this
+digital loop, computed from its exact $L$. Performance is measured by
+the load-step IAE, the integral of $|y|$ after a unit step disturbance
+at the plant input.
 
-\paragraph*{Results}
-\begin{itemize}
-\item \textbf{The certificates held and were tight.}
-Theorem~\ref{thm:cert}: for all $276$ accepted tunings, a four times
-longer record showed a tail below $3\cdot10^{-5}$, well within
-$\tau=10^{-3}$, and every $M_s$ lay between its bounds, within $0.003$ of
-$\overline M$. Theorem~\ref{thm:ahead}: of $456$ random moves from
-accepted tunings (gains scaled by up to $8$), all $339$ certified moves
-were stable and all $117$ rejected ones unstable; the bound
-\eqref{eq:aheadbound} exceeded $M_s$ by a median of $0.011$.
+\paragraph*{The certificates held and were tight} For all $276$ accepted
+tunings, a four times longer record showed a tail below $3\cdot10^{-5}$,
+well within $\tau=10^{-3}$, and every $M_s$ lay between its bounds, at
+most $0.003$ below $\overline M$ (Theorem~\ref{thm:cert}). Of $456$
+random moves from accepted tunings, with gains scaled by up to $8$, all
+$339$ certified moves were stable and all $117$ rejected ones unstable,
+and the bound \eqref{eq:aheadbound} exceeded $M_s$ by a median of $0.011$
+(Theorem~\ref{thm:ahead}).
 % confirm_thm1.py (RUNS=safe1,safe2), confirm_thm3.py
-\item \textbf{Certified \spin ends below $M^*$} (Corollary~\ref{cor:spin},
-Table~\ref{tab:spin}). Basic \spin ended above $M^*$ on $9$ and $7$
-loops (cautious, bold start), certified \spin on none, and every loop
-kept accepting tunings. On $P_3$ with PID, the predicted band move
-matched the true $M_s$ (Fig.~\ref{fig:certified}).
-\item \textbf{Only safe \spin stays below $M^*$ while tuning}
-(Corollary~\ref{cor:safe}, Table~\ref{tab:spin}). Basic and certified
-\spin applied tunings above $M^*$ in $57\%$ and $45\%$ of the $7600$
-iterations; safe \spin in none, and all its tunings were stable. Every
-start tuning was accepted, so Corollary~\ref{cor:safe} covered every
-iteration.
+
+\paragraph*{Certified \spin ends below $M^*$, only safe \spin stays below it}
+Table~\ref{tab:spin} shows both corollaries. Basic \spin ended above
+$M^*$ on $9$ and $7$ of the $19$ loops; certified \spin on none, and
+every loop kept accepting tunings (Corollary~\ref{cor:spin}). But
+certified \spin must apply a tuning to reject it, so it still applied
+tunings above $M^*$ in $45\%$ of its iterations, against $57\%$ for basic
+\spin. Safe \spin applied none, and all its tunings were stable
+(Corollary~\ref{cor:safe}; every start tuning was accepted, so the
+corollary covered every iteration).
 % run_safe.sh, analyze_safe.py
-\item \textbf{Robustness costs little performance with safe \spin}
-(Figs.~\ref{fig:history} and~\ref{fig:response}). On $P_3$ with PID,
-basic and certified \spin climb alike; certified \spin then lowers
-$K_i$, but it must apply each tuning of its final cycle to reject it,
-so $131$ of its $200$ applied tunings exceed $M^*$. Safe \spin applies
-only certified moves and trades $K_p$ for $K_d$. The setpoint responses
-are alike, and the basic tuning barely overshoots although its $M_s$ is
-$1.81$: the response alone does not reveal fragility. In load
-rejection, certified \spin, with the lower $K_i$, is $23\%$ worse than
-basic \spin, safe \spin only $3\%$. Over all loops, the median
-load-step IAE of safe and certified \spin is the same; the mean of safe
-\spin is higher only because of the fast PID loop, where it settled at
-$M_s\approx1.5$.
-\item \textbf{Count limits do not replace the certificate.} With every
+
+\paragraph*{Robustness costs little with safe \spin} Figs.~\ref{fig:certified}--\ref{fig:response}
+follow $P_3$ with PID. From the record of the basic tuning, \eqref{eq:predict} predicted
+the $M_s$ after a band move exactly (Fig.~\ref{fig:certified}).
+Basic and certified \spin climb alike (Fig.~\ref{fig:history});
+certified \spin then lowers $K_i$, but it must apply each tuning of its
+final cycle to reject it, so $131$ of its $200$ applied tunings exceed
+$M^*$. Safe \spin applies only certified moves and trades $K_p$ for
+$K_d$. The setpoint responses are alike (Fig.~\ref{fig:response}), and
+the basic tuning barely overshoots although its $M_s$ is $1.81$: the
+response alone does not reveal fragility. In load rejection, certified
+\spin, with its lower $K_i$, is $23\%$ worse than basic \spin, and safe
+\spin only $3\%$. Over all loops, safe and certified \spin have the same
+median load-step IAE; the mean of safe \spin is higher only because of
+the fast PID loop, where it settled at $M_s\approx1.5$.
+
+\paragraph*{Count limits do not replace the certificate} With every
 $\bar N_k=1/2$, certified \spin still applied tunings above $M^*$ in
 $1310$ and $1420$ iterations, accepted no tuning on $2$ and $3$ loops,
 and raised the median load-step IAE by $11$ and $19\%$.
 % run_limits_fixed.sh, analyze_limits_fixed.py
-\end{itemize}
 
 \section{Conclusion}
 
