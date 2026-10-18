@@ -75,27 +75,23 @@ function, $S=1/(1+L)$ the sensitivity function and $T=1-S$ the
 complementary sensitivity function. The peak $M_s=\max_\omega|S|$
 measures robustness: $1/M_s$ is the shortest distance from the Nyquist
 curve of $L$ to the critical point $-1$, so $M_s$ near $1.4$ is safe and
-near $2$ is poor \cite{AstromHagglund2004}. Model-based tuning rules
-reach a chosen $M_s$ \cite{AstromHagglund2004,Skogestad2003}. Model-free
+near $2$ is poor~\cite{AstromHagglund2004}. Model-based tuning rules
+reach a chosen $M_s$~\cite{AstromHagglund2004,Skogestad2003}. Model-free
 tuners adjust the gains from closed-loop data instead, by iterative
-feedback tuning \cite{IFT1998}, extremum seeking
-\cite{Killingsworth2006}, virtual reference feedback tuning
-\cite{VRFT2002}, setpoint overshoot \cite{Shamsuzzoha2010} or
-step-response inspection \cite{SPIN}. They target performance or a
+feedback tuning~\cite{IFT1998}, extremum seeking~\cite{Killingsworth2006}, virtual reference feedback tuning~\cite{VRFT2002}, setpoint overshoot~\cite{Shamsuzzoha2010} or
+step-response inspection~\cite{SPIN}. They target performance or a
 response shape; none guarantees the $M_s$ of its result, or of the
 tunings it tries on the way. Once a loop runs, its $M_s$ is rarely
-checked at all \cite{Desborough2002,Bauer2016}.
+checked at all~\cite{Desborough2002,Bauer2016}.
 
 The $\mathcal H_\infty$ norm of a system, and hence $M_s$, can be
 estimated from data: by power iterations over repeated dedicated
-experiments \cite{Wahlberg2010,Rojas2012}, by data-driven estimation
-\cite{vanHeusden2007}, from limit cycles induced in closed loop
-\cite{Garcia2003}, or from impulse-response data under a decay
-assumption, with a one-sided guarantee \cite{Tu2017}; margins can be
-bounded from data \cite{Isoshima2023}.
+experiments~\cite{Wahlberg2010,Rojas2012}, by data-driven estimation~\cite{vanHeusden2007}, from limit cycles induced in closed loop~\cite{Garcia2003}, or from impulse-response data under a decay
+assumption, with a one-sided guarantee~\cite{Tu2017}; margins can be
+bounded from data~\cite{Isoshima2023}.
 These methods need dedicated experiments, give estimates or one-sided
 bounds, and are not built into a tuner. Safe Bayesian optimization tunes
-controllers without leaving a safe set \cite{Berkenkamp2016}, with
+controllers without leaving a safe set~\cite{Berkenkamp2016}, with
 probabilistic guarantees under a Gaussian-process model of the cost.
 
 \emph{The idea.} A tuner already applies a setpoint step in every
@@ -112,7 +108,7 @@ Theorem~\ref{thm:cert});
 tunings with $M_s\le M^*$ (Theorem~\ref{thm:spin}), and a test of
 the next tuning \emph{before} it is applied (Theorem~\ref{thm:ahead}),
 which keeps every applied tuning below $M^*$ (Section~\ref{sec:accept});
-\item \emph{application to \spin} \cite{SPIN}: two variants built on
+\item \emph{application to \spin}~\cite{SPIN}: two variants built on
 the tests, certified \spin, which ends below $M^*$, and safe \spin,
 which never applies a tuning above $M^*$ (Section~\ref{sec:app},
 Corollaries~\ref{cor:spin} and~\ref{cor:safe}), and why its turn counts
@@ -268,7 +264,7 @@ Passing means $\overline M\le M^*$, and $M_s\le\overline M$.
 \end{proof}
 
 So the test never passes a fragile tuning. Nor can it trap a tuner: a
-uniform back-off shrinks the Nyquist curve of $L$ towards the origin,
+uniform back-off shrinks the Nyquist curve of $L$ toward the origin,
 away from $-1$, so it always leads to a tuning that passes.
 
 \begin{proposition}[A back-off restores the test]
@@ -294,7 +290,7 @@ indentation outside the pole $z=1$, where $\lambda L$ has a positive real
 part since $K_iP(1)>0$: $\lambda L$ has no poles outside this contour,
 and its curve stays in $\mathrm{Re}\ge-\lambda|\mu|>-1$, so it cannot
 encircle $-1$. Back-offs drive
-$\lambda$ to zero, and with it the bound \eqref{eq:backoff} towards $1$,
+$\lambda$ to zero, and with it the bound \eqref{eq:backoff} toward $1$,
 until $M_s\le M^*-2\tau-\eta$ and the tuning passes.
 \end{proof}
 
@@ -357,11 +353,11 @@ Theorem~\ref{thm:ahead} needs no small-step assumption. With $\tau=0$,
 
 \subsection{The \spin method}
 
-\spin \cite{SPIN} tunes an I, PI or PID controller with the integral,
+\spin~\cite{SPIN} tunes an I, PI or PID controller with the integral,
 proportional and derivative gains $K_i$, $K_p$, $K_d$. In each
 iteration, it applies one setpoint step, records the error $e_n$, and
 forms three phase portraits, curves in the plane traced as $n$ grows
-(the Pachner plots of \cite{SPIN}):
+(the Pachner plots of~\cite{SPIN}):
 \begin{equation}
 \begin{aligned}
 \Gamma_0&:\big(e_n,\textstyle\sum_{m\le n}e_m\big),\qquad
@@ -406,7 +402,7 @@ band that turns too much; Algorithm~1 states the rule.\footnote{An online simula
 \noindent\textbf{Algorithm 1:} one iteration (top: where the tests A and
 B sit): from the tuning $C$ in use to the next tuning; \textbf{return}
 ends the iteration. \emph{Basic
-\spin} \cite{SPIN}: lines 1--7. \emph{Certified \spin}: adds layer A,
+\spin}~\cite{SPIN}: lines 1--7. \emph{Certified \spin}: adds layer A,
 the test (Theorem~\ref{thm:spin}). \emph{Safe \spin}: adds A1
 and layer B, which certifies each move before applying it
 (Theorem~\ref{thm:ahead}).
@@ -460,7 +456,6 @@ $\tau=10^{-3}$, $\eta=2\cdot10^{-3}$.
 \end{figure}
 
 \subsection{From certified to safe \spin}
-\label{sec:spin}
 
 Algorithm~1 adds the tests of Section~\ref{sec:accept} in two steps.
 \emph{Certified \spin accepts a tuning only if it passes both the counts
@@ -511,7 +506,6 @@ with $M_s\le M^*$.
 \end{proof}
 
 \subsection{Why the turn counts alone cannot certify}
-\label{sec:count}
 
 The counts see setpoint crossings, and crossings reveal $M_s$ only on
 special loops. To show this, write a portrait
@@ -543,15 +537,14 @@ the orientation.
 
 So each setpoint crossing adds half a turn to $N_0$, and a count sees
 the crossings that rise above $\delta$. On some loops, crossings do
-reveal $M_s$. Lambda, IMC and SIMC rules cancel the plant lag by the
-controller zero \cite{Skogestad2003}, which leaves the loop
+reveal $M_s$. Lambda tuning, internal model control (IMC) and Skogestad's IMC
+(SIMC)~\cite{Skogestad2003} cancel the plant lag by the controller zero, which leaves the loop
 $L(s)=\kappa\,\mathrm{e}^{-sL_d}/(sL_d)$ with the loop gain $\kappa$. Its
 $M_s$ grows with $\kappa$, and its error never crosses the setpoint while
 $\kappa\le1/\mathrm{e}$, that is, $M_s\le1.39$ (a classical result on
-this delay equation \cite{GyoriLadas1991}); beyond, each new crossing
+this delay equation~\cite{GyoriLadas1991}); beyond, each new crossing
 above $\delta$ appears at a fixed $M_s$. So the counts rise in steps
-(Fig.~\ref{fig:stair}(a)), and the limits $\bar N_k=(1/2,3/4,1)$ of
-\cite{SPIN} allow $0$, $1$ and $2$ crossings, that is, $M_s\le1.53$,
+(Fig.~\ref{fig:stair}(a)), and the limits $\bar N_k=(1/2,3/4,1)$ of~\cite{SPIN} allow $0$, $1$ and $2$ crossings, that is, $M_s\le1.53$,
 $1.84$ and $2.21$. $\Gamma_0$ binds first, so on these loops \spin stops
 at $M_s\le1.53$.
 % check_result1.py, confirm_limits.py
@@ -616,7 +609,7 @@ unit load step at the plant input.}
 \toprule
 & plant $P(s)$ & controller & loops\\
 \midrule
-from \cite{SPIN} & $P_1=\mathrm{e}^{-s}/((10s+1)(s+1)^3)$ & PI, PID & $2$\\
+from~\cite{SPIN} & $P_1=\mathrm{e}^{-s}/((10s+1)(s+1)^3)$ & PI, PID & $2$\\
 & $P_2=1.25\,\mathrm{e}^{-8s}/(5s+1)^4$ & PI, PID & $2$\\
 & $P_3=\mathrm{e}^{-10s}/((2s+1)(s+1)^3)$ & PI, PID & $2$\\
 & $P_4=\mathrm{e}^{-4s}/(8s+1)^6$ & PI, PID & $2$\\
@@ -674,15 +667,15 @@ accepted in the last $60$ iterations. $^{b}$Mean change from basic
 \paragraph*{Setup} We test the three variants on the $19$ loops of
 Table~\ref{tab:loops}. Each runs $200$ iterations of Algorithm~1 with its
 defaults. The gain box ties the result to the start, so every loop runs
-from two starts: SIMC \cite{Skogestad2003} on a half-rule
+from two starts: SIMC~\cite{Skogestad2003} on a half-rule
 first-order-plus-dead-time model, with the closed-loop time constant
 three times the model dead time (cautious), and the same tuning with all
 gains doubled (bold). P, I and D act on the error. As in a real
 controller, the sampling period stays fixed, and each record covers $15$
 times the dead time plus the lag time constants. $M_s$ is that of this
 digital loop, computed from its exact $L$. Performance is measured by
-the load-step IAE, the integral of $|y|$ after a unit step disturbance
-at the plant input.
+the load-step IAE (integrated absolute error), the integral of $|y|$
+after a unit step disturbance at the plant input.
 
 \paragraph*{The certificates held and were tight} For all $276$ accepted
 tunings, a four times longer record showed a tail below $3\cdot10^{-5}$,
