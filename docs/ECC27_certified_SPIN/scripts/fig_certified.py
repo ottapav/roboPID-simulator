@@ -23,7 +23,7 @@ LABEL = {"delay-dominant PI": "delay\nPI", "lag-dominant PI": "lag\nPI", "lag-do
          "fast PID": "fast\nPID"}
 LABEL.update({f"P{i} {c}": f"$P_{i}$\n{c}" for i in range(1, 5) for c in ("PI", "PID")})
 
-fig, b = plt.subplots(figsize=(3.45, 1.2))
+fig, b = plt.subplots(figsize=(3.45, 1.35))
 
 # (b) ----------------------------------------------------------------------------------------
 RUNS = [json.loads(l) for f in glob.glob("safe1_*.jsonl") for l in open(f)]       # fixed T_s, cautious start

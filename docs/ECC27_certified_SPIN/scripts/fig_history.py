@@ -21,7 +21,7 @@ Ms = json.load(open("traj_P3PID.json"))
 G = json.load(open("traj_P3PID_gains.json"))
 RULES = [("original", "basic"), ("cert-shape", "certified"), ("cert-ahead", "safe")]
 
-fig, ax = plt.subplots(2, 3, figsize=(3.45, 1.85), sharex=True, sharey="row",
+fig, ax = plt.subplots(2, 3, figsize=(3.45, 2.1), sharex=True, sharey="row",
                        gridspec_kw=dict(height_ratios=[1.15, 1], hspace=0.12, wspace=0.12))
 for j, (rule, name) in enumerate(RULES):
     g = np.array(G[rule]); m = np.array(Ms[rule]); it = np.arange(len(m))
