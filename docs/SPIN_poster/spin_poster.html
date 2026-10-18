@@ -87,6 +87,10 @@ tr.alarm td.a{padding-top:0 !important;padding-bottom:1px !important}
   table.grid,table.grid tbody,table.grid tr,table.grid td{display:block;width:auto}
   table.grid thead{display:none}
   table.grid tr{border-bottom:2px solid #c3cdd8}
+  /* the step response is shared by the three rows (rowspan): put it once, above the Ki band */
+  table.grid tr:first-child{display:flex;flex-direction:column}
+  table.grid tr:first-child .stepcell{order:-1;width:auto;border-bottom:1px solid #c3cdd8}
+  table.grid tr:first-child .stepcell svg{max-width:100%;height:auto}
   .guide,.bottom{grid-template-columns:1fr}
   .eqwrap{flex-wrap:wrap}
 }
