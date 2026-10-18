@@ -5,7 +5,7 @@ Authors: P. Otta, D. Pachner, J. Dostál, V. Havlena. Extends the SPIN method (`
 - `spin_ecc27.tex`: paper source (ieeeconf, 6 pages). `ieeeconf.cls`: the
   PaperPlaza class from the ECC author kit. `spin_ecc27.pdf`: build with it
   (`pdflatex` twice; 6 pages).
-- `fig_record.pdf`, `fig_stair.pdf`, `fig_certified.pdf`, `fig_history.pdf`, `fig_response.pdf`: figures 1-5.
+- `fig_record.pdf`, `fig_stair.pdf`, `fig_history.pdf`, `fig_response.pdf`: figures 1-4.
 - `scripts/`: confirmation of every statement and all figures; see `scripts/README.md`.
 
 Results.

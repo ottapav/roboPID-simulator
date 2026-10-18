@@ -574,16 +574,6 @@ radius is compressed for display.}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig_certified.pdf}
-\caption{$|S|$ near its peak, $P_3$ with PID: the basic tuning
-($\overline M=1.81$, $\circ$), one band move lowering $K_i$
-($M_s=1.740$, as predicted by \eqref{eq:predict} from the record of the
-basic tuning), and the certified tuning ($M_s=1.690$).}
-\label{fig:certified}
-\end{figure}
-
-\begin{figure}[t]
-\centering
 \includegraphics[width=\columnwidth]{fig_history.pdf}
 \caption{Tuning history, $P_3$ with PID, cautious start, as the online
 simulator shows it: the gains (top) and $M_s$ of the tuning applied in
@@ -595,8 +585,8 @@ each iteration (bottom; dots: $M_s>M^*$).}
 \centering
 \includegraphics[width=\columnwidth]{fig_response.pdf}
 \caption{The tuned loops of Fig.~\ref{fig:history} (final tunings):
-output after (a) a unit setpoint step and (b) a
-unit load step at the plant input.}
+(a) $|S|$ and the target $M^*$; output after (b) a unit setpoint step and
+(c) a unit load step at the plant input.}
 \label{fig:response}
 \end{figure}
 
@@ -698,20 +688,25 @@ tunings above $M^*$ in $45\%$ of its iterations, against $57\%$ for basic
 corollary covered every iteration).
 % run_safe.sh, analyze_safe.py
 
-\paragraph*{Robustness costs little with safe \spin} Figs.~\ref{fig:certified}--\ref{fig:response}
-follow $P_3$ with PID. From the record of the basic tuning, \eqref{eq:predict} predicted
-the $M_s$ after a band move exactly (Fig.~\ref{fig:certified}).
+\paragraph*{Robustness costs little with safe \spin}
+Figs.~\ref{fig:history} and~\ref{fig:response} follow $P_3$ with PID.
 Basic and certified \spin climb alike (Fig.~\ref{fig:history});
 certified \spin then lowers $K_i$, but it must apply each tuning of its
 final cycle to reject it, so $131$ of its $200$ applied tunings exceed
 $M^*$. Safe \spin applies only certified moves and trades $K_p$ for
-$K_d$. The setpoint responses are alike (Fig.~\ref{fig:response}), and
-the basic tuning does not overshoot although its $M_s$ is $1.81$: the
-response alone does not reveal fragility. In load rejection, certified
-\spin, with its lower $K_i$, is $23\%$ worse than basic \spin, and safe
-\spin only $3\%$. Over all loops, safe and certified \spin have the same
-median load-step IAE; the mean of safe \spin is higher only because of
-the fast PID loop, where it settled at $M_s\approx1.5$.
+$K_d$. The certificates behind these moves are accurate: from the record
+of the basic tuning, \eqref{eq:predict} gave $M_s=1.740$ after a move
+lowering $K_i$, the true value. Both certified and safe \spin end just
+below $M^*$, basic \spin at $1.81$ (Fig.~\ref{fig:response}(a)). The
+setpoint responses are alike (Fig.~\ref{fig:response}(b)), and the
+basic tuning does not overshoot although its $M_s$ is $1.81$: the
+response alone does not reveal fragility. In load rejection
+(Fig.~\ref{fig:response}(c)), certified \spin, with its lower $K_i$, is
+$23\%$ worse than basic \spin, and safe \spin only $3\%$. Over all
+loops, safe and certified \spin have the same median load-step IAE; the
+mean of safe \spin is higher only because of the fast PID loop, where it
+settled at $M_s\approx1.5$.
+% fig_history.py, fig_response.py (prints the prediction 1.740 vs true 1.740)
 
 \paragraph*{Count limits do not replace the certificate} With every
 $\bar N_k=1/2$, certified \spin still applied tunings above $M^*$ in
