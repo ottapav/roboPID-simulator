@@ -61,8 +61,8 @@ only tunings with $M_s\le M^*$ and never apply one above $M^*$. For
 portraits, the counts bound $M_s$ only on special loops. We add the
 certificates in two steps: certified \spin checks each tuning after
 applying it, safe \spin before. On $19$ simulated loops, basic \spin
-ended above $M^*=1.7$ on up to $9$ and applied tunings above it in $57\%$
-of its iterations; certified \spin ended below $M^*$ on all loops but
+ended above $M^*=1.7$ on up to $9$ of them and applied tunings above it in
+$57\%$ of its iterations; certified \spin ended below $M^*$ on all loops but
 still applied such tunings in $45\%$; safe \spin never applied one.
 \end{abstract}
 
@@ -435,7 +435,7 @@ $\max|e_n|$ over the last fifth of the record exceeds half of
 $\max|e_n|$. \emph{Details:} A2 takes the highest such band, and backs
 off after $10$ band moves without a pass; a tuning that failed B1 is
 not proposed again. \emph{Accepted} tunings pass line 4 (basic), lines
-4 and A1 (certified), or A1 (safe); Section~V reports the most
+4 and A1 (certified), or A1 (safe); Section~\ref{sec:sim} reports the most
 aggressive one accepted in the last $60$ iterations. Defaults:
 $\bar N_k=(0.5,0.75,1.0)$, $\delta=0.02$, $\beta=0.1$, $M^*=1.7$,
 $\tau=10^{-3}$, $\eta=2\cdot10^{-3}$.
@@ -592,32 +592,47 @@ applies a move only if Theorem~\ref{thm:ahead} certifies it (B2).
 
 \begin{corollary}[Safe \spin]
 \label{cor:safe}
-Under the conditions of Theorem~\ref{thm:spin}, from the first accepted
-tuning on, every tuning that safe \spin applies stabilizes the plant and
-has $M_s\le M^*$, whatever the limits $\bar N_k$.
+Let the plant be stable with $K_iP(1)>0$, let the first accepted tuning
+stabilize it, and let the record of every stable loop meet
+Assumption~\ref{ass:tail}. Then, from the first accepted tuning on, every
+tuning that safe \spin applies stabilizes the plant and has $M_s\le M^*$,
+whatever the limits $\bar N_k$.
 \end{corollary}
 
 \begin{proof}
-Moves are proposed only from accepted tunings, so each applied tuning
-is certified by Theorem~\ref{thm:ahead} from the record of an accepted
-tuning, or is accepted itself (Theorem~\ref{thm:spin}(i)).
+By induction over the iterations. Let the tuning $C$ in use be stable;
+by B1, either $C$ passes, so $M_s(C)\le M^*$
+(Theorem~\ref{thm:spin}(i)), or the next tuning is the last one that
+passed, stable with $M_s\le M^*$. If $C$ passes, B2 applies either $C$
+itself or a move that Theorem~\ref{thm:ahead}, from the record of $C$,
+certifies to be stable with $M_s\le M^*$.
 \end{proof}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_certified.pdf}
-\caption{$P_3$ with PID. (a) Basic tuning ($\overline M=1.81$,
-$\circ$), one band move lowering $K_i$ ($M_s=1.740$, as predicted by
-\eqref{eq:predict}), certified tuning ($1.690$). (b) $M_s$ of the tuning
-applied in each iteration.}
+\caption{$|S|$ near its peak, $P_3$ with PID: the basic tuning
+($\overline M=1.81$, $\circ$), one band move lowering $K_i$
+($M_s=1.740$, as predicted by \eqref{eq:predict} from the record of the
+basic tuning), and the certified tuning ($M_s=1.690$).}
 \label{fig:certified}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_history.pdf}
+\caption{Tuning history, $P_3$ with PID, cautious start, as the online
+simulator shows it: the gains (top) and $M_s$ of the tuning applied in
+each iteration (bottom; dots: $M_s>M^*$).}
+\label{fig:history}
 \end{figure}
 
 \begin{table}[t]
 \centering
 \caption{Final $M_s$ (most aggressive tuning accepted in the last $60$
 iterations; bold: $>M^*=1.7$) from the cautious (c) and bold (b) start.
-Bottom: totals over the $19$ loops, $3800$ iterations per start.}
+Bottom: totals over all $19$ loops, including family (3) of
+Section~\ref{sec:sim}, $3800$ iterations per start.}
 \label{tab:spin}
 \footnotesize\setlength{\tabcolsep}{3.2pt}
 \begin{tabular}{llcccccc}
@@ -666,7 +681,7 @@ the delay-dominant $\mathrm{e}^{-5s}/(s+1)$ and the lag-dominant $\mathrm{e}^{-s
 and $\mathrm{e}^{-0.5s}/((10s+1)(s+1))$ with PI, and the fast
 $\mathrm{e}^{-0.1s}/((s+1)(0.5s+1))$ with PID; (3) the family
 $\mathrm{e}^{-L_ds}/((s+1)(0.5s+1)(0.25s+1))$ with PID and
-$L_d\in\{0.25,0.5,1,\dots,16\}$. P, I and D act on the error. Let $T_a$
+$L_d\in\{0.25,0.5,1,2,4,8,16\}$. P, I and D act on the error. Let $T_a$
 be the dead time plus the lag time constants. As in a real
 controller, $T_s$ stays fixed: $T_s=\min(T_a/100,T_f/20)$ for the PID
 start tuning and $T_a/1000$ for PI. The lags are discretized exactly and
@@ -690,16 +705,21 @@ cautious start and on $7$ from the bold start (up to $M_s=2.07$);
 certified \spin on none (at most $1.69$), as Theorem~\ref{thm:spin}(i)
 guarantees, and every loop kept accepting tunings. On $P_3$ with PID,
 the predicted band move matched the true $M_s$
-(Fig.~\ref{fig:certified}(a)). The
+(Fig.~\ref{fig:certified}). The
 load-step IAE rose by $9\%$ and $8\%$ on average.
 
-\paragraph*{Staying below $M^*$ (Corollary~\ref{cor:safe}, Table~\ref{tab:spin}, Fig.~\ref{fig:certified}(b))}
+\paragraph*{Staying below $M^*$ (Corollary~\ref{cor:safe}, Table~\ref{tab:spin}, Fig.~\ref{fig:history})}
 In the $7600$ iterations of the $38$ runs, basic \spin applied a
 tuning with $M_s>M^*$ in $4371$ (up to $M_s=2.38$), certified \spin,
 which must apply a tuning to reject it, in $3398$ (up to $1.98$), and
 safe \spin in none: all its tunings were stable, with $M_s\le1.696$.
 Every start tuning was accepted, so Corollary~\ref{cor:safe} covered
-every iteration. Safe \spin also ended below $M^*$, with the same median
+every iteration. Fig.~\ref{fig:history} shows the difference on $P_3$
+with PID: basic and certified \spin climb alike, and certified \spin then
+lowers $K_i$, but it must apply each tuning of its final cycle to reject
+it, so $131$ of its $200$ applied tunings exceed $M^*$; safe \spin,
+applying only certified moves, trades $K_p$ for $K_d$, ends with $K_p$ a
+third below that of basic \spin, and never exceeds $M^*$. Safe \spin also ended below $M^*$, with the same median
 load-step IAE as certified \spin; its mean is higher because on the fast
 PID loop it settled at $M_s\approx1.5$ with twice the IAE. On $456$
 random moves (gains scaled by up to $8$) from accepted tunings,

@@ -1,10 +1,7 @@
 """
-Figure 3: P3 with PID, exact M_s of the digital loop.
-  (a) one band move on P3 with PID: true |S_d| before, the prediction of Prop. 3(d) from the same
-      record, and the true |S_d| after the move
-  (b) M_s of the tuning applied in each iteration, published, certified and safe SPIN
-      (traj_P3PID.json from traj_P3PID.py)
-Reads safe1_*.jsonl (run_safe.sh) and traj_P3PID.json (traj_P3PID.py).
+Figure 3: P3 with PID, exact M_s of the digital loop: one band move, |S| of the basic tuning, the
+prediction (4) of |S| after the move from the same record, the true |S| after it, and |S| of the
+certified tuning. Reads safe1_*.jsonl (run_safe.sh). The tuning history is Fig. 4 (fig_history.py).
 """
 import json, glob, math
 import numpy as np
@@ -26,9 +23,7 @@ LABEL = {"delay-dominant PI": "delay\nPI", "lag-dominant PI": "lag\nPI", "lag-do
          "fast PID": "fast\nPID"}
 LABEL.update({f"P{i} {c}": f"$P_{i}$\n{c}" for i in range(1, 5) for c in ("PI", "PID")})
 
-fig = plt.figure(figsize=(3.45, 1.45))
-gs = fig.add_gridspec(1, 2, width_ratios=[1, 1], wspace=0.55)
-b, c = (fig.add_subplot(gs[i]) for i in range(2))
+fig, b = plt.subplots(figsize=(3.45, 1.4))
 
 # (b) ----------------------------------------------------------------------------------------
 RUNS = [json.loads(l) for f in glob.glob("safe1_*.jsonl") for l in open(f)]       # fixed T_s, cautious start
@@ -53,29 +48,16 @@ b.semilogx(w, pred, color=INK, lw=1.0, ls=(0, (2, 2)))
 b.semilogx(w, Sc, color=CERT, lw=1.8)
 b.axhline(TARGET, ls=(0, (4, 3)), color=INK2, lw=0.8)
 b.plot(wp, S0[ip], "o", ms=5, mfc="white", mec=INK, mew=1.0, zorder=5)
-b.text(0.073, TARGET - 0.03, "$M^*$", fontsize=6.3, color=INK2, va="top")
-b.plot([], [], color=ORIG, lw=4, alpha=0.5, label="published")
+b.text(0.0715, TARGET + 0.03, "$M^*$", fontsize=6.3, color=INK2, va="bottom")
+b.plot([], [], color=ORIG, lw=4, alpha=0.5, label="basic")
 b.plot([], [], color=INK2, lw=0.9, label="one move ($K_i\\downarrow$)")
 b.plot([], [], color=INK, lw=1.0, ls=(0, (2, 2)), label="its prediction")
 b.plot([], [], color=CERT, lw=1.8, label="certified")
 b.set_xlim(0.07, 0.45); b.set_ylim(0.75, 2.9)
 b.set_xticks([0.1, 0.2, 0.4]); b.set_xticklabels(['0.1', '0.2', '0.4']); b.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter()); b.set_xlabel("frequency $\\omega$ (rad/s)"); b.set_ylabel("$|S|$")
-b.set_title("(a) near the peak", fontsize=8, color=INK)
-b.legend(fontsize=5.6, frameon=False, loc="upper right", handlelength=1.3, labelspacing=0.1, handletextpad=0.3, borderaxespad=0.0)
+b.legend(fontsize=6.3, frameon=False, loc="upper right", handlelength=1.3, labelspacing=0.1, handletextpad=0.3, borderaxespad=0.0)
 print("P3 PID: upper", round(ce["upper"], 4), "true before", round(S0.max(), 4), "pred", round(pred.max(), 5),
       "true after", round(S1.max(), 5))
 
-# (c) ----------------------------------------------------------------------------------------
-T = json.load(open("traj_P3PID.json")); SAFE = "#1f9e6a"
-it = np.arange(len(T["original"]))
-c.step(it, T["original"], where="post", color=ORIG, lw=0.8, label="published")
-c.step(it, T["cert-shape"], where="post", color=CERT, lw=0.8, label="certified")
-c.step(it, T["cert-ahead"], where="post", color=SAFE, lw=1.1, label="safe")
-c.axhline(TARGET, ls=(0, (4, 3)), color=INK2, lw=0.8)
-c.set_xlim(0, 80); c.set_ylim(1.3, 2.1); c.set_xticks([0, 40, 80])
-c.set_xlabel("iteration"); c.set_ylabel("$M_s$ of applied tuning")
-c.set_title("(b) while tuning", fontsize=8, color=INK)
-c.legend(fontsize=6.0, frameon=False, loc="lower right", handlelength=1.2, labelspacing=0.15,
-         handletextpad=0.3, borderaxespad=0.1)
-fig.subplots_adjust(left=0.13, right=0.99, bottom=0.24, top=0.88)
-fig.savefig("fig_certified.pdf"); fig.savefig("fig_certified.png", dpi=150)
+fig.subplots_adjust(left=0.12, right=0.99, bottom=0.27, top=0.97)
+fig.savefig("../fig_certified.pdf"); fig.savefig("../fig_certified.png", dpi=200)

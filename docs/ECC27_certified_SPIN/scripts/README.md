@@ -23,7 +23,8 @@ All simulation results of the paper come from one experiment: published, certifi
 | paper item | command / data |
 |---|---|
 | The experiment (Table 1, Sec. 5, Fig. 3) | `bash run_safe.sh` -> `safe1_*.jsonl` (cautious), `safe2_*.jsonl` (bold); `python3 analyze_safe.py` -> `summary_safe.json` (Table 1 incl. totals, applied tunings above M*, IAE) |
-| Fig. 3 | `python3 fig_certified.py` (panel (a) from `safe1_*.jsonl`; panel (b) from `traj_P3PID.json`, `python3 traj_P3PID.py`) |
+| Fig. 3 | `python3 fig_certified.py` (from `safe1_*.jsonl`) |
+| Fig. 4 | `python3 fig_history.py` (tuning history; `traj_P3PID.json`, `traj_P3PID_gains.json` from `python3 traj_P3PID.py`) |
 | Sec. 5 "The certificate": Lemma 1 and Theorem 1 on all 276 accepted tunings (true tail, identity, bracketing) | `RUNS=safe1,safe2 OUT=thm1_safe.json python3 confirm_thm1.py` |
 | Theorem 3 on 456 random moves from the accepted tunings of safe SPIN | `python3 confirm_thm3.py` -> `thm3_points.json` |
 | Limit values under the certificate (every limit 1/2) | `bash run_limits_fixed.sh` -> `limf1_*.jsonl`, `limf2_*.jsonl`; `python3 analyze_limits_fixed.py` -> `limits_fixed.json` |

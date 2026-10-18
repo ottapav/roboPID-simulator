@@ -283,7 +283,8 @@ def run(K, L, lags, pid, rule, iters=200, beta=0.1):
                 unstable=sum(a_["unstable"] for a_ in applied),
                 max_Ms=max(a_["Ms_d"] for a_ in applied),
                 first_safe=next((a_["it"] for a_ in applied if a_["safe"]), None),
-                Ms_it=[a_["Ms_d"] for a_ in applied])
+                Ms_it=[a_["Ms_d"] for a_ in applied],
+                gains_it=[a_["gains"] for a_ in applied])
     if not acc: return dict(worst=None, traj=traj)
     # SPIN ends in a limit cycle; every tuning it accepts in the final cycle is a
     # candidate output. Report all of them and the most aggressive one.
