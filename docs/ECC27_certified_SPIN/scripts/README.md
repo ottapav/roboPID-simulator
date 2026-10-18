@@ -31,7 +31,7 @@ All simulation results of the paper come from one experiment: published, certifi
 | Limit values under the certificate (every limit 1/2) | `bash run_limits_fixed.sh` -> `limf1_*.jsonl`, `limf2_*.jsonl`; `python3 analyze_limits_fixed.py` -> `limits_fixed.json` |
 | Sec. 4.2: SPIN's counts on the lag-cancelled loop (steps at 1.534, 1.842, 2.210) and the 3800 count decisions of certified SPIN | `FIXED_TS=1 python3 confirm_limits.py` -> `limits.json` (run by `run_limits_fixed.sh`) |
 | Lemma 2 and Prop. 1 against a direct search | `python3 check_result1.py` |
-| Fig. 1, Fig. 2 | `python3 fig_record.py`, `python3 fig_stair.py` |
+| Fig. 1, Fig. 2 | `python3 fig_record.py` (running example: basic tuning of P3 PID from `safe1_*.jsonl`; also prints the M_s = 2.62 no-crossing loop of Sec. IV-C), `python3 fig_stair.py` |
 
 ## Earlier material
 

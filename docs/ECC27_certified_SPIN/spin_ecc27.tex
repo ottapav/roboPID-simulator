@@ -26,6 +26,8 @@
 \newtheorem{assumption}{Assumption}
 \renewenvironment{proof}{\noindent\textit{Proof:}\ }{\hfill$\square$\par\smallskip}
 \usepackage{xspace}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
 \newcommand{\spin}{SPIN\xspace}
 
 \title{\LARGE\bf Certified Robustness from One Setpoint Step:\\
@@ -106,15 +108,16 @@ this elementary fact into guarantees, for a chosen target $M^*$:
 \item \emph{bounds}: one finite record gives a lower and an upper bound
 on $M_s$ that hold with certainty, not estimates (Section~\ref{sec:cert},
 Theorem~\ref{thm:cert});
-\item \emph{tests for any iterative tuner}: an acceptance test that keeps
-only tunings with $M_s\le M^*$ (Theorem~\ref{thm:spin}), and a test of
+\item \emph{tests for any iterative tuner}: a test that passes only
+tunings with $M_s\le M^*$ (Theorem~\ref{thm:spin}), and a test of
 the next tuning \emph{before} it is applied (Theorem~\ref{thm:ahead}),
 which keeps every applied tuning below $M^*$ (Section~\ref{sec:accept});
-\item \emph{application to \spin} \cite{SPIN}: why its turn counts cannot
-certify $M_s$ (Lemma~\ref{lem:half}, Proposition~\ref{prop:exact}), and
-two variants built on the tests, certified \spin, which ends below $M^*$,
-and safe \spin, which never applies a tuning above $M^*$
-(Section~\ref{sec:app}, Corollaries~\ref{cor:spin} and~\ref{cor:safe}).
+\item \emph{application to \spin} \cite{SPIN}: two variants built on
+the tests, certified \spin, which ends below $M^*$, and safe \spin,
+which never applies a tuning above $M^*$ (Section~\ref{sec:app},
+Corollaries~\ref{cor:spin} and~\ref{cor:safe}), and why its turn counts
+alone cannot certify $M_s$ (Lemma~\ref{lem:half},
+Proposition~\ref{prop:exact}).
 \end{enumerate}
 Section~\ref{sec:sim} confirms the results in simulation.
 Table~\ref{tab:symbols} lists the main symbols.
@@ -241,18 +244,19 @@ Everything in \eqref{eq:bound} except $\tau$ comes from the record;
 $n_c$ only affects tightness (we take the weighted median of $|a_n|$).
 All grid values follow from one chirp $z$-transform, an FFT-type
 algorithm; the high-frequency term needs no grid at all.
-Fig.~\ref{fig:record} shows both bounds on one loop.
+Fig.~\ref{fig:record} shows the bounds on the example that runs
+through the paper: plant $P_3$ of Table~\ref{tab:loops} with PID, tuned
+by basic \spin.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig_record.pdf}
-\caption{One step certifies $M_s$: a first-order plant with dead time
-$L_d$ and time constant $T_1=0.3L_d$ under PI with integral time
-$T_i=8T_1$, $T_s=0.01L_d$. (a) The error after a setpoint step; it never
-crosses the setpoint by more than $2\%$ (grey band). The record ends at
-$8L_d$. (b) $|\hat S|$ from the record lies on the true $|S|$, and the
-bounds \eqref{eq:bound} bracket $M_s=2.62$, far above $M^*$ ($\tau=0.13$,
-the true variation after $8L_d$).}
+\caption{One step certifies $M_s$, on the running example: $P_3$ with
+PID under the final tuning of basic \spin. (a) The error after a unit
+setpoint step; it never crosses the setpoint (grey band: $\pm2\%$).
+(b) $|\hat S|$ from the record lies on the true $|S|$, and the bounds
+\eqref{eq:bound}, $1.809\le M_s\le1.813$ ($\tau=10^{-3}$), show
+$M_s>M^*=1.7$: the tuning fails the test.}
 \label{fig:record}
 \end{figure}
 
@@ -261,14 +265,14 @@ the true variation after $8L_d$).}
 
 An iterative tuner applies a controller $C$, records the error after a
 setpoint step, and proposes the next controller from the record. We call
-a set of gains a \emph{tuning}, and say that a tuning is
-\emph{accepted} when the tuner keeps it as a candidate result.
-\emph{Certified acceptance} adds one test to any tuner: $C$ is accepted
-only if the upper bound $\overline M$ of Theorem~\ref{thm:cert}, computed
-from the record of $C$, is at most the target $M^*$. A tuning that fails
-the test is lowered, by the tuner's own rule or by a \emph{uniform
-back-off} $C\to(1-\beta)C$, $0<\beta<1$, which scales all gains down by
-the same factor.
+a set of gains a \emph{tuning}. The \emph{test} adds one check to any
+tuner: a tuning \emph{passes} if the upper bound $\overline M$ of
+Theorem~\ref{thm:cert}, computed from its own record, is at most the
+target $M^*$. A tuning that fails is lowered, by the tuner's own rule or
+by a \emph{uniform back-off} $C\to(1-\beta)C$, $0<\beta<1$, which scales
+all gains down by the same factor. A tuner \emph{accepts} a tuning when
+it keeps it as a candidate result; with the test, it accepts only
+tunings that pass.
 
 From here on, the plant is stable (so its static gain $P(1)$ is finite),
 as are the self-regulating processes that \spin targets, and the
@@ -282,13 +286,26 @@ tolerance $\eta$.
 
 \begin{theorem}[Certified acceptance]
 \label{thm:spin}
-Let the plant be stable, let $K_iP(1)>0$ (the integral action counteracts
-the error), and let every record meet Lemma~\ref{lem:record} and
-Assumption~\ref{ass:tail}.
+Let every record meet Lemma~\ref{lem:record} and
+Assumption~\ref{ass:tail}. Then every tuning that passes the test has
+$M_s\le M^*$, whatever rule proposed it.
+\end{theorem}
+
+\begin{proof}
+Passing means $\overline M\le M^*$, and $M_s\le\overline M$ by
+Theorem~\ref{thm:cert}.
+\end{proof}
+
+So the test never passes a fragile tuning. Nor can it trap a tuner: a
+uniform back-off shrinks the Nyquist curve of $L$ towards the origin,
+away from $-1$, so it always leads to a tuning that passes.
+
+\begin{proposition}[A back-off restores the test]
+\label{prop:backoff}
+Let $K_iP(1)>0$ (the integral action counteracts the error), and let
+every record meet Lemma~\ref{lem:record} and Assumption~\ref{ass:tail}.
 \begin{enumerate}
-\item[(i)] Every accepted tuning has $M_s\le M^*$, whatever rule
-proposed it.
-\item[(ii)] For a controller $C$, let
+\item[(i)] For a controller $C$, let
 $\mu=\min\{0,\inf_{0<\theta\le\pi}\mathrm{Re}\,L(\mathrm{e}^{j\theta})\}$, the
 leftmost real part of its Nyquist curve. For $0<\lambda<1/|\mu|$, the
 controller $\lambda C$ stabilizes the plant, and
@@ -296,21 +313,15 @@ controller $\lambda C$ stabilizes the plant, and
 M_s(\lambda C)\le\frac{1}{1-\lambda|\mu|}.
 \label{eq:backoff}
 \end{equation}
-\item[(iii)] If $M^*>1+2\tau+\eta$, then at most
+\item[(ii)] If $M^*>1+2\tau+\eta$, then at most
 $j^*=\lceil\ln\frac{|\mu|M'}{M'-1}/\ln\frac1{1-\beta}\rceil$ uniform
-back-offs from any such $C$ lead to an accepted tuning, where
+back-offs from $C$ lead to a tuning that passes, where
 $M'=M^*-2\tau-\eta$.
 \end{enumerate}
-\end{theorem}
-
-In words: (i) the test never accepts a fragile tuning; (ii) a uniform
-back-off shrinks the Nyquist curve of $L$ towards the origin, away from
-$-1$, so it always restores robustness; (iii) bounds how many back-offs
-this takes.
+\end{proposition}
 
 \begin{proof}
-(i) Accepted means $\overline M\le M^*$, and $M_s\le\overline M$ by
-Theorem~\ref{thm:cert}. (ii) First, $\mu$ is finite: $L$ is bounded on
+(i) First, $\mu$ is finite: $L$ is bounded on
 the unit circle except near $z=1$, where the integral term has the real
 part $-K_iT_s/2$, since $\mathrm{Re}\,1/(\mathrm{e}^{j\theta}-1)=-\frac12$, and
 $P$ is continuous at $z=1$. For every $\theta$,
@@ -321,14 +332,14 @@ $z=1$. On the indentation, $\lambda L\approx\lambda K_iT_sP(1)/(z-1)$ has
 a positive real part, since $K_iP(1)>0$. So the whole Nyquist curve of
 $\lambda L$ lies in $\mathrm{Re}\ge-\lambda|\mu|>-1$ and cannot encircle
 $-1$; as $\lambda L$ has no poles outside the indented circle, the loop
-is stable. (iii) After $j$ back-offs, $\lambda=(1-\beta)^j$, and
+is stable. (ii) After $j$ back-offs, $\lambda=(1-\beta)^j$, and
 \eqref{eq:backoff} gives $M_s\le M'$ once $j\ge j^*$. Then the grid term
 of \eqref{eq:bound} is at most $(M_s+\tau)+\eta+\tau\le M^*$, and the
 high-frequency term is at most $M^*$ by the choice of $\bar\theta$; so
-the tuning is accepted.
+the tuning passes.
 \end{proof}
 
-The acceptance test checks a tuning only after it has been applied: the
+The test checks a tuning only after it has been applied: the
 tuner learns that a tuning is fragile only by running it. But the record
 of $C$ gives $S$ of the running loop, and $S$ determines the sensitivity
 of any other controller $C'$ on the same plant. Let $\rho=C'/C-1$ be the
@@ -345,9 +356,8 @@ for this error.
 
 \begin{theorem}[Certify before applying]
 \label{thm:ahead}
-On a stable plant, let $C$ and $C'$ be controllers as in
-Theorem~\ref{thm:spin} with the
-same $T_s$, let $\rho$ be bounded on the unit circle, and let the record
+On a stable plant, let $C$ and $C'$ be controllers with integral action,
+as in Section~\ref{sec:accept}, and the same $T_s$, let $\rho$ be bounded on the unit circle, and let the record
 of $C$ meet Lemma~\ref{lem:record} and Assumption~\ref{ass:tail}. If, for
 all $\theta\in(0,\pi]$,
 \begin{equation}
@@ -373,7 +383,7 @@ The controllers $C_\lambda=C(1+\lambda\rho)=(1-\lambda)C+\lambda C'$ move
 from $C$ to $C'$ as $\lambda$ goes from $0$ to $1$. Each has a positive
 integral gain, and its other poles are those of $C_0$ and $C_0'$, inside
 the unit disc. So $L_\lambda=C_\lambda P$ has no poles outside the
-indented circle of Theorem~\ref{thm:spin}, and on the indentation it has
+indented circle of Proposition~\ref{prop:backoff}, and on the indentation it has
 a large positive real part. By \eqref{eq:predict} with $\lambda\rho$ in
 place of $\rho$, $1+L_\lambda=(1+L)(1+\lambda T\rho)$. Here $1+L\neq0$,
 and since $|T-\hat T|=|S-\hat S|\le\tau$,
@@ -432,10 +442,27 @@ band that turns too much; Algorithm~1 states the rule.\footnote{An online simula
 \newcommand{\al}[3]{#1 & \parbox[t]{0.9\columnwidth}{\leftskip=#2em
 \hangindent=1em\hangafter=1\noindent #3\strut}\\}
 \hrule\smallskip
-\noindent\textbf{Algorithm 1:} one iteration: from the tuning $C$ in use
-to the next tuning; \textbf{return} ends the iteration. \emph{Basic
+\centerline{\begin{tikzpicture}[font=\scriptsize, >={Stealth[length=4pt]},
+  box/.style={draw, rounded corners=1.5pt, align=center, inner sep=2pt, minimum height=0.62cm},
+  test/.style={draw, circle, fill=black!8, inner sep=1pt, minimum size=0.44cm, font=\scriptsize\bfseries}]
+\node[box] (ap) {apply $C$,\\step};
+\node[box, right=0.45cm of ap] (rec) {record\\$e$};
+\node[test, right=0.38cm of rec] (A) {A};
+\node[box, right=0.38cm of A] (cnt) {count\\turns};
+\node[box, right=0.45cm of cnt] (mv) {propose\\move $P$};
+\node[test, right=0.38cm of mv] (B) {B};
+\draw[->] (ap) -- (rec); \draw[->] (rec) -- (A); \draw[->] (A) -- (cnt);
+\draw[->] (cnt) -- (mv); \draw[->] (mv) -- (B);
+\draw[->] (B.north) -- ++(0,0.28) -| node[pos=0.25, above, inner sep=1pt] {next tuning} (ap.north);
+\node[below=0.03cm of A, align=center, inner sep=0pt] {test\\Th.~\ref{thm:spin}};
+\node[below=0.03cm of B, align=center, inner sep=0pt] {certify\\Th.~\ref{thm:ahead}};
+\end{tikzpicture}}
+\smallskip\hrule\smallskip
+\noindent\textbf{Algorithm 1:} one iteration (top: where the tests A and
+B sit): from the tuning $C$ in use to the next tuning; \textbf{return}
+ends the iteration. \emph{Basic
 \spin} \cite{SPIN}: lines 1--7. \emph{Certified \spin}: adds layer A,
-the acceptance test (Theorem~\ref{thm:spin}). \emph{Safe \spin}: adds A1
+the test (Theorem~\ref{thm:spin}). \emph{Safe \spin}: adds A1
 and layer B, which certifies each move before applying it
 (Theorem~\ref{thm:ahead}).
 \smallskip\hrule\smallskip
@@ -487,7 +514,58 @@ $\tau=10^{-3}$, $\eta=2\cdot10^{-3}$.
 \smallskip\hrule
 \end{figure}
 
-\subsection{Why the turn counts cannot certify}
+\subsection{From certified to safe \spin}
+\label{sec:spin}
+
+Algorithm~1 adds the tests of Section~\ref{sec:accept} in two steps.
+\emph{Certified \spin accepts a tuning only if it passes both the counts
+and the test.} It adds layer A: the counts shape the tuning, and the test
+decides whether it is accepted. A tuning that passes the counts but fails
+the test is lowered by the band move that \eqref{eq:predict} predicts to
+lower $M_s$, or else by a back-off (A2).
+
+\begin{corollary}[Certified \spin]
+\label{cor:spin}
+Under the conditions of Proposition~\ref{prop:backoff}, the result of
+certified \spin has $M_s\le M^*$, whatever the limits $\bar N_k$. If no
+gain reaches the gain box, the test never traps \spin: every failed
+tuning is followed by a tuning that passes after finitely many moves.
+\end{corollary}
+
+\begin{proof}
+The result is an accepted tuning, so it passed the test, and
+Theorem~\ref{thm:spin} applies. After at most $10$ band moves, A2 backs
+off, which leads to a tuning that passes within $j^*$ back-offs by
+Proposition~\ref{prop:backoff}(ii), unless line 2 or 6 moves the gains
+first.
+\end{proof}
+
+Certified \spin ends safe, but it learns that a tuning is fragile only
+by applying it. \emph{Safe \spin certifies every move before applying
+it.} It adds layer B: it applies the test to every record and returns to
+the last tuning that passed when one fails (B1; A2 then never acts), so
+moves start only from tunings that passed; and it applies a move only if
+Theorem~\ref{thm:ahead} certifies it (B2).
+
+\begin{corollary}[Safe \spin]
+\label{cor:safe}
+Let the plant be stable with $K_iP(1)>0$, let the first tuning that
+passes the test stabilize it, and let the record of every stable loop
+meet Assumption~\ref{ass:tail}. Then, from that tuning on, every tuning
+that safe \spin applies stabilizes the plant and has $M_s\le M^*$,
+whatever the limits $\bar N_k$.
+\end{corollary}
+
+\begin{proof}
+By induction over the iterations. Let the tuning $C$ in use be stable;
+by B1, either $C$ passes, so $M_s(C)\le M^*$ (Theorem~\ref{thm:spin}),
+or the next tuning is the last one that passed, stable with
+$M_s\le M^*$. If $C$ passes, B2 applies either $C$ itself or a move that
+Theorem~\ref{thm:ahead}, from the record of $C$, certifies to be stable
+with $M_s\le M^*$.
+\end{proof}
+
+\subsection{Why the turn counts alone cannot certify}
 \label{sec:count}
 
 The counts see setpoint crossings, and crossings reveal $M_s$ only on
@@ -580,9 +658,11 @@ $M_s\le1.534$.
 On general loops, this guarantee is lost. The counts leave the steps
 (in the $3800$ count decisions of certified \spin in
 Section~\ref{sec:sim}, $N_0$ and $N_2$ lay off them in $23$ and $69\%$),
-and crossings do not bound $M_s$: the loop of Fig.~\ref{fig:record} has
-$M_s=2.62$, yet its error never crosses the setpoint by more than $2\%$,
-while a controller zero can cause crossings at a low $M_s$. The counts can shape
+and crossings do not bound $M_s$: the basic tuning of
+Fig.~\ref{fig:record} never crosses the setpoint, yet has $M_s=1.81$
+(a PI loop on a first-order plant reaches $M_s=2.62$ without a crossing
+above $2\%$), while a controller zero can cause crossings at a low
+$M_s$. The counts can shape
 a tuning, but only a certificate can certify it.
 
 \begin{figure}[t]
@@ -597,56 +677,6 @@ radius is compressed for display.}
 \label{fig:stair}
 \end{figure}
 
-\subsection{From certified to safe \spin}
-\label{sec:spin}
-
-Algorithm~1 adds the certificates in two steps. \emph{Certified \spin accepts a tuning that the counts accept only if the
-upper bound $\overline M$ of Theorem~\ref{thm:cert}, computed from the
-same record, is at most $M^*$.} It adds layer A to Algorithm~1: the
-counts shape the tuning, and the certificate decides whether it is
-accepted (A2). A tuning that passes the counts but fails the test is
-lowered by the band move that \eqref{eq:predict} predicts to lower $M_s$,
-or else by a back-off.
-
-\begin{corollary}[Certified \spin]
-\label{cor:spin}
-Under the conditions of Theorem~\ref{thm:spin}, the result of certified
-\spin has $M_s\le M^*$, whatever the limits $\bar N_k$. If no gain
-reaches the gain box, the test never traps \spin: every rejection is
-followed by an accepted tuning after finitely many moves.
-\end{corollary}
-
-\begin{proof}
-The result is an accepted tuning, so Theorem~\ref{thm:spin}(i) applies.
-After at most $10$ band moves, A2 backs off, which ends
-in an acceptance within $j^*$ back-offs by Theorem~\ref{thm:spin}(iii),
-unless line 2 or 6 moves the gains first.
-\end{proof}
-
-Certified \spin ends safe, but it learns that a tuning is fragile only
-by applying it. \emph{Safe \spin certifies every move before applying
-it}: it adds layer B, which applies the acceptance test to every record
-and returns to the last accepted tuning when one fails (B1; A2 then
-never acts), so moves are proposed only from accepted tunings; and it
-applies a move only if Theorem~\ref{thm:ahead} certifies it (B2).
-
-\begin{corollary}[Safe \spin]
-\label{cor:safe}
-Let the plant be stable with $K_iP(1)>0$, let the first accepted tuning
-stabilize it, and let the record of every stable loop meet
-Assumption~\ref{ass:tail}. Then, from the first accepted tuning on, every
-tuning that safe \spin applies stabilizes the plant and has $M_s\le M^*$,
-whatever the limits $\bar N_k$.
-\end{corollary}
-
-\begin{proof}
-By induction over the iterations. Let the tuning $C$ in use be stable;
-by B1, either $C$ passes, so $M_s(C)\le M^*$
-(Theorem~\ref{thm:spin}(i)), or the next tuning is the last one that
-passed, stable with $M_s\le M^*$. If $C$ passes, B2 applies either $C$
-itself or a move that Theorem~\ref{thm:ahead}, from the record of $C$,
-certifies to be stable with $M_s\le M^*$.
-\end{proof}
 
 \begin{figure}[t]
 \centering
@@ -770,7 +800,7 @@ every loop kept accepting tunings (Corollary~\ref{cor:spin}). But
 certified \spin must apply a tuning to reject it, so it still applied
 tunings above $M^*$ in $45\%$ of its iterations, against $57\%$ for basic
 \spin. Safe \spin applied none, and all its tunings were stable
-(Corollary~\ref{cor:safe}; every start tuning was accepted, so the
+(Corollary~\ref{cor:safe}; every start tuning passed the test, so the
 corollary covered every iteration).
 % run_safe.sh, analyze_safe.py
 
@@ -782,7 +812,7 @@ certified \spin then lowers $K_i$, but it must apply each tuning of its
 final cycle to reject it, so $131$ of its $200$ applied tunings exceed
 $M^*$. Safe \spin applies only certified moves and trades $K_p$ for
 $K_d$. The setpoint responses are alike (Fig.~\ref{fig:response}), and
-the basic tuning barely overshoots although its $M_s$ is $1.81$: the
+the basic tuning does not overshoot although its $M_s$ is $1.81$: the
 response alone does not reveal fragility. In load rejection, certified
 \spin, with its lower $K_i$, is $23\%$ worse than basic \spin, and safe
 \spin only $3\%$. Over all loops, safe and certified \spin have the same
