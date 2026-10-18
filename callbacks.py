@@ -687,6 +687,39 @@ def _build_ms_history_fig(it=None, ms=None, upper=None, Mstar=MSTAR,
 
 def register_callbacks(app):
 
+    # ── Gain text boxes <-> log sliders ──────────────────────────────────
+    # Each gain has a slider (log10 of the gain) and a text box holding the gain itself.
+    # A change of one is copied to the other only if it differs, which stops the echo; the
+    # tuner streams slider values during a run, so the boxes follow it through the slider.
+    def _link_gain(name):
+        sid, tid = f'slider-{name}', f'slider-{name}-text'
+
+        @app.callback(
+            Output(tid, 'value'),
+            Input(sid, 'value'),
+            State(tid, 'value'),
+            prevent_initial_call=False,
+        )
+        def _slider_to_text(log_val, text):
+            shown = fmt2(_gain(log_val))
+            return no_update if shown == text else shown
+
+        @app.callback(
+            Output(sid, 'value', allow_duplicate=True),
+            Input(tid, 'value'),
+            State(sid, 'value'), State(sid, 'min'), State(sid, 'max'),
+            prevent_initial_call=True,
+        )
+        def _text_to_slider(text, log_val, lo, hi):
+            g = _f(text, float('nan'))
+            if not (np.isfinite(g) and g > 0):
+                return no_update
+            v = float(np.clip(np.log10(g), lo, hi))
+            return no_update if abs(v - _f(log_val, 0.0)) < 1e-9 else v
+
+    for _name in ('ki', 'kp', 'kd'):
+        _link_gain(_name)
+
     # ── Tuning-history plots share the iteration axis ────────────────────
     # The two plots are stacked; a zoom, pan or autorange on one is copied to the other.
     # The range is set only if it differs, which stops the two from echoing each other.
@@ -809,8 +842,8 @@ def register_callbacks(app):
     )
     def toggle_guard_mode(guarded):
         if not guarded:
-            return 0.0, True
-        return 0.02, False
+            return fmt2(0.0), True
+        return fmt2(DELTA), False
 
     # ── 0c. Output-noise checkbox toggle ─────────────────────────────────
     # Greys the sigma/tau fields out when unchecked; their values are left
@@ -864,8 +897,9 @@ def register_callbacks(app):
     def reset_tuner(n_clicks, ctype, variant):
         niter = N_ITER_BY_CTYPE.get(ctype, N_ITER_BY_CTYPE['PID'])
         empty_history = _build_gains_history_fig([], [], [])
-        return (*NBAR, *GAIN_BOX, EPS, BETA, niter, True, empty_history,
-                _build_ms_history_fig(variant=variant or 'basic'), MSTAR)
+        return (*(fmt2(v) for v in NBAR), *(fmt2(v) for v in GAIN_BOX), fmt2(EPS), fmt2(BETA),
+                str(niter), True, empty_history,
+                _build_ms_history_fig(variant=variant or 'basic'), fmt2(MSTAR))
 
     # ── 0f. Gain slider range follows the gain box [Kmin, Kmax] ────────────
     # The Kp/Ki/Kd sliders are log-scale over [Kmin, Kmax] (paper Section 6's
@@ -1037,7 +1071,7 @@ def register_callbacks(app):
         prevent_initial_call=False,
     )
     def reset_niter_default(ctype):
-        return N_ITER_BY_CTYPE.get(ctype, N_ITER_BY_CTYPE['PID'])
+        return str(N_ITER_BY_CTYPE.get(ctype, N_ITER_BY_CTYPE['PID']))
 
     # ── 2c. Snap K/L display to two decimals ──────────────────────────────
     # Runs once at load (formatting the CLI-supplied default) and again after
@@ -1210,12 +1244,17 @@ def register_callbacks(app):
         n_iter     = max(10, min(n_iter, 2000))
         eps_tune   = _f(eps_val, 0.1)
         delta_tune = _f(delta_val, 0.02)
-        beta_tune  = _f(beta_val, 0.1)
+        beta_tune  = min(max(_f(beta_val, 0.1), 0.01), 0.9)   # the increment is 1/(1-beta)
 
         desc = standard_pid_features(Nbar=(Nbar0, Nbar1, Nbar2))
 
         last_push = [0.0]
-        MIN_PUSH_INTERVAL = 0.08  # seconds; well under interval=150ms poll above
+        # Seconds between UI pushes. Each push sends five figures and the browser redraws all of
+        # them, which cost far more than the tuning itself (200 iterations: 0.3 s of tuning,
+        # 15 s with a push every 0.08 s, 3.7 s with one every 0.5 s), so the plots are
+        # refreshed about twice a second; every iteration is still recorded and the last is
+        # always pushed. ROBOPID_PUSH overrides it.
+        MIN_PUSH_INTERVAL = float(os.environ.get("ROBOPID_PUSH", "0.4"))
         hist_iter, hist_kp, hist_ki, hist_kd = [], [], [], []
         last_feats = [None]
         ms_iter, ms_true, ms_upper, ms_acc = [], [], [], []

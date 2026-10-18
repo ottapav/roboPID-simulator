@@ -40,18 +40,30 @@ CARD_TITLE_STYLE = {'fontSize': '14px'}
 PARAM_GROUP_LABEL_WIDTH = '78px'
 
 
+def _text_field(fid: str, value, **kw) -> dcc.Input:
+    """A plain text box, the same widget as K (static gain): no spinner arrows, no
+    fixed step. The value is parsed (and clamped where it matters) by the callbacks."""
+    return dcc.Input(id=fid, type='text', value=value, debounce=True,
+                     style={'width': '100%'}, **kw)
+
+
 def _slider(sid: str, label: str, col_id: str | None = None) -> dbc.Col:
-    return dbc.Col([
-        html.Label(label, style={'fontWeight': 'bold', 'fontSize': '13px', 'marginBottom': '2px'}),
-        dcc.Slider(
-            id=sid, min=GAIN_LOG_MIN, max=GAIN_LOG_MAX, step=0.01, value=0.0,
-            marks=SLIDER_MARKS, updatemode='drag',
-            tooltip={
-                'placement': 'bottom', 'always_visible': True,
-                'transform': 'logGain',
-            },
-        ),
-    ], width=12, id=col_id)
+    """One gain: label, log-scale slider, and a text box holding the gain itself
+    (the slider position is log10 of it, which is of no use to read)."""
+    kw = dict(id=sid, min=GAIN_LOG_MIN, max=GAIN_LOG_MAX, step=0.01, value=0.0,
+              marks=SLIDER_MARKS, updatemode='drag',
+              tooltip={'placement': 'bottom', 'always_visible': False,
+                       'transform': 'logGain'})
+    try:                                   # Dash >= 4 adds its own number box (log10, arrows)
+        slider = dcc.Slider(allow_direct_input=False, **kw)
+    except TypeError:
+        slider = dcc.Slider(**kw)
+    return dbc.Col(dbc.Row([
+        dbc.Col(html.Label(label, style={'fontWeight': 'bold', 'fontSize': '13px',
+                                         'marginBottom': 0}), width=1),
+        dbc.Col(html.Div(slider, style={'padding': '0 14px 14px 14px'}), width=8),
+        dbc.Col(_text_field(f'{sid}-text', '1.00'), width=3),
+    ], className='align-items-center g-1'), width=12, id=col_id, className='mb-1')
 
 
 def _plant_card(default_tau, default_K, default_L, default_noise_tau,
@@ -198,37 +210,17 @@ def _controller_card(default_ctype, default_limits, default_niter,
         ], className='d-flex', style={'gap': '6px'}), width='auto'),
     ], align='center', justify='between', className='g-2 flex-nowrap mb-2')
 
-    def _limit_input(sid, val):
-        return dcc.Input(id=sid, type='number', value=val,
-                         debounce=True, step=0.05, min=0.0, max=5.0,
-                         style={'width': '60px'})
-
-    def _tuner_param_input(sid, val, step):
-        return dcc.Input(id=sid, type='number', value=val,
-                         debounce=True, step=step, min=0.0, max=5.0,
-                         style={'width': '60px'})
-
-    def _box_input(sid, val):
-        return dcc.Input(id=sid, type='number', value=val,
-                         debounce=True, step='any', min=0.0001, max=1000.0,
-                         style={'width': '70px'})
-
-    def _param_row(label, *pairs):
-        """One labeled group; pairs is a sequence of (short_label, input)
-        joined with ', ' delimiters. The label column has a fixed width so
-        the first parameter of every group lines up across rows."""
-        children = []
-        for i, (plabel, inp) in enumerate(pairs):
-            if i > 0:
-                children.append(html.Span(', ', style={'color': '#777'}))
-            children.append(html.Small(f'{plabel} ', style={'color': '#777'}))
-            children.append(inp)
+    def _prow(label, field, tooltip=None, wl=4):
+        """Label left, text box right: the same row as τ, K, L of the plant card."""
         return dbc.Row([
-            dbc.Col(html.Small(f'{label}:', style={'color': '#777'}),
-                    width='auto', style={'width': PARAM_GROUP_LABEL_WIDTH}),
-            dbc.Col(children, width='auto',
-                    className='d-flex align-items-center flex-wrap gap-1'),
-        ], align='center', className='mb-2 g-2')
+            dbc.Col(html.Label(label, style={'fontSize': '13px', 'marginBottom': 0},
+                               title=tooltip), width=wl),
+            dbc.Col(field, width=12 - wl),
+        ], className='mb-2 align-items-center')
+
+    def _group(title):
+        return html.Div(title, style={'fontSize': '11px', 'color': '#777', 'letterSpacing': '.04em',
+                                      'textTransform': 'uppercase', 'margin': '2px 0 6px'})
 
     return dbc.Card([
         dbc.CardHeader(
@@ -265,89 +257,59 @@ def _controller_card(default_ctype, default_limits, default_niter,
                 _slider('slider-kd', 'Kd', col_id='col-kd'),
             ], className='mb-3'),
 
-            # Feature limits (N̄0, N̄1, N̄2)
-            _param_row('Limits',
-                      ('Γ0', _limit_input('input-nbar0', Nbar0)),
-                      ('Γ1', _limit_input('input-nbar1', Nbar1)),
-                      ('Γ2', _limit_input('input-nbar2', Nbar2))),
-
-            # Gain boundary [Kmin, Kmax]: bounds the tuning search box and
-            # the live gain clamp during a run (paper Section 6: "widening
-            # the box is the first remedy" when a multiplier stalls at its
-            # bound).
-            _param_row('Gain box',
-                      ('Kmin', _box_input('input-kmin', default_kmin)),
-                      ('Kmax', _box_input('input-kmax', default_kmax))),
-
-            # SPIN variant (docs/ECC27_certified_SPIN): published SPIN, or the
-            # certified variants that read a bound on M_s from each step record.
+            html.Hr(style={'borderColor': '#e0e0e0', 'margin': '4px 0 10px'}),
             dbc.Row([
-                dbc.Col(html.Small('Variant:', style={'color': '#777'}),
-                        width='auto', style={'width': PARAM_GROUP_LABEL_WIDTH}),
-                dbc.Col(dcc.Dropdown(
-                    id='dropdown-variant',
-                    options=[
-                        {'label': 'Basic SPIN', 'value': 'basic',
-                         'title': 'SPIN as published: the turn counts alone decide.'},
-                        {'label': 'Certified SPIN', 'value': 'certified',
-                         'title': 'Accept a tuning only if the bound on M_s certified '
-                                  'from its own step record is at most M*.'},
-                        {'label': 'Safe SPIN', 'value': 'safe',
-                         'title': 'Certify every move before applying it: no tuning '
-                                  'with M_s above M* is ever applied.'},
-                    ],
-                    value='basic', clearable=False, searchable=False,
-                    style={'minWidth': '150px', 'fontSize': '12px'},
-                ), width='auto'),
-                dbc.Col(html.Div([
-                    html.Small('M*', style={'color': '#777'},
-                               title='Target sensitivity peak of certified and safe SPIN'),
-                    dcc.Input(id='input-mstar', type='number', value=1.7,
-                              debounce=True, step=0.05, min=1.05, max=5.0,
-                              style={'width': '60px'}),
-                ], className='d-flex align-items-center', style={'gap': '4px'}),
-                        width='auto'),
-                dbc.Col(html.Small('ⓘ', style={'color': '#777', 'cursor': 'help'},
-                                   title='Certified and safe SPIN put the derivative on the '
-                                         'error, so that the step record is the step response '
-                                         'of the sensitivity function; the bound on M_s is read '
-                                         'from that record alone, without a model.'),
-                        width='auto'),
-            ], align='center', className='mb-2 g-2'),
-
-            # Tuner settings
-            _param_row('Settings',
-                      ('Trunc ε', _tuner_param_input('input-eps', default_eps, 0.01)),
-                      ('Step γ', _tuner_param_input('input-beta', default_beta, 0.05))),
-
-            # Simulation (left) | Guard mode (right): checked = Guarded (delta
-            # settable, Definition 4's settling-anchored window); unchecked =
-            # Unguarded (delta pinned at 0, the raw-window count of
-            # Definition 1) -- paper Section "Well-posedness of the count".
-            # Settle δ lives next to the checkbox since unchecking
-            # pins/disables it directly.
-            dbc.Row([
-                dbc.Col(html.Small('Simulation:', style={'color': '#777'}),
-                        width='auto', style={'width': PARAM_GROUP_LABEL_WIDTH}),
-                dbc.Col(html.Div([
-                    html.Small('Iter', style={'color': '#777'}),
-                    dcc.Input(id='input-niter', type='number', value=default_niter,
-                             debounce=True, step=10, min=10, max=2000,
-                             style={'width': '70px'}),
-                ], className='d-flex align-items-center', style={'gap': '4px'}),
-                        width='auto'),
-                dbc.Col(html.Div([
-                    dbc.Checkbox(
-                        id='guard-mode', value=True,
-                        className='mb-0', style={'marginRight': '0'},
-                    ),
-                    html.Small('Guard:', style={'color': '#777'}),
-                    html.Small('Settle δ', style={'color': '#777'}),
-                    _tuner_param_input('input-delta', default_delta, 0.01),
-                ], className='d-flex align-items-center', style={'gap': '4px'}),
-                        className='ms-auto',
-                        width='auto'),
-            ], align='center', className='mb-2 g-2 flex-wrap'),
+                dbc.Col([
+                    _group('SPIN variant'),
+                    _prow('Variant', dcc.Dropdown(
+                        id='dropdown-variant',
+                        options=[
+                            {'label': 'Basic SPIN', 'value': 'basic',
+                             'title': 'SPIN as published: the turn counts alone decide.'},
+                            {'label': 'Certified SPIN', 'value': 'certified',
+                             'title': 'Accept a tuning only if the bound on M_s certified '
+                                      'from its own step record is at most M*.'},
+                            {'label': 'Safe SPIN', 'value': 'safe',
+                             'title': 'Certify every move before applying it: no tuning '
+                                      'with M_s above M* is ever applied.'},
+                        ],
+                        value='basic', clearable=False, searchable=False,
+                        style={'fontSize': '13px'}),
+                        'Certified and safe SPIN put the derivative on the error, so that the '
+                        'step record is the step response of the sensitivity function; the '
+                        'bound on M_s is read from that record alone, without a model.'),
+                    _prow('M*', _text_field('input-mstar', fmt2(1.7)),
+                          'Target sensitivity peak of certified and safe SPIN'),
+                    _group('Turn-count limits'),
+                    _prow('Γ0 limit', _text_field('input-nbar0', fmt2(Nbar0))),
+                    _prow('Γ1 limit', _text_field('input-nbar1', fmt2(Nbar1))),
+                    _prow('Γ2 limit', _text_field('input-nbar2', fmt2(Nbar2))),
+                ], md=6),
+                dbc.Col([
+                    _group('Gain box'),
+                    _prow('Kmin', _text_field('input-kmin', fmt2(default_kmin)),
+                          'Lower bound of every gain during tuning'),
+                    _prow('Kmax', _text_field('input-kmax', fmt2(default_kmax)),
+                          'Upper bound of every gain during tuning'),
+                    _group('Tuner'),
+                    _prow('Step γ', _text_field('input-beta', fmt2(default_beta)),
+                          'One gain increment multiplies by 1/(1−γ)'),
+                    _prow('Trunc ε', _text_field('input-eps', fmt2(default_eps)),
+                          'Truncation disc radius of the turn count'),
+                    _prow('Iterations', _text_field('input-niter', str(int(default_niter))),
+                          'Number of tuning iterations (10 to 2000)'),
+                    _prow('Settle δ', _text_field('input-delta', fmt2(default_delta)),
+                          'Settling band of the count, as a fraction of the step'),
+                    dbc.Row([
+                        dbc.Col(width=5),
+                        dbc.Col(html.Div([
+                            dbc.Checkbox(id='guard-mode', value=True, className='mb-0',
+                                         style={'marginRight': '0'}),
+                            html.Small('Guard', style={'color': '#777'}, title='Checked: δ is settable (guarded count). Unchecked: δ = 0 (raw count).'),
+                        ], className='d-flex align-items-center', style={'gap': '6px'}), width=7),
+                    ], className='mb-2'),
+                ], md=6),
+            ], className='g-3'),
         ]),
     ], className='h-100')
 

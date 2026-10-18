@@ -1,0 +1,2 @@
+/* gain slider marks: small, so that the five decade labels do not collide */
+.rc-slider-mark-text, .dash-slider-mark, .dash-slider-mark-text { font-size: 10px !important; }

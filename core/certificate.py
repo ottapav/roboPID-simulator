@@ -33,6 +33,7 @@ record (check_record() says whether a record qualifies).
 from __future__ import annotations
 
 import math
+from core.params import DERIV_FILTER_N
 
 import numpy as np
 from scipy.signal import czt
@@ -102,7 +103,7 @@ def certificate(e_r, tau: float = TAU_CERT, eta: float = ETA_CERT,
     a = increments(e_r)
     J, B = _J(a), _B(a, tau)
     if Mhf is None:
-        Sc, _ = _S_grid(a, math.pi, 20001)
+        Sc, _ = _S_grid(a, math.pi, 4001)          # coarse: only picks theta_1; any theta_1 is valid
         Mhf = max(float(np.max(np.abs(Sc))), 1.0 + 1e-6)
     th1 = math.pi if B >= Mhf - 1 else 2 * math.asin(B / (Mhf - 1))
     M = int(min(Mmax, max(2001, math.ceil(th1 * J / (2 * eta)) + 1)))
@@ -115,9 +116,17 @@ def certificate(e_r, tau: float = TAU_CERT, eta: float = ETA_CERT,
 
 
 def controller_freq(Kp: float, Ki: float, Kd: float, Ts: float, z: np.ndarray) -> np.ndarray:
-    """C(z) of the app's controller (derivative on the error), evaluated at z."""
-    num, den = _controller_tf(Kp, Ki, Kd, 'e', Ts)
-    return np.polyval(num, z) / np.polyval(den, z)
+    """C(z) of the app's controller (derivative on the error), evaluated at z.
+
+    The sum of the PI part (Ki*Ts + Kp - Kp/z) / (1 - 1/z) and the filtered derivative
+    Kd (z - 1) / ((Ts + Tf) z - Tf), Tf = Kd/N, evaluated directly: the same function as
+    the polynomial form of core.pid._controller_tf, without building polynomials."""
+    z = np.asarray(z)
+    pi = (Ki * Ts + Kp - Kp / z) / (1.0 - 1.0 / z)
+    if Kd == 0.0:
+        return pi
+    Tf = Kd / DERIV_FILTER_N
+    return pi + Kd * (z - 1.0) / ((Ts + Tf) * z - Tf)
 
 
 def certify_ahead(e_r, Ts: float, gains_old, gains_new, tau: float = TAU_CERT,
