@@ -1,2 +1,48 @@
 /* gain slider marks: small, so that the five decade labels do not collide */
 .rc-slider-mark-text, .dash-slider-mark, .dash-slider-mark-text { font-size: 10px !important; }
+
+/* ── Light/dark mode (theme.js sets <html data-bs-theme>) ───────────────────
+   Bootstrap 5.3 themes its own components. Everything below is for what it
+   does not reach: the theme button, Dash's inputs, dropdowns and sliders, a few
+   inline-styled texts, and the Plotly figures, which the server always builds
+   light (so that saved PNGs stay paper-ready). Plotly writes its colours as
+   inline styles; !important overrides them, attribute selectors pick the dark
+   ones. */
+.theme-toggle { font-size: 16px; line-height: 1; padding: 2px 8px; }
+.theme-icon-light { display: none; }
+[data-bs-theme=dark] .theme-icon-dark { display: none; }
+[data-bs-theme=dark] .theme-icon-light { display: inline; }
+
+[data-bs-theme=dark] input:not([type=checkbox]):not([type=radio]),
+[data-bs-theme=dark] textarea {
+    background-color: var(--bs-body-bg); color: var(--bs-body-color);
+    border: 1px solid var(--bs-border-color);
+}
+[data-bs-theme=dark] input:disabled { background-color: var(--bs-secondary-bg); color: var(--bs-secondary-color); }
+[data-bs-theme=dark] [class^="dash-dropdown"], [data-bs-theme=dark] [class*=" dash-dropdown"] {
+    background-color: var(--bs-body-bg); color: var(--bs-body-color); border-color: var(--bs-border-color);
+}
+[data-bs-theme=dark] .dash-slider-mark { color: var(--bs-secondary-color); }
+
+/* inline greys and pale backgrounds of the layout */
+[data-bs-theme=dark] [style*="color: rgb(51, 51, 51)"],
+[data-bs-theme=dark] [style*="color: rgb(85, 85, 85)"] { color: var(--bs-body-color) !important; }
+[data-bs-theme=dark] [style*="color: rgb(119, 119, 119)"] { color: var(--bs-secondary-color) !important; }
+[data-bs-theme=dark] [style*="background-color: rgb(238, 244, 251)"] { background-color: var(--bs-primary-bg-subtle) !important; }
+[data-bs-theme=dark] [style*="background-color: rgb(248, 249, 250)"] { background-color: var(--bs-tertiary-bg) !important; }
+
+/* Plotly figures */
+[data-bs-theme=dark] .js-plotly-plot .main-svg { background: transparent !important; }
+[data-bs-theme=dark] .js-plotly-plot rect.bg { fill: #1c2026 !important; }
+[data-bs-theme=dark] .js-plotly-plot [style*="stroke: rgb(0, 0, 0)"] { stroke: #aab2bb !important; }
+[data-bs-theme=dark] .js-plotly-plot [style*="fill: rgb(0, 0, 0)"] { fill: #aab2bb !important; }
+[data-bs-theme=dark] .js-plotly-plot .gridlayer path { stroke: #3b424b !important; }
+[data-bs-theme=dark] .js-plotly-plot .zerolinelayer path { stroke: #59616b !important; }
+[data-bs-theme=dark] .js-plotly-plot text[style*="fill: rgb(68, 68, 68)"],
+[data-bs-theme=dark] .js-plotly-plot text[style*="fill: rgb(42, 63, 95)"],
+[data-bs-theme=dark] .js-plotly-plot text[style*="fill: rgb(51, 51, 51)"],
+[data-bs-theme=dark] .js-plotly-plot text[style*="fill: rgb(85, 85, 85)"],
+[data-bs-theme=dark] .js-plotly-plot text[style*="fill: rgb(0, 0, 0)"] { fill: #d0d6dc !important; }
+[data-bs-theme=dark] .js-plotly-plot .modebar-btn path { fill: #8b949e !important; }
+[data-bs-theme=dark] .js-plotly-plot .modebar { background: transparent !important; }
+[data-bs-theme=dark] .js-plotly-plot .modebar-group { background: transparent !important; }

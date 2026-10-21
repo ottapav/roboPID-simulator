@@ -468,7 +468,18 @@ def make_layout(default_tau: str = '[5,5,5,5]',
         dcc.Store(id='grid-store'),
 
         # ── Title ──────────────────────────────────────────────────────────
-        dbc.Row(dbc.Col(html.H4('roboPID', className='mt-2 mb-2'))),
+        # The theme button only flips <html data-bs-theme>; assets/theme.js owns the
+        # state (system preference until the user picks, then localStorage) and
+        # assets/style.css restyles the figures for dark mode.
+        dbc.Row([
+            dbc.Col(html.H4('roboPID', className='mt-2 mb-2'), width='auto'),
+            dbc.Col(html.Button(
+                [html.Span('☾', className='theme-icon-dark'),
+                 html.Span('☀', className='theme-icon-light')],
+                id='theme-toggle', n_clicks=0, title='Switch between light and dark mode',
+                className=f'{BTN} btn-outline-secondary theme-toggle',
+            ), width='auto', className='ms-auto align-self-center'),
+        ], align='center'),
 
         # ── Where to start: poster + paper ────────────────────────────────
         dbc.Row(dbc.Col(_start_here_banner(), width=12), className='mb-1'),
