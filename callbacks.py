@@ -711,6 +711,12 @@ def register_callbacks(app):
             prevent_initial_call=True,
         )
         def _text_to_slider(text, log_val, lo, hi):
+            # The box shows the slider's gain to two decimals. When it changes only
+            # because the slider moved (the echo of _slider_to_text, or the tuner
+            # streaming gains), it must not be written back: that would round the
+            # gain itself, e.g. Ki = 0.0516 to 0.05.
+            if text == fmt2(_gain(log_val)):
+                return no_update
             g = _f(text, float('nan'))
             if not (np.isfinite(g) and g > 0):
                 return no_update
@@ -1206,8 +1212,10 @@ def register_callbacks(app):
         Kp_base = 0.0 if ctype == 'I' else Kp
         Kd_base = 0.0 if ctype in ('I', 'PI') else Kd
 
-        Kmin       = _f(kmin_val, GAIN_BOX[0])
+        Kmin       = max(_f(kmin_val, GAIN_BOX[0]), 1e-6)    # as the slider range does
         Kmax       = _f(kmax_val, GAIN_BOX[1])
+        if not Kmax > Kmin:
+            Kmin, Kmax = GAIN_BOX
 
         # Admissibility, before anything is simulated. A blocking finding means
         # the search has no answer to converge to, so the run is refused and

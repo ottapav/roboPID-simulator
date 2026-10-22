@@ -189,7 +189,8 @@ class _Certifier:
         if why is None and unstable:
             why = 'record not settled'
         tau = tau_for(e_r, self.tau)                  # Assumption 1, with a data-based floor
-        upper = certificate(e_r, tau)['upper'] if why is None else float('inf')
+        cert = certificate(e_r, tau) if why is None else None
+        upper = cert['upper'] if cert else float('inf')
         accepted = upper <= self.Mstar
         info = {'upper': upper, 'why': why, 'accepted': accepted, 'U': None, 'tau': tau}
         sigs['cert'] = info
@@ -204,9 +205,11 @@ class _Certifier:
                     row = 'cert_reject'
                     move = None
                     if why is None and self.streak < N_BAND_MAX:
+                        # a band move that (4) predicts to lower M_s: below the peak
+                        # read from the record, not below the certified bound above it
                         down = [k for k in self.bands
                                 if predict_Ms(e_r, self.Ts, self._gains(F),
-                                              self._gains(self._band_move(F, k))) < upper]
+                                              self._gains(self._band_move(F, k))) < cert['read']]
                         move = max(down) if down else None
                     if move is None:
                         Fn, self.streak = self._clip(F / self.g), 0

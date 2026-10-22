@@ -96,7 +96,7 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau,
             html.Small(f'{label} ', style={'color': '#777'}),
             dcc.Input(
                 id=field_id, type='text', value=value, debounce=True,
-                style={'width': '64px', 'fontSize': '12px', 'padding': '0 4px'},
+                style={'width': '64px', 'fontSize': '12px'},
             ),
         ], className='d-flex align-items-center gap-1', title=tooltip),
             width='auto', className=f'{cls} align-self-center'.strip())
