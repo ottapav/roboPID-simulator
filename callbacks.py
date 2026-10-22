@@ -289,6 +289,8 @@ def _read_inputs(grid_store, ctype, tau_str, K_val, L_val,
                  noise_enabled, noise_std_raw, noise_tau_raw,
                  variant: str | None = None) -> SimParams:
     tau, tau_notes = parse_tau(tau_str)
+    if variant not in (None, 'basic'):
+        noise_enabled = False          # output noise with basic SPIN only (callback 0c2)
     K = _f(K_val, 1.0)
     L = _deadtime(L_val)
     Nbar = (_f(nbar0_raw, NBAR[0]), _f(nbar1_raw, NBAR[1]), _f(nbar2_raw, NBAR[2]))
@@ -865,6 +867,26 @@ def register_callbacks(app):
     def toggle_noise_mode(enabled):
         return not enabled, not enabled
 
+    # ── 0c2. Output noise with basic SPIN only ───────────────────────────
+    # Certified and safe SPIN certify M_s from the step record, which needs a
+    # noise-free record (docs/ECC27_certified_SPIN/proposal.md). Choosing either
+    # switches the noise off and locks the checkbox; basic SPIN unlocks it and
+    # leaves it off until the user ticks it again.
+    @app.callback(
+        Output('noise-enabled', 'value', allow_duplicate=True),
+        Output('noise-enabled', 'disabled'),
+        Output('noise-note', 'className'),
+        Output('noise-row', 'title'),
+        Input('dropdown-variant', 'value'),
+        prevent_initial_call='initial_duplicate',
+    )
+    def noise_only_for_basic(variant):
+        if (variant or 'basic') == 'basic':
+            return no_update, False, 'd-none ms-2', ''
+        return (False, True, 'ms-2',
+                'Certified and safe SPIN need noise-free step records; '
+                'output noise is available with basic SPIN only.')
+
     # ── 0d. Reset controller gains ───────────────────────────────────────
     @app.callback(
         Output('slider-kp', 'value', allow_duplicate=True),
@@ -1236,11 +1258,9 @@ def register_callbacks(app):
         # progress push, then re-emitted alongside whatever the run itself
         # turned out to say.
         gate_warnings = list(verdict.warnings)
-        if variant != 'basic' and noise_enabled:
-            gate_warnings.append(
-                'Certified/safe SPIN assume noise-free records: with output noise '
-                'the certificate is not guaranteed, and noisy records are not accepted.')
         warn_children = _render_findings(gate_warnings)
+        if variant != 'basic':
+            noise_enabled = False      # basic SPIN only (callback 0c2); enforced here too
 
         # The grid the user is looking at, so a tuning run scores the same
         # response the plots show rather than a second, independent one.

@@ -71,8 +71,9 @@ accepted (method: [`docs/ECC27_certified_SPIN`](docs/ECC27_certified_SPIN)):
 
 Certified and safe SPIN put the derivative on the error (Basic keeps it on the
 output), since only then is the error record the step response of S. They
-assume a linear, noise-free record: a record with actuator saturation or output
-noise is not certified. The unrecorded tail is bounded by τ = 10⁻³, raised to
+assume a linear, noise-free record: a record with actuator saturation is not
+certified, and output noise is available with Basic SPIN only (choosing
+Certified or Safe switches it off). The unrecorded tail is bounded by τ = 10⁻³, raised to
 twice the variation of the last tenth of the record when that is larger.
 
 The **Robustness** plot next to the Tuning History shows, for every iteration,
@@ -184,8 +185,8 @@ says so.
   afterwards: a blocking finding opens a modal, an advisory one appears
   beneath the cards and in the status line (see *Scope* above)
 - Optional first-order filtered white noise on the plant output, toggled
-  from the Plant card (off by default), with live σ and filter time
-  constant controls
+  from the Plant card (off by default, Basic SPIN only), with live σ and
+  filter time constant controls
 - Runtime-configurable simulation settings via `robopid.config`
 - Every simulation runs on a fixed 500 samples, so the horizon `Tsim` is the
   only grid value on offer: it is proposed from the plant (10 × (Σ τ + L)),
@@ -276,7 +277,11 @@ The Plant card exposes an "Output noise" checkbox (off by default) that
 adds first-order filtered white noise to the plant's `y` output — a target
 standard deviation σ (default 1%) and the noise filter's time constant
 (default 0.1 × the average plant τ). Both fields are only editable while
-the checkbox is checked.
+the checkbox is checked. The checkbox works with Basic SPIN only: Certified
+and Safe SPIN read M_s from a noise-free record, so choosing either switches
+the noise off and locks the checkbox (see
+`docs/ECC27_certified_SPIN/proposal.md` for how a noisy record could be
+certified).
 
 ## Project Structure
 

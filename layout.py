@@ -162,13 +162,18 @@ def _plant_card(default_tau, default_K, default_L, default_noise_tau,
             )),
             html.Hr(style={'borderColor': '#e0e0e0', 'margin': '10px 0'}),
             dbc.Row([
+                # Output noise is available with basic SPIN only: the certificate of
+                # certified and safe SPIN needs noise-free records (see
+                # docs/ECC27_certified_SPIN/proposal.md). callbacks 0c2 enforces it.
                 dbc.Col(html.Div([
                     dbc.Checkbox(
                         id='noise-enabled', value=False,
                         className='mb-0', style={'marginRight': '6px'},
                     ),
                     html.Label('Output noise', style={'fontSize': '13px', 'marginBottom': 0}),
-                ], className='d-flex align-items-center'), width=12),
+                    html.Small('(basic SPIN only)', id='noise-note',
+                               className='d-none ms-2', style={'color': '#777'}),
+                ], id='noise-row', className='d-flex align-items-center'), width=12),
             ], className='mb-2'),
             noise_formula,
             _row('σ (noise std, %)', dcc.Input(
