@@ -33,3 +33,4 @@ Results.
    to 2.38); certified SPIN ended below M* everywhere but applied such tunings in 3398 (up to 1.98);
    safe SPIN in none (at most 1.696). Mean load-step IAE vs published: certified +9%/+8%, safe
    +15%/+22% (medians: 0% and +4%/+2%). Under the certificate the limit values set performance only.
+- `proposal.md`: follow-up proposal, certified robustness from noisy steps (numbers from `scripts/noise_exp.py`).
