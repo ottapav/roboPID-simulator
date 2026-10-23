@@ -658,6 +658,15 @@ def _build_ms_history_fig(it=None, ms=None, upper=None, Mstar=MSTAR,
             x=it, y=[min(u, cap) if u is not None and np.isfinite(u) else None for u in upper],
             mode='markers', name='certified bound',
             marker={'color': '#333', 'size': 6, 'symbol': 'line-ew-open'}))
+    # y range from the data, as the other plots autorange: from 1 (M_s >= 1) to the
+    # largest value drawn (M_s, the certified bound, unstable markers at cap), with M*
+    # always in view. Padding as Plotly's autorange, about 5 % of the span.
+    shown = [c for c in clip if np.isfinite(c)] + [cap] * bool(unst)
+    if variant != 'basic' and upper is not None:
+        shown += [min(u, cap) for u in upper if u is not None and np.isfinite(u)]
+    lo, hi = min([1.0] + shown), max([Mstar] + shown)
+    pad = max(0.05 * (hi - lo), 0.02)
+    y_range = [lo - pad, hi + 2 * pad]          # room above for the M* label
     fig = go.Figure(data=data)
     if variant == 'safe' and it and first is not None and first > 0:
         fig.add_vrect(x0=it[0] - 0.5, x1=it[first] - 0.5, fillcolor='#bbb', opacity=0.25,
@@ -677,7 +686,7 @@ def _build_ms_history_fig(it=None, ms=None, upper=None, Mstar=MSTAR,
         title={'text': title, 'font': {'size': 11}},
         xaxis_title='iteration', yaxis_title='M_s',
         xaxis_range=x_range if x_range is not None else _iteration_range(it),
-        yaxis_range=[0.9, cap + 0.15],
+        yaxis_range=y_range,
         margin={'l': 40, 'r': 8, 't': 52, 'b': 50},
         legend={'font': {'size': 9}, 'orientation': 'h', 'y': -0.3, 'x': 0},
         plot_bgcolor='white',
