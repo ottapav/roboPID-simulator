@@ -21,7 +21,10 @@ Three indices are compared:
 - **reg-full** — the regularized integral over [k1, k2]: what Sec. 3 of the
   draft defines.
 
-## 1. The algorithm as it runs (hard count)
+## 1. The algorithm as it ran (hard count, rule before the fix of §5)
+
+M_s at the orbit centroid. These numbers are from the run before the fix;
+`orbit_uniqueness.json` now holds the run with the fixed rule.
 
 | plant | Ki | Kp | Kd | M_s | orbits with a gain on the box |
 |---|---|---|---|---|---|
@@ -105,13 +108,106 @@ paragraph should say so.
    moves to the hard count (piecewise constant, so a different argument), or
    the draft must state that it analyses a different rule. All numbers need
    regenerating from the current code in any case.
-2. **For the algorithm:** the blocked-cut pump (§1.1) has a simple
-   deterministic fix — when the cut of band k_min is clipped by the floor, do
-   not raise the bands below it (hold, or treat band k_min as satisfied and
-   pass to the next violated band). Mechanism §1.2 needs an attribution check
-   for Kd and is harder.
+2. **For the algorithm:** the blocked-cut pump (§1.1) is fixed in
+   `core.tuning.triangular_rule` (§5). Mechanism §1.2 has a candidate fix, a
+   complex-zero guard, measured but not applied (§5).
 3. **For acceleration:** the target set is a point only on some plants; on the
    others the quality to compare is Ki and M_s, not the distance to a
    reference orbit. And any acceleration must not make the §1 failure modes
    more likely: larger steps reach more of the gain space, including the
    P3 basins with M_s ≈ 10.
+
+## 5. Fix applied: a blocked cut passes down
+
+`core.tuning.triangular_rule` now treats a band as *cuttable* only if it is
+active (nonzero base gain) and its multiplier is above its floor (relative
+tolerance 1e-9, so a floor reached through a log/exp round trip counts). When
+the lowest violated band k_min is not cuttable, the cut passes to the nearest
+lower band that is, with the usual raises below that band (rows `N2/N1`,
+`N2/N0`, `N1/N0`); if none is, the gains are held (row `blocked`). Rule of the
+companion paper otherwise unchanged: the pass-down never fires while k_min can
+move. The same defect hit PI (Kd = 0) and I (Kp = Kd = 0) controllers on every
+Γ2 (resp. Γ1) violation, since there the cut of the inactive band did nothing
+and only the raises took effect.
+
+Measured with the same 27 starts per plant (worst M_s over the terminal orbit):
+
+| plant | before: starts with M_s > 3 | after: starts with M_s > 3 | after: worst / median M_s |
+|---|---|---|---|
+| P1 | 0 | 0 | 1.62 / 1.60 |
+| P2 | 0 | 0 | 1.88 / 1.81 |
+| P3 | 3 | 1 | 11.39 / 2.02 |
+| P4 | 0 | 0 | 1.89 / 1.80 |
+
+From the AMIGO start without noise the fixed rule returns exactly the gains of
+the old one on P1–P4, and the golden tuning trajectories are unchanged. Under
+the app's default output noise (σ = 1 %) both rules collapse Kp to the floor on
+all four plants (Γ2 sees the noise as buzzing); the fix does not change that
+picture, it only changes which gain absorbs the noise-driven cut.
+
+**Not applied — complex-zero guard for mechanism §1.2.** The remaining P3 orbit
+has Kp = 0.07, Kd = 4.2, i.e. Td = Kd/Kp ≈ 57 s against Ti = Kp/Ki ≈ 3 s: the
+controller zeros are complex (Kp² < 4 Ki Kd), which is the "critical pair
+captured by the controller zeros" case the companion paper excludes. Tested in
+the harness only: when a band is violated and Kp² < 4 Ki Kd, cut Kd alone.
+
+| plant | fixed rule: worst M_s | + zero guard: worst M_s | Ki range with guard |
+|---|---|---|---|
+| P1 | 1.62 | 1.62 | unchanged |
+| P2 | 1.88 | 1.88 | unchanged |
+| P3 | 11.39 | **2.10** | 0.050–0.057 (was 0.023–0.058) |
+| P4 | 1.89 | 1.89 | unchanged |
+
+It is plant-free and changes nothing where the zeros are real. It adds a row to
+the rule, so it is left for a decision.
+
+## 6. The regularized index: what it should regularize
+
+Scripts: `docs/scripts/regindex_sharpness.py`, `docs/scripts/regindex_envelope.py`.
+
+**Observation about the published count.** `find_disc_entrypoint` returns the
+last segment that *touches* the ε-disc. A portrait that ends inside the disc
+touches it to the very end of the window, so the published count truncates
+almost nothing: on the P1 orbit it stops at sample 59 of 61. In practice the
+count is the full winding over the guarded window [k1, k_δ], and it is k_δ, not
+the disc, that ends the count — and that makes it jump.
+
+**The draft's regularization measures something else.** Weighting by the
+radius, ρ^p/(ρ^p + ε^p), discards the small-radius winding the hard count
+includes. Share of states (visited by the hard-count runs) where it makes the
+same move as the hard count:
+
+| plant | ρ-weight p=2, guarded | p=2, full | p=16, guarded | p=16, full |
+|---|---|---|---|---|
+| P1 | 30 % | 36 % | 36 % | 37 % |
+| P2 | 32 % | 38 % | 39 % | 39 % |
+| P3 | 45 % | 50 % | 53 % | 53 % |
+| P4 | 38 % | 48 % | 49 % | 44 % |
+
+Sharpening the weight does not help, and neither does an exact segment angle
+(per-sample rotation is only 2–12°): the difference is in what is weighted.
+
+**Regularize k_δ instead.** Weight each segment by the future envelope of the
+error, E_k = max_{m≥k} |e_m| / max|e|, with w_k = E_k^p / (E_k^p + δ^p): a smooth
+version of "k < k_δ", continuous in the gains, tending to the hard count as p
+grows. Over [k1, k2], p = 32:
+
+| plant | same move | median max\|N − N_hard\| | Ki (hard → envelope) | worst M_s (hard → envelope) |
+|---|---|---|---|---|
+| P1 | 88 % | 0.18 | 0.110–0.130 → 0.113–0.431 | 1.55–1.62 → 1.55–2.94 |
+| P2 | 92 % | 0.11 | 0.023–0.025 → 0.023–0.026 | 1.75–1.88 → 1.73–1.90 |
+| P3 | 93 % | 0.12 | 0.023–0.058 → 0.052–0.070 | 1.85–11.39 → 1.87–2.28 |
+| P4 | 97 % | 0.13 | 0.015–0.017 → 0.016–0.017 | 1.73–1.89 → 1.76–1.87 |
+
+On P2 and P4 the destinations coincide. On P3 the envelope index avoids the
+M_s ≈ 11 orbit. On P1 some starts reach a second, more aggressive orbit
+(Ki ≈ 0.43, M_s ≈ 2.9) that the hard count does not; the remaining differences
+come from the normalization (full window instead of [k1, k_δ]) and from Γ0's
+integral axis being taken relative to k2 instead of k_δ.
+
+**Recommendation for the ECC draft.** Replace the radius-weighted N_ε by the
+envelope-weighted index: it is continuous (so the switching surfaces exist and
+Sec. 3's argument goes through) and it is a regularization *of the count the
+rule actually uses*, agreeing on 88–97 % of the decisions, instead of a
+different instrument agreeing on 30–50 %. The one remaining discrepancy to
+close is P1's second orbit.

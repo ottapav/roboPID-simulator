@@ -47,6 +47,12 @@ MANUAL_READING = {
     'N1': 'ringing: less gain',
     'N2': 'buzzing: less rate',
     'none': 'all quiet: tighten',
+    # the lowest violated band cannot be cut (inactive, or at its floor): the
+    # cut passes to the nearest lower band that can be cut
+    'N1/N0': 'ringing, gain at its bound: less reset',
+    'N2/N1': 'buzzing, rate at its bound: less gain',
+    'N2/N0': 'buzzing, rate and gain at their bounds: less reset',
+    'blocked': 'violated band at its bound: hold',
     # certified / safe SPIN (docs/ECC27_certified_SPIN)
     'cert_reject': 'certificate: M_s above target, lower gains',
     'warm': 'not yet certified: back off',
@@ -65,6 +71,8 @@ N_BAND_MAX = 10      # certified SPIN: band moves in a row before a uniform back
 # the next multipliers and which MANUAL_READING row fired. Register a new
 # key here to make an alternative rule selectable via
 # pid_tuning(..., rule=<fn>) without editing the iteration loop below.
+# pid_tuning also passes active=(Ki != 0, Kp != 0, Kd != 0) by keyword, so a
+# rule must accept it.
 TuningRule = Callable[
     [list[dict], tuple[float, float, float], bool,
      float, float, float, float,
@@ -82,6 +90,7 @@ def triangular_rule(
     Fp_min: float, Fp_max: float,
     Fi_min: float, Fi_max: float,
     Fd_min: float, Fd_max: float,
+    active: tuple[bool, bool, bool] = (True, True, True),
 ) -> tuple[float, float, float, str]:
     """
     Table 2's triangular tuning rule (paper eq. "triangular").
@@ -91,8 +100,24 @@ def triangular_rule(
     feats[2]=Gamma2 (indicts Kd). Returns (Fp_new, Fi_new, Fd_new, row); row
     must be a MANUAL_READING key, since callers such as callbacks.py's
     on_iteration dereference MANUAL_READING[row] directly with no fallback.
+
+    active: which bands (Fi, Fp, Fd) -- band order -- are present in the
+    controller, i.e. have a nonzero base gain. A band can be cut only if it is
+    active and its multiplier is above its floor. When the lowest violated band
+    cannot be cut, the cut passes to the nearest lower band that can, with the
+    usual raises below *that* band; if there is none, the gains are held (row
+    'blocked').
+
+    Without this, the corrective row still raised the bands below a cut that
+    did nothing -- Kd already at its floor, or Kd = 0 in a PI controller -- and
+    those raises cancelled the correction one band down. On P3 that closed
+    orbits with M_s of 8-10 (docs/ECC27_limit_cycle/ORBIT_UNIQUENESS_NOTES.md).
+    A violated count on a band that cannot move is, in the rule's own reading,
+    leakage of a lower-band mode, so the cut belongs to a lower band.
     """
-    Fp_new, Fi_new, Fd_new = Fp_cur, Fi_cur, Fd_cur
+    F = [Fi_cur, Fp_cur, Fd_cur]                     # band order
+    lo = [Fi_min, Fp_min, Fd_min]
+    hi = [Fi_max, Fp_max, Fd_max]
 
     if unstable:
         # Record grows rather than decays. Every gain comes down at once, and
@@ -106,34 +131,30 @@ def triangular_rule(
         # the user is actually after -- is disturbed least. This is the one
         # row that fires without a usable count to attribute the trouble to,
         # so the attribution is made a priori by band instead.
-        row = 'unstable'
-        Fi_new = max(Fi_cur * 0.5, Fi_min)
-        Fp_new = max(Fp_cur * 0.25, Fp_min)
-        Fd_new = max(Fd_cur * 0.125, Fd_min)
+        Fn = [max(F[0] * 0.5, lo[0]), max(F[1] * 0.25, lo[1]), max(F[2] * 0.125, lo[2])]
+        return Fn[1], Fn[0], Fn[2], 'unstable'
 
-    elif feats[0]['N'] > Nbar[0]:
-        row = 'N0'
-        Fi_new = max(Fi_cur / gamma, Fi_min)
-
-    elif feats[1]['N'] > Nbar[1]:
-        row = 'N1'
-        Fi_new = min(Fi_cur * gamma, Fi_max)
-        Fp_new = max(Fp_cur / gamma, Fp_min)
-
-    elif feats[2]['N'] > Nbar[2]:
-        row = 'N2'
-        Fi_new = min(Fi_cur * gamma, Fi_max)
-        Fp_new = min(Fp_cur * gamma, Fp_max)
-        Fd_new = max(Fd_cur / gamma, Fd_min)
-
-    else:
+    violated = [k for k in range(3) if feats[k]['N'] > Nbar[k]]
+    if not violated:
         # All features within limits: raise all bands.
-        row = 'none'
-        Fi_new = min(Fi_cur * gamma, Fi_max)
-        Fp_new = min(Fp_cur * gamma, Fp_max)
-        Fd_new = min(Fd_cur * gamma, Fd_max)
+        Fn = [min(F[k] * gamma, hi[k]) for k in range(3)]
+        return Fn[1], Fn[0], Fn[2], 'none'
 
-    return Fp_new, Fi_new, Fd_new, row
+    k_min = violated[0]
+    # 'above its floor' with a relative tolerance: a multiplier that reached the
+    # floor through a log/exp round trip (log-scale sliders, log-gain analyses)
+    # sits a few ulps above it and must still count as there.
+    cuttable = [active[k] and F[k] > lo[k] * (1 + 1e-9) for k in range(3)]
+    k_cut = next((k for k in range(k_min, -1, -1) if cuttable[k]), None)
+    if k_cut is None:
+        return Fp_cur, Fi_cur, Fd_cur, 'blocked'
+
+    Fn = list(F)
+    for k in range(k_cut):
+        Fn[k] = min(F[k] * gamma, hi[k])
+    Fn[k_cut] = max(F[k_cut] / gamma, lo[k_cut])
+    row = f'N{k_min}' if k_cut == k_min else f'N{k_min}/N{k_cut}'
+    return Fn[1], Fn[0], Fn[2], row
 
 
 TUNING_RULES: dict[str, TuningRule] = {
@@ -322,6 +343,7 @@ def pid_tuning(
     Fd_hist = np.clip(np.ones(n_iter), Fd_min, Fd_max)
 
     row = 'none'
+    active = (Ki != 0.0, Kp != 0.0, Kd != 0.0)       # band order; I/PI zero the upper gains
     seed_seq = None if seed is None else np.random.SeedSequence(seed)
     if variant not in VARIANTS:
         raise ValueError(f'unknown variant {variant!r}; expected one of {VARIANTS}')
@@ -353,6 +375,7 @@ def pid_tuning(
         Fp_new, Fi_new, Fd_new, row = rule(
             feats, Nbar, unstable, Fp_cur, Fi_cur, Fd_cur, gamma,
             Fp_min, Fp_max, Fi_min, Fi_max, Fd_min, Fd_max,
+            active=active,
         )
 
         if variant != 'basic':

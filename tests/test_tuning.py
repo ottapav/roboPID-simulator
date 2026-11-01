@@ -70,12 +70,61 @@ def test_rule_precedence_is_lowest_violated_band_first():
 
 def test_every_rule_row_has_a_manual_reading():
     """callbacks.on_iteration dereferences MANUAL_READING[row] with no fallback."""
+    floor = 0.01
     rows = {_rule(_feats(9, 9, 9), True)[3], _rule(_feats(9, 9, 9), False)[3],
             _rule(_feats(0, 9, 9), False)[3], _rule(_feats(0, 0, 9), False)[3],
-            _rule(_feats(0, 0, 0), False)[3]}
+            _rule(_feats(0, 0, 0), False)[3],
+            _rule(_feats(0, 9, 0), False, cur=(floor, 1.0, 1.0))[3],          # N1/N0
+            _rule(_feats(0, 0, 9), False, cur=(1.0, 1.0, floor))[3],          # N2/N1
+            _rule(_feats(0, 0, 9), False, cur=(floor, 1.0, floor))[3],        # N2/N0
+            _rule(_feats(0, 0, 9), False, cur=(floor, floor, floor))[3]}      # blocked
     # The rule's rows plus the rows only certified / safe SPIN emit.
     assert rows | CERT_ROWS == set(MANUAL_READING)
     assert not rows & CERT_ROWS
+
+
+def _rule_active(feats, cur, active):
+    return triangular_rule(feats, NBAR, False, *cur, 1.0 / 0.9,
+                           LIMITS['Fp_min'], LIMITS['Fp_max'],
+                           LIMITS['Fi_min'], LIMITS['Fi_max'],
+                           LIMITS['Fd_min'], LIMITS['Fd_max'], active=active)
+
+
+def test_rule_blocked_cut_passes_to_the_band_below():
+    """Kd at its floor and Gamma2 violated: cutting Kd does nothing, so the
+    cut goes to Kp (with Ki raised), instead of raising Ki and Kp as the
+    unblocked N2 row would. On P3 the raises closed orbits with M_s 8-10."""
+    Fp, Fi, Fd, row = _rule(_feats(0, 0, 9), False, cur=(1.0, 1.0, 0.01))
+    assert row == 'N2/N1'
+    assert Fp < 1.0 < Fi and Fd == 0.01
+
+
+def test_rule_blocked_cut_skips_every_blocked_band():
+    Fp, Fi, Fd, row = _rule(_feats(0, 0, 9), False, cur=(0.01, 1.0, 0.01))
+    assert row == 'N2/N0'
+    assert Fi < 1.0 and Fp == 0.01 and Fd == 0.01
+
+
+def test_rule_holds_when_no_band_at_or_below_the_fault_can_be_cut():
+    cur = (0.01, 0.01, 0.01)
+    assert _rule(_feats(0, 0, 9), False, cur=cur) == (*cur, 'blocked')
+    assert _rule(_feats(9, 0, 0), False, cur=cur) == (*cur, 'blocked')
+
+
+def test_rule_treats_an_inactive_band_as_blocked():
+    """A PI controller (Kd = 0): a Gamma2 violation cannot be answered by Kd,
+    so it is answered by Kp; the I controller (Kp = Kd = 0) answers by Ki."""
+    Fp, Fi, Fd, row = _rule_active(_feats(0, 0, 9), (1.0, 1.0, 1.0), (True, True, False))
+    assert row == 'N2/N1' and Fp < 1.0 < Fi and Fd == 1.0
+    Fp, Fi, Fd, row = _rule_active(_feats(0, 9, 9), (1.0, 1.0, 1.0), (True, False, False))
+    assert row == 'N1/N0' and Fi < 1.0 and Fp == 1.0 and Fd == 1.0
+
+
+def test_rule_unchanged_when_the_fault_band_can_move():
+    """The pass-down never fires while the violated band is above its floor,
+    even by a hair: the published rows are untouched there."""
+    assert _rule(_feats(0, 0, 9), False, cur=(1.0, 1.0, 0.0101))[3] == 'N2'
+    assert _rule(_feats(0, 9, 0), False, cur=(1.0, 0.0101, 1.0))[3] == 'N1'
 
 
 def test_rule_respects_its_bounds():
@@ -153,10 +202,14 @@ def test_tuning_with_noise_is_reproducible_under_a_seed():
     same gains score differently each time they are visited."""
     desc = standard_pid_features()
     kw = dict(Tsim=280.0, n_iter=25, dist_a=0.9, dist_b=0.02)
+    # A stabilizing start, so the noise reaches the decisions. From unit gains
+    # P2 is unstable and the screen's backoffs, then the floor, decide every
+    # step whatever the noise, so two seeds can legitimately agree.
+    g = (0.5, 0.03, 2.0)
 
-    a = pid_tuning(desc, [5.0] * 4, 1.25, 8.0, 1.0, 1.0, 1.0, 1.0, seed=11, **kw)
-    b = pid_tuning(desc, [5.0] * 4, 1.25, 8.0, 1.0, 1.0, 1.0, 1.0, seed=11, **kw)
-    c = pid_tuning(desc, [5.0] * 4, 1.25, 8.0, 1.0, 1.0, 1.0, 1.0, seed=12, **kw)
+    a = pid_tuning(desc, [5.0] * 4, 1.25, 8.0, 1.0, *g, seed=11, **kw)
+    b = pid_tuning(desc, [5.0] * 4, 1.25, 8.0, 1.0, *g, seed=11, **kw)
+    c = pid_tuning(desc, [5.0] * 4, 1.25, 8.0, 1.0, *g, seed=12, **kw)
 
     for x, y in zip(a, b):
         np.testing.assert_array_equal(x, y)

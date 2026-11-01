@@ -46,6 +46,7 @@ from core.features import standard_pid_features, compute_features  # noqa: E402
 from core.signals import loop_signals, add_derivatives  # noqa: E402
 from core.signals import find_index, auto_grid                        # noqa: E402
 from core.certificate import true_Ms                                  # noqa: E402
+from core.tuning import triangular_rule                              # noqa: E402
 
 NBAR = np.array([0.5, 0.75, 1.0])
 H = np.log(1 / 0.9)
@@ -112,6 +113,16 @@ def move_of(N):
     return 'e' if not viol else f'd{min(viol)}'
 
 
+def step(P, th):
+    """One iteration of the rule in core.tuning (unit base gains, so the
+    multipliers are the gains), from the counts of the experiment at th."""
+    N, unst = P.counts(th)
+    Ki, Kp, Kd = np.exp(th)
+    Fp, Fi, Fd, row = triangular_rule([{'N': n} for n in N], tuple(NBAR), unst,
+                                      Kp, Ki, Kd, 1 / 0.9, *BOX, *BOX, *BOX)
+    return np.log([Fi, Fp, Fd]), row
+
+
 def run_fixed(P, th0, n_iter=600):
     th = np.clip(np.array(th0, float), LO, HI)
     seen, states = {}, []
@@ -121,8 +132,7 @@ def run_fixed(P, th0, n_iter=600):
             return np.array(states[seen[key]:]), k
         seen[key] = k
         states.append(th.copy())
-        N, unst = P.counts(th)
-        th = np.clip(th - BACKOFF if unst else th + H * MOVES[move_of(N)], LO, HI)
+        th, _ = step(P, th)
     return None, n_iter
 
 
