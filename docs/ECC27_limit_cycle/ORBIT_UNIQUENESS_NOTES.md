@@ -1,106 +1,117 @@
-# Is the terminal orbit unique? — findings, 1 Nov 2026
+# Is the terminal orbit unique? — findings on the current algorithm, 1 Nov 2026
 
-Prompted by `docs/scripts/accel_schedule.py`: fixed-step runs from different
-starts closed different terminal orbits, which contradicts Corollary 1 of the
-ECC draft ("the triple point depends only on the plant ... not on the starting
-gains"). Script: `docs/scripts/orbit_uniqueness.py`, results:
-`orbit_uniqueness.json`. Setup as in the draft (regularized index, dtype='y',
-box [0.01, 10], beta = 0.1); 27 starts per plant on a 3x3x3 grid of factor 8
-around the unit-gain orbit; every run until the first exact state revisit.
+The measurements in the ECC draft predate small changes to the algorithm and
+are not used here; everything below is from the current code. Script:
+`docs/scripts/orbit_uniqueness.py`, results: `orbit_uniqueness.json`.
 
-Four explanations were tested: H1 several roots, H2 an ill-conditioned root,
-H3 the grid Ts = 1, H4 the analysis window. **Two independent causes were
-found: H4 on P1, and a degenerate (non-transversal) root on P2 and P4.** The
-grid (H3) is not the cause: everything below holds on Ts = 1 and on the app's
-own grid Ts = span/49.9.
+**Configuration** — the app's defaults (`core/params.py`, `robopid.config`):
+500-sample auto grid, actuator saturation ±10 (simtype 1), derivative on the
+measurement (Basic SPIN), box [0.001, 10], β = 0.1, Nbar = (0.5, 0.75, 1.0).
+Per plant, 27 starts on a 3×3×3 grid of factor 8 around the orbit reached from
+unit gains; every run until the first exact state revisit (the iteration is
+deterministic, so this is the closed terminal orbit).
 
-## 1. P1: the delta guard makes the "continuous" index discontinuous
+Three indices are compared:
 
-`regindex.patch()` swaps only the metric. `loop_response_features` still cuts
-the window at the settling index k_delta, so the index the draft *runs* is the
-regularized integrand over the guarded window [k1, k_delta], not the
-full-window index of Sec. 3. A small gain change can add one oscillation lobe
-above the delta band and move k_delta, which moves the index by a jump.
+- **hard** — the published count over the δ-guarded window [k1, k_δ]: what the
+  algorithm runs;
+- **reg-guard** — the regularized winding integral of the ECC draft over the
+  same guarded window: what `regindex.patch()` gives, since it swaps only the
+  metric;
+- **reg-full** — the regularized integral over [k1, k2]: what Sec. 3 of the
+  draft defines.
 
-Measured on P1 (Ts = 1), along the uniform direction through the low-Ki orbit:
+## 1. The algorithm as it runs (hard count)
 
-| offset | k_delta | N, window [k1, k_delta] | N, window [k1, k2] |
-|---|---|---|---|
-| −0.2h | 16 | (0.18, 0.40, 0.74) | (0.45, 1.28, 1.93) |
-| −0.1h | 18 | (0.40, 0.73, 1.04) | (0.45, 1.35, 1.96) |
-|  0.0h | 28 | (0.63, 1.37, 1.78) | (0.45, 1.40, 1.99) |
+| plant | Ki | Kp | Kd | M_s | orbits with a gain on the box |
+|---|---|---|---|---|---|
+| P1 | 0.113–0.130 | 1.23–1.64 | 0.001–1.34 | 1.50–1.57 | 9/27, all Kd at floor |
+| P2 | 0.023–0.025 | 0.31–0.39 | 0.001 | 1.64–1.76 | 27/27, all Kd at floor |
+| P3 | 0.013–0.058 | 0.07–1.00 | 0.001–4.2 | **1.72–9.54** | 7/27, all Kd at floor |
+| P4 | 0.016–0.017 | 0.40–0.51 | 0.001 | 1.64–1.76 | 27/27, all Kd at floor |
 
-All three guarded indices jump together within 0.1h, the full-window ones move
-smoothly. On such a cliff all four regions of the rule are adjacent, so an
-orbit closes there although no triple point exists: least squares from that
-orbit finds no root (residual 0.32). Note also that at Ts = 1 the guarded
-window of P1 is only 8–20 samples long.
+P1, P2, P4: the destination is effectively unique in what matters (Ki within
+15 %, M_s within 0.12). On P2 and P4 the rule removes derivative action
+entirely, from every start. On P1, Kd is left anywhere in [0.001, 1.34], with
+no effect on Ki or M_s.
 
-| index | P1 orbits from 27 starts |
-|---|---|
-| guarded window (as run in the draft) | 4 clusters, Ki from 0.19 to 1.03 (×5.3) |
-| full window (as defined in Sec. 3) | **1 cluster**, all 27 starts, exact root; Ki ≈ 0.97 at Ts = 1 (residual 1e-12), Ki ≈ 0.58 on the app grid (residual 5e-10) |
+**P3: 3 of 27 starts end in orbits with M_s 8–11.** Two distinct mechanisms,
+both deterministic:
 
-The two indices also lead to different tunings: from unit gains the guarded
-index closes at (Ki, Kp, Kd) = (0.19, 3.21, 8.36), M_s ≈ 2.6, the full-window
-index at (0.96, 3.66, 6.59), M_s ≈ 3.0. So on P1 the premise of Sec. 3, that
-the regularized index changes no sign comparison of the rule, does not hold.
+1. *A blocked cut still pays out.* Start (Ki/8, 8 Kp, Kd/8): the orbit
+   `1 2 0 0` (period 4) at (Ki, Kp, Kd) ≈ (0.013, 1.00, 0.001), M_s 8.0–10.0.
+   Band 1 rings (N1 = 4.5) and leaks into Γ2 (N2 = 4.3). When the rule fires
+   d2, Kd is already at the floor, so the cut is clipped away, but the raises
+   of Ki and Kp that come with it are still applied and undo the d1
+   correction. The orbit closes only because of the clipping: (+1,−1,0) +
+   (+1,+1,0) + 2·(−1,0,0) = 0. This is a sharper form of Limitation 6 of the
+   companion paper: a band at its floor that keeps ringing does not just block
+   the cascade, it pumps the bands below it.
+2. *Ringing produced by the derivative, attributed to Kp.* Start (Ki, Kp/8,
+   8 Kd): orbit at (0.023, 0.074, 4.2), M_s 9.5, with N = (0.12, 1.09, 0.52).
+   The under-damped mode is created by the large Kd, Γ1 sees it, the rule cuts
+   Kp, and Kd is never touched because N2 stays below its limit. This is the
+   case the companion paper's Remark (Scope) excludes from its argument
+   ("strong derivative action ... critical pair captured by the controller
+   zeros"); here it occurs from an 8× mistuned start.
 
-## 2. P2, P4: Kd is not determined, the "triple point" is a curve
+## 2. The analysis index (regularized) does not describe that destination
 
-With either window and either grid, the three indices hardly depend on Kd over
-a range of two to three decades. At every orbit found, the smallest singular
-value of the Jacobian dN/d(log K) is 0.00–0.06, and its singular vector is
-almost pure log Kd (e.g. P4: (0.00, 0.01, 1.00) at Kd = 0.13). The equations
-N(theta) = Nbar then have a curve of solutions along Kd, not an isolated root,
-and the cycle closes wherever the start brings the iterate onto that curve.
-
-| plant (full window) | Ki | Kp | Kd | M_s |
+| plant | index | Ki | Kd | M_s |
 |---|---|---|---|---|
-| P2, app grid | 0.029–0.035 (×1.19) | 0.48–0.70 | **0.01–3.3** | 1.84–2.00 |
-| P4, app grid | 0.020–0.026 (×1.31) | 0.62–0.99 | **0.01–10** | 1.82–2.01 |
+| P1 | hard | 0.113–0.130 | 0.001–1.34 | 1.50–1.57 |
+| P1 | reg-guard | 0.17–0.51 (4 clusters) | 4.8–6.6 | 2.14–2.92 |
+| P1 | reg-full | 0.37–0.49 (24/27 one cluster) | 4.4–6.3 | 2.49–2.94 |
+| P2 | hard | 0.023–0.025 | 0.001 | 1.64–1.76 |
+| P2 | reg-full | 0.027–0.050 | 0.001–5.7 | 1.90–2.32 |
+| P4 | hard | 0.016–0.017 | 0.001 | 1.64–1.76 |
+| P4 | reg-full | 0.019–0.024 | 0.001–10 | 1.86–2.01 |
 
-Orbits that touch the box (app grid: 5/27 on P2, 9/27 on P4; Ts = 1: 0/27 and 14/27) are the same curve leaving
-the box: in every case it is Kd at the floor 0.01 or the ceiling 10, never Ki
-or Kp. On the app grid the curve is benign for the loop: Ki, which sets the
-integrated error for a load step, varies by at most 31 %, and M_s by 0.2. On
-the coarse grid Ts = 1 it is less so: P2 spreads to Ki ×1.85 and M_s 1.88–2.38. It is the direction
-the loop cares least about, and the rule has no evidence to pick a point on it.
+The regularized index tunes more aggressively than the count it is meant to
+stand in for (P1: Ki ×3–4, M_s ≈ 2.7 against 1.5), and keeps Kd where the hard
+count removes it. The premise of the draft's Sec. 3, that the regularized index
+changes no sign comparison of the rule and is "used only for the analysis",
+does not hold on the current code: the analysed orbit is not the one the
+algorithm reaches.
 
-P3 is practically unique (Ki within ×1.17–1.40, 2–3 adjacent clusters).
+Two further properties of the regularized index:
+
+- **The guarded window makes it discontinuous.** On P1 a gain change of 0.1h
+  moves k_δ (one more lobe crossing the δ band) and all three indices jump
+  together, e.g. from (0.18, 0.40, 0.74) to (0.63, 1.37, 1.78). Orbits close on
+  such cliffs without a root nearby (reg-guard: 4 clusters on P1). Over the full
+  window the index is continuous and 24/27 starts reach one orbit.
+- **Kd is not identifiable on P2 and P4.** At the centroids of the 17 orbits
+  found (reg-full), the smallest singular value of dN/d(log K) (central
+  differences, step 0.02) is 0.000–0.18, and in 16 of them its singular vector
+  is almost pure log Kd (Kd component ≥ 0.99); N = Nbar then has a curve of
+  solutions along Kd, and the
+  orbit closes wherever the start brings it onto the curve (Kd from the floor
+  to the ceiling). Ki and M_s barely change along it.
 
 ## 3. What survives
 
-The balance results do not depend on any of this. From unit gains at Ts = 1,
-with either window, every plant closes an orbit with counts n_e·(1, 4, 2, 1)
-and half-spans inside the excursion bound (Prop. 1, Cor. 2, Cor. 3). With the
-full window all four orbits have n_e = 1 and period 8. With the guarded window
-P3 closes with n_e = 3, period 24, in this exact-revisit run, where Table
-`tab:duty` reports period 16 from a 2000-iteration run.
+The combinatorial results (Prop. 1 balance, Cor. 2 counts n_e(1, 4, 2, 1),
+Cor. 3 excursion bound) concern orbits in the interior of the box and hold for
+every interior orbit found. Orbits on the box can be shorter (period 4 on P3),
+because clipping removes a component of a move; the draft's "Boundary Case"
+paragraph should say so.
 
-## 4. Consequences for the ECC draft
+## 4. Consequences
 
-1. **Sec. 3 / regindex.py.** Compute N_eps over [k1, k2], as Sec. 3 defines it.
-   This is a one-line change (pass k2 instead of k_delta), but it moves the P1
-   destination, so every number produced through `regindex.patch()` must be
-   regenerated: Table `tab:duty`, the theta* errors of Sec. 3, the Jacobian
-   determinants of Sec. 6, Fig. `fig_meter` and the schedule results of Sec. 7.
-2. **Corollary 1 needs a transversality hypothesis**: the switching surfaces
-   meet transversally, i.e. dN/dtheta is nonsingular at theta*. Without it,
-   the balance argument only places the orbit on the set where the surfaces
-   come within O(h) of each other, and that set can be a curve.
-3. **State the degenerate case on P2 and P4 rather than hide it.** On these
-   plants Kd is not identifiable from the three indices, so the destination in
-   Kd depends on the start (or on the box), while Ki, Kp and M_s do not, to
-   within the numbers above. This is also why Sec. 6 should not report one
-   nonsingular Jacobian for P4: at the orbits found here the smallest singular
-   value is 0.00–0.06.
-4. **Acceleration experiments** (`accel_schedule.py`) must be judged by Ki and
-   M_s on P2/P4, not by the distance to a reference orbit, and rerun with the
-   full-window index. On P1 and P3 the target is then unique and the
-   comparison is meaningful.
-
-Open: whether the rule should get a tie-break along the unidentified direction
-(the companion paper's principle "rate is the cheapest gain to give up" would
-pick the smallest Kd on the curve), or whether the curve should be reported as
-the honest answer.
+1. **For the ECC draft:** Corollary 1 (one triple point, independent of the
+   start) needs a transversality hypothesis, and it is about the regularized
+   index, whose destination differs from the algorithm's. Either the analysis
+   moves to the hard count (piecewise constant, so a different argument), or
+   the draft must state that it analyses a different rule. All numbers need
+   regenerating from the current code in any case.
+2. **For the algorithm:** the blocked-cut pump (§1.1) has a simple
+   deterministic fix — when the cut of band k_min is clipped by the floor, do
+   not raise the bands below it (hold, or treat band k_min as satisfied and
+   pass to the next violated band). Mechanism §1.2 needs an attribution check
+   for Kd and is harder.
+3. **For acceleration:** the target set is a point only on some plants; on the
+   others the quality to compare is Ki and M_s, not the distance to a
+   reference orbit. And any acceleration must not make the §1 failure modes
+   more likely: larger steps reach more of the gain space, including the
+   P3 basins with M_s ≈ 10.
