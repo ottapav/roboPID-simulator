@@ -40,13 +40,11 @@ gains, so the index is continuous in the gains for every finite p. The angle
 of a segment is its exact angle atan2(cross, dot).
 
 sharp=None evaluates the p = infinity limit with hard indicators (and r0 = 0),
-which is used to check the construction against the published count. Checked
-on 7459 states visited by hard-count runs on P1-P4 (regindex_soft_check.py):
-identical to the published count up to rounding except (a) 6 states where
-encirc misses the last segment's crossing of the negative x-axis (a one-turn
-error of the published implementation), (b) 3 states with a segment through
-the origin (ambiguous winding, resolved differently), (c) 3 states in the
-corner case j <= 1, where encirc returns 0 (difference 0.011).
+which is used to check the construction against the published count
+(docs/ECC27_limit_cycle/scripts/lc_results.py, 'fidelity'). The two agree on
+every visited state except the corner case j <= 1, where core.features.encirc
+returns 0. (The check also found two one-turn errors in the published
+crossing correction, now fixed in encirc.)
 """
 from __future__ import annotations
 

@@ -1,697 +1,602 @@
 % =====================================================================
-% Conference paper in ieeeconf format, targeting ECC. 6-page limit.
+% ECC 2027 draft (ieeeconf). Object: the limit cycle of fixed-step SPIN.
+% Deterministic theory: closed orbits (combinatorial, any index),
+% localization and the small-step limit (topological, any index), and the
+% published count as the limit of a continuous count. Robustness: the
+% orbits sit on the event "overshoot = delta", a damping condition on the
+% step response of S.
 %
-% FRAMING (settled): the paper's object is the LIMIT CYCLE of fixed-step
-% and accelerated SPIN tuning. The triple point is the tool that locates
-% the cycle's center; the regularized index is the tool that makes the
-% analysis well posed. Neither appears in the title.
-%
-% Numbers policy: all from verified follow-up runs. TODO-REGEN entries
-% need regeneration before submission; TODO marks editorial placeholders.
+% Every number is produced by docs/ECC27_limit_cycle/scripts/lc_results.py
+% from the current code (lc_results.json); nothing is quoted from earlier
+% drafts. Setting: lc_setup.py.
 % =====================================================================
-\documentclass[letterpaper, 10pt, conference, twocolumn]{ieeeconf}
+\documentclass[letterpaper, 10 pt, conference]{ieeeconf}
+\IEEEoverridecommandlockouts
+\overrideIEEEmargins
 
-\usepackage{amsmath,amssymb,amsthm}
+\usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{url}
 
-\newtheorem{proposition}{Proposition}
-\newtheorem{corollary}{Corollary}
 \newtheorem{lemma}{Lemma}
-\newtheorem{observation}{Observation}
+\newtheorem{proposition}{Proposition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\newtheorem{assumption}{Assumption}
 \newtheorem{remark}{Remark}
+\renewenvironment{proof}{\noindent\textit{Proof:}\ }{\hfill$\square$\par\smallskip}
 
 \newcommand{\Nbar}{\bar{N}}
-\newcommand{\Neps}{N_{\varepsilon}}
+\newcommand{\spin}{SPIN}
 
-% Paper title
-\title{Limit Cycles of Model-Free PID Tuning by Step-Response Inspection}
+\title{\LARGE\bf Limit Cycles of Model-Free PID Tuning\\ by Step-Response Inspection}
 
-% Author names and affiliations
 \author{Pavel Otta$^{1}$, Daniel Pachner$^{1}$, Ji\v{r}\'{\i} Dost\'al$^{1}$
 and Vladim\'{\i}r Havlena$^{2}$%
 \thanks{$^{1}$University Centre for Energy Efficient Buildings (UCEEB),
 Czech Technical University in Prague, Bu\v{s}t\v{e}hrad, Czech Republic.
-Corresponding author: \texttt{pavel.otta@cvut.cz}}%
+Corresponding author: {\tt pavel.otta@cvut.cz}}%
 \thanks{$^{2}$Department of Control Engineering, Faculty of Electrical
-Engineering, Czech Technical University in Prague, Prague, Czech Republic.}%
+Engineering, Czech Technical University in Prague, Czech Republic.}%
 }
 
-\date{}
 \begin{document}
-
 \maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
 
 \begin{abstract}
-In a companion paper we introduced SPIN, a model-free method for tuning PID
-controllers: it draws three phase portraits from one closed-loop step response,
-counts a turn index in each, and changes the gains by a fixed table of four
-moves. The iteration does not stop at a point; it ends in a small periodic
-orbit. This paper explains that orbit and turns the explanation into an
-instrument.
-
-In log-gain coordinates the four moves have exactly one convex combination
-summing to zero. This forces the orbit to circle the \emph{triple point}, where
-all three turn indices sit on their thresholds, and fixes the move frequencies
-at $(\tfrac18, \tfrac12, \tfrac14, \tfrac18)$; measured frequencies agree to
-three decimal places. The same computation over the integers gives the shortest
-possible orbit, of length eight, and bounds how far the gains stray from its
-centre. Stating this properly requires replacing the published integer count by
-an $\varepsilon$-regularized winding integral, used here only for the analysis.
-
-Two practical results follow. The excursion bound fixes the step size from a
-required gain accuracy, with no plant parameter entering. And the balance
-condition read backwards measures the distance still to travel: the deviation
-of the observed move frequencies from the balance weights is the drift rate, to
-within a factor of $1.30$ and again with plant-free constants. The rule can
-therefore read its own progress from the moves it has already made, with no
-extra experiment, and use that reading either to shrink its step or to stop
-tuning.
+\spin{} tunes a PID controller from closed-loop step responses: it counts
+how often three phase portraits of the error turn around the origin and
+moves the gains by a fixed table of four moves. In every run we made, the
+iteration ends in a periodic orbit. We characterize such orbits in the
+deterministic case. Every closed orbit that stays below the upper gain
+bound, whatever turn index drives the rule, applies the four moves in the
+proportions $1\!:\!4\!:\!2\!:\!1$, has a period of $8 n_e$ for an integer
+multiplicity $n_e$, and stays within $n_e (2, 1, \tfrac12)$ steps of its
+centre in $(\log K_i, \log K_p, \log K_d)$. Its bounding box meets the
+switching boundaries, so as the step shrinks the orbits accumulate where the
+boundaries meet. For the published turn count this set is not a point. The
+count is the limit of a continuous count that makes the rule's move on
+$98.5$--$99.5\,\%$ of the states the rule visits, and through it the
+destination becomes visible: all $108$ terminal orbits on a four-plant
+battery straddle the event at which the overshoot of the step response
+equals the settling band $\delta = 2\,\%$, and every quiet step has a smaller
+overshoot. This is a damping condition on the step response of the
+sensitivity function $S$. The orbits therefore differ in the gains but
+hardly in robustness: the largest sensitivity peak on an orbit lies within
+$1.54$--$2.10$ when the derivative acts on the error, and reaches $2.95$ when it
+acts on the measurement and the record is no longer the step response of $S$.
+A plant-free step-size rule and a drift meter follow from the orbit structure.
 \end{abstract}
-
-\begin{IEEEkeywords}
-PID control, model-free tuning, limit cycles, switched systems,
-winding number
-\end{IEEEkeywords}
 
 % =====================================================================
 \section{Introduction}
-\label{sec:intro}
 
 Most PID tuning methods first fit a model and then compute the gains
-\cite{ZN1942,AstromHagglund2004}. In a companion paper \cite{Paper1} we took a
-different route and tuned directly from what the step response \emph{looks
-like}. The method is called SPIN (Step-response Phase-portrait INspection). It
-draws three phase portraits from one closed-loop step response and counts how
-many times each curve turns around the origin. This count is the \emph{turn
-index} $N_k$ of band $k$, and it is compared with a fixed threshold. A table of
-four moves, the \emph{triangular rule}, then scales the gains up or down by a
-constant factor. No plant model is identified at any point.
+\cite{ZN1942,AstromHagglund2004}. \spin{} \cite{Paper1} tunes from what the
+closed-loop step response looks like instead. It draws three phase portraits
+of the control error, counts how often each turns around the origin, compares
+the three \emph{turn counts} $N_k$ with fixed thresholds $\Nbar_k$, and applies
+one of four moves to the gains. No model is identified. Iterative feedback
+tuning \cite{Hjalmarsson1998} and extremum seeking \cite{Killingsworth2006}
+estimate gradients of a cost; the triangular rule uses only three signs.
+Its natural end state is therefore not a stationary point but a periodic
+orbit of a switched system, and this paper is about that orbit.
 
-The companion paper shows that the rule detunes aggressive gains, recovers
-from failed loops, and reaches a feasible region on a battery of standard
-plants. It also reports one behavior that it does not explain. No run stops at
-a point. Every successful run ends in a small periodic orbit in gain space.
-That orbit is the subject of this paper, and we ask four questions about it.
-
-\emph{Where is it?} Which point does the orbit circle, and is that point
-fixed by the plant or by the history of the run? \emph{What is its shape and
-size?} Which moves occur, in what proportion, how short can an orbit be, and
-can the step size be chosen to meet a required accuracy on the gains?
-\emph{Why this rule?} The moves are a design choice in the companion paper;
-is another choice possible? \emph{Can the orbit be made smaller?} Is there a
-faster schedule whose accuracy the theory can guarantee rather than only
-observe?
-
-One technical step comes first. The published turn index is an integer count,
-so it is discontinuous in the gains, and the boundaries between the regions of
-the rule are then not well defined. Section~\ref{sec:index} replaces it by an
-$\varepsilon$-regularized winding integral. This is a tool for the analysis and
-not a change to the method: every sign comparison made by the published rule
-stays the same.
-
-Our answers are then as follows. The orbit circles one point that depends only
-on the plant. We call it the \emph{triple point}, because all three turn
-indices sit exactly on their thresholds there (Section~\ref{sec:cycle}). The
-move frequencies and the shortest possible length of eight both follow from a
-single balance condition on the four moves. The move table itself is forced: it
-is the only one compatible with the priority logic (Section~\ref{sec:why}).
-The same move counts bound how far the gains stray from the centre, which fixes
-the step size from a required accuracy (Section~\ref{sec:size}). Finally, the
-balance condition read backwards measures the distance still to be travelled,
-from the move sequence alone: the resulting drift meter tells the rule when to
-shrink its step and when to stop (Section~\ref{sec:accel}).
-
-Iterative model-free tuning is not new. Iterative feedback tuning
-\cite{Hjalmarsson1998} and extremum seeking \cite{Killingsworth2006} both
-estimate the gradient of a cost from closed-loop experiments and converge to a
-local minimum of it. The triangular rule is different: it uses only
-\emph{signs}, with no cost function and no gradient. Its natural end state is
-therefore not a stationary point but a limit cycle of a switched system, which
-is exactly what averaged (Filippov) dynamics were developed for
-\cite{Filippov1988}.
+We ask where the orbit is, what shape it has, what happens to it as the step
+shrinks, and why it ends at a robust controller. The answers come in three
+layers. The first is combinatorial and holds for any turn index: the move
+counts, the period and the excursion of every closed orbit
+(Section~\ref{sec:orbits}). The second is topological and also holds for any
+index: the orbit's box meets the switching boundaries, so small-step orbits
+accumulate on their intersection (Section~\ref{sec:limit}). The third
+concerns the published count, a winding number over a window that ends when
+the error settles, which jumps when that window jumps. We construct a
+continuous count of which it is the limit, find that the orbits sit on the
+event at which the overshoot equals the settling band $\delta$, and read that
+event as
+a damping condition on the sensitivity function
+(Sections~\ref{sec:count}--\ref{sec:robust}). This explains why the
+destination is not unique and why it is robust anyway.
+Section~\ref{sec:step} turns the orbit structure into a step-size rule and a
+stopping test.
 
 % =====================================================================
-\section{The Switched System}
+\section{The Rule as a Switched System}
 \label{sec:rule}
 
-We recall only what is needed; the companion paper \cite{Paper1} defines the
-portraits, the index, and the rule in full. One closed-loop step experiment
-yields three curves (band $0$, $1$, $2$), and for each curve a turn index
-$N_k \ge 0$ measuring how far the curve winds around the origin of its
-portrait. Each band has a fixed threshold:
-\begin{equation}
-\Nbar = (\Nbar_0, \Nbar_1, \Nbar_2) = (0.5,\; 0.75,\; 1.0).
-\label{eq:thresholds}
-\end{equation}
+\emph{Loop and record.} A discrete-time loop with sampling period $T_s$
+closes a parallel PID controller $K_p + K_i/s + K_d s/(1 + (K_d/\nu) s)$,
+$\nu = 10$, around the plant, and a unit setpoint step is applied at
+$t = 0$. The record is the error $e_n = r - y_n$, $n = 0, \dots, n_{\max}$.
 
-The triangular rule reads the three comparisons $N_k \gtrless \Nbar_k$ and
-applies one of four moves to the gain vector. Following \cite{Paper1} we
-order the gains by the band each channel dominates,
-$K^{(0)} = K_i$, $K^{(1)} = K_p$, $K^{(2)} = K_d$, so that $N_k$ is the index
-pointing at $K^{(k)}$. If all
-three bands are below threshold, all gains are scaled up; otherwise the lowest
-offending band is cut by scaling gains down in a band-specific pattern. Every
-move multiplies each gain by $\gamma^{\pm 1}$ or leaves it alone, where
-$\gamma = 1/(1-\beta)$ and $\beta$ is the step size (default $\beta = 0.1$,
-so $\gamma \approx 1.111$). Multipliers are clipped to a box, here
-$[0.01, 10]$.
+\begin{assumption}\label{ass:loop}
+The loop is linear and noise-free, and the derivative acts on the error.
+\end{assumption}
 
-Throughout we assume the step response is measured without output noise, so
-that each turn index is a deterministic function of the gains. The stochastic
-case, in which the three comparisons become random near the target, is treated
-in follow-up work; the deterministic characterization below is its zero-noise
-limit, and Proposition~\ref{prop:unique} records a combinatorial property of
-the move table that bears on it.
+Under Assumption~\ref{ass:loop} the increments $e_n - e_{n-1}$ ($e_{-1} = 0$)
+are the impulse response of the sensitivity function $S$, so the record is
+the step response of $S$ \cite{Certified}. We return to this in
+Section~\ref{sec:robust}.
 
-We use log coordinates $\theta = (\log K_i, \log K_p, \log K_d)$. Note that
-these are in band order and not in the usual PID order. The four moves are then
-translations by $h = \log\gamma$:
+\emph{Turn counts.} From the record, \spin{} draws three portraits:
+$\Gamma_0 = (e, E)$ with $E$ the running sum of $e$, $\Gamma_1 = (\Delta e, e)$
+and $\Gamma_2 = (\Delta^2 e, \Delta e)$. They are read over a window
+$[k_1, k_\delta]$. The start $k_1$ is the first sample at which the output
+has risen past $10\,\%$ of the step, plus a fixed padding. The end $k_\delta$
+is one sample past the last sample with $|e_n| > \delta \max_m |e_m|$,
+$\delta = 0.02$, clipped to $[k_1, k_2]$, where $k_2$ is the end of the record
+less a padding. Each axis is normalized by its peak over the window, the
+integral axis of $\Gamma_0$ is taken relative to its value at $k_\delta$, and the
+turn count $N_k$ is the winding number of $\Gamma_k$ around the origin, up to
+the last segment that touches the disc of radius $\varepsilon = 0.1$. The
+thresholds are $\Nbar = (0.5, 0.75, 1.0)$.
+
+\emph{Moves.} We write $\theta = (\log K_i, \log K_p, \log K_d)$, in band order.
+If the stability screen of \cite{Paper1} finds the record growing, all gains
+are backed off by $b = (1, 2, 3) \log 2$. Otherwise the lowest band with
+$N_k > \Nbar_k$ is cut and the bands below it are raised; if no band is
+violated, all are raised. With $h = \log\gamma$, $\gamma = 1/(1-\beta)$, the four
+moves are translations by $h$ times
 \begin{equation}
 \begin{aligned}
-e   &= (+1, +1, +1) &\text{(expand),}\\
-d_0 &= (-1, \phantom{+}0, \phantom{+}0) &\text{(cut band 0),}\\
-d_1 &= (+1, -1, \phantom{+}0) &\text{(cut band 1),}\\
-d_2 &= (+1, +1, -1) &\text{(cut band 2),}
+g &= (1, 1, 1), & d_0 &= (-1, 0, 0),\\
+d_1 &= (1, -1, 0), & d_2 &= (1, 1, -1).
 \end{aligned}
 \label{eq:moves}
 \end{equation}
-each scaled by $h$. The iteration is therefore a switched dynamical system.
-The signs of $N_k(\theta) - \Nbar_k$ divide gain space into four regions, and
-each region is given one constant velocity. Since the velocity never vanishes
-inside a region, the state can never come to rest. A bounded trajectory must
-keep crossing from one region to another, so the rule must end in a cycle. Two
-questions remain: where the regions meet, and how the crossing pattern arranges
-itself there. Section~\ref{sec:index} makes the first question well posed, and
-Section~\ref{sec:cycle} answers both.
+A $g$-step (``grow'') is \emph{quiet}: it is taken only where no band is
+violated. The gains live in the box $\Theta = [\ell, u]^3$,
+$\ell = \log 10^{-3}$, $u = \log 10$; raises are clipped at $u$ and cuts at
+$\ell$. We use $\beta = 0.1$ unless stated.
+
+\emph{Two corrections to \cite{Paper1}.} (i)~A cut is \emph{blocked} if its
+gain is already at $\ell$. A blocked cut now passes to the nearest lower band
+whose gain can still be cut, with the raises below that band; if there is
+none, the gains are held. Previously the raises were applied although the
+cut was not, which applied the vector $(1, 1, 0)$, outside the table
+\eqref{eq:moves}. (ii)~The winding number is computed as the sum of the
+signed angles of the portrait's segments. The published implementation
+corrected the endpoint angle by crossings of the negative real axis but
+missed crossings by a segment with one end at $x \ge 0$, and on the last
+segment; it miscounted by one or two full turns on $41$ of the $8792$ states
+visited in Section~\ref{sec:count}. Both corrections are in the reference
+code.
+
+\emph{Experiments.} The battery is that of \cite{Paper1}: P1
+$e^{-s}/((10s+1)(s+1)^3)$, P2 $1.25e^{-8s}/(5s+1)^4$, P3
+$e^{-10s}/((2s+1)(s+1)^3)$, P4 $e^{-4s}/(8s+1)^6$. Each record has $500$
+samples over ten times the sum of the plant's time constants and dead time.
+For each plant we start from the AMIGO gains \cite{AstromHagglund2004} and
+from the $26$ gain vectors obtained by multiplying each AMIGO gain by $8$,
+$1$ or $1/8$, and run the deterministic iteration until it revisits a state.
+The states from the first visit on form the terminal orbit.
 
 % =====================================================================
-\section{A Continuous Turn Index}
-\label{sec:index}
+\section{Closed Orbits}
+\label{sec:orbits}
 
-Both questions concern the boundaries between regions, so before either can be
-answered we must check that those boundaries exist. With the turn index as
-published they do not. That index is a hard count: the
-winding is accumulated along the portrait curve and then cut off when the curve
-enters a small disc of radius $\varepsilon$ around the origin for the last
-time. The time of this \emph{last entry} does not depend continuously on the
-curve. A very small change can make the curve just touch the edge of the disc,
-and one whole turn is then gained or lost. On the battery plants a gain change
-of $0.05\,\%$, far smaller than any step the rule takes, moves one index by
-exactly $1.000$, and a longer simulation window does not help. The switching
-surfaces $N_k(\theta) = \Nbar_k$ are then not surfaces at all, the four regions
-of Section~\ref{sec:rule} have no well-defined boundaries, and no statement
-about where they meet can even be formulated.
+\begin{lemma}\label{lem:table}
+Let $\log 2/h$ be irrational. On a closed orbit of period $T \ge 2$ that does
+not reach the ceiling $u$ and on which $K_i$ stays above $\ell$, every step
+is a full table move $\theta^{t+1} = \theta^t + h v^t$,
+$v^t \in \{g, d_0, d_1, d_2\}$.
+\end{lemma}
 
-For running the rule this jump does no harm. The rule reads only the
-\emph{sign} of $N_k - \Nbar_k$, and a jump of one simply moves a switching
-surface a little. This is why all results of the companion paper remain valid.
-The analysis, however, needs a continuous index, and there is a natural one.
-For a curve $(x(t), y(t))$ we replace the hard cut-off by a smooth weight:
-\begin{equation}
-\Neps \;=\; \frac{1}{2\pi} \oint
-\frac{x\,dy - y\,dx}{\,x^2 + y^2 + \varepsilon^2\,}.
-\label{eq:neps}
-\end{equation}
-Write $\rho^2 = x^2 + y^2$. The integrand is then the usual winding integrand
-multiplied by the weight $\rho^2 / (\rho^2 + \varepsilon^2)$. Turning far from
-the origin counts fully, turning at radius $\varepsilon$ counts half, and
-turning deep inside the disc counts almost nothing. Three properties make
-$\Neps$ the right tool.
+\begin{proof}
+A step is a table move, possibly with a cut clipped at $\ell$; a raise
+clipped at $u$; a screen backoff, possibly clipped at $\ell$; or a hold. A
+hold is a fixed point ($T = 1$), and clipped raises are excluded. The
+coordinate $\log K_i$ is never clipped, so its steps are $0$, $\pm h$ or
+$-\log 2$; closing the orbit gives $m h = n \log 2$ with $n$ the number of
+screen events, hence $n = 0$. In $\log K_p$ and $\log K_d$ the remaining
+steps are $0$, $\pm h$ and cuts clipped to $\ell$. If a coordinate takes the
+value $\ell$ on the orbit, then following the orbit from there it takes only
+values in $\ell + h\mathbb{Z}$, since $\pm h$ preserves this set and a clipped
+cut would start in $(\ell, \ell + h)$; so no cut is clipped. If it never
+takes the value $\ell$, no cut is clipped either. By correction~(i), a
+passed-on cut is a table move of a lower band.
+\end{proof}
 
-\emph{It is continuous.} The integrand is smooth everywhere, so $\Neps$ is a
-continuous function of the gains. For the $0.05\,\%$ change above it moves by
-$7 \times 10^{-4}$, where the hard count jumps by $1.000$.
+For $\beta = 0.1$, $\log 2/\log(10/9)$ is irrational: $2^q = (10/9)^p$ would
+give $2^{q} 3^{2p} = 2^p 5^p$.
 
-\emph{It does not depend on the window.} After the response has settled the
-radius tends to zero, and there the weight tends to zero as $\rho^2$. The value
-of $\Neps$ is therefore exactly independent of the window length, and the
-$\delta$-guard of the hard count is no longer needed.
-
-\emph{It can replace the count.} Away from the switching surfaces $\Neps$ and
-the hard count agree up to an error that tends to zero with $\varepsilon$.
-Every sign comparison of the published rule is therefore unchanged, and so is
-every published result.
-
-With $\Neps$ the sets $N_k(\theta) = \Nbar_k$ are true level surfaces, and the
-analysis of the next section is well posed. We also check directly that these
-surfaces meet in a single point. Runs in which the step size is driven to zero,
-which is a device for the analysis and not a tuning recommendation, converge to
-that point, which Section~\ref{sec:cycle} calls $\theta^*$, with final log-gain
-errors
-\begin{equation*}
-\text{P1: } 0.010, \quad \text{P3: } 0.017, \quad \text{P4: } 0.041,
-\end{equation*}
-where $\theta^*$ is located independently by direct search on
-\eqref{eq:triplepoint}. With the hard count the same runs stop at points that
-depend on the schedule. This is further evidence that only the regularized
-index reveals the true center of the cycle.
-
-% =====================================================================
-\section{The Cycle and Its Center}
-\label{sec:cycle}
-
-We now use the regularized index of Section~\ref{sec:index} throughout, so
-that the four regions have genuine boundaries. Suppose a trajectory stays
-bounded and does not drift. Over a long window,
-each move $v \in \{e, d_0, d_1, d_2\}$ is applied some fraction $w_v \ge 0$ of
-the time, with $\sum_v w_v = 1$. Non-drifting requires the average
-displacement $h \sum_v w_v v$ to vanish.
-
-\begin{proposition}[Unique Balance]
-\label{prop:balance}
+\begin{proposition}[Balance]\label{prop:balance}
 The only convex combination of the moves \eqref{eq:moves} that vanishes is
-\begin{equation}
-\tfrac{1}{8}\, e + \tfrac{1}{2}\, d_0 + \tfrac{1}{4}\, d_1
-+ \tfrac{1}{8}\, d_2 = 0.
-\label{eq:weights}
-\end{equation}
+$\tfrac18 g + \tfrac12 d_0 + \tfrac14 d_1 + \tfrac18 d_2 = 0$.
 \end{proposition}
 
-All four weights are strictly positive. This fixes the cycle in two ways.
+\begin{proof}
+With weights $w$, the $\log K_d$ coordinate gives $w_g = w_2$, then
+$\log K_p$ gives $w_1 = 2 w_g$, $\log K_i$ gives $w_0 = 4 w_g$, and
+$\sum w = 1$ gives $w_g = \tfrac18$.
+\end{proof}
 
-\begin{corollary}[Center of the Cycle]
-\label{cor:triple}
-A bounded, non-drifting trajectory must apply all four moves with the
-frequencies \eqref{eq:weights}, and can therefore only orbit a point
-$\theta^*$ where all three switching surfaces meet:
-\begin{equation}
-N_k(\theta^*) = \Nbar_k, \qquad k = 0, 1, 2.
-\label{eq:triplepoint}
-\end{equation}
-We call $\theta^*$ the \emph{triple point}. It depends only on the plant and
-the thresholds. It does not depend on the step size, on the starting gains, or
-on the history of the run.
-\end{corollary}
+\begin{theorem}[Closed orbits]\label{thm:orbit}
+Under the hypotheses of Lemma~\ref{lem:table}, the orbit applies the moves
+$(g, d_0, d_1, d_2)$ exactly $n_e (1, 4, 2, 1)$ times for an integer
+$n_e \ge 1$, its \emph{multiplicity}; so $T = 8 n_e$ and every move occurs.
+Each coordinate stays within $n_e (2, 1, \tfrac12)\, h$ of the midpoint of
+its range on the orbit; we call the vector of these midpoints the orbit's
+\emph{centre}.
+\end{theorem}
 
-The same computation over the integers gives a lower bound on the cycle
-length. No shorter cycle than the observed one can exist.
+\begin{proof}
+By Lemma~\ref{lem:table} the counts $n_v$ satisfy $\sum_v n_v v = 0$; the
+computation of Proposition~\ref{prop:balance} over the integers gives
+$n = n_e(1,4,2,1)$, and $T \ge 2$ forces $n_e \ge 1$. A closed walk with
+$m$ up-steps and $m$ down-steps of size $h$ has range at most $m h$; per
+period, $\log K_i$, $\log K_p$ and $\log K_d$ are raised $4n_e$, $2n_e$ and
+$n_e$ times.
+\end{proof}
 
-\begin{corollary}[Minimal Period]
-\label{cor:period}
-Any exactly closed orbit applies the moves an integer number of times
-$(n_e, n_{d_0}, n_{d_1}, n_{d_2})$ with $\sum_v n_v\, v = 0$, which forces
-$(n_e, n_{d_0}, n_{d_1}, n_{d_2}) = n_e \cdot (1, 4, 2, 1)$. Every closed
-orbit therefore has length a multiple of $8$; the shortest possible cycle
-has length exactly $8$, and no closed orbit can avoid any of the four moves.
-\end{corollary}
+On the battery, the six P4 orbits that reach the $K_d$ ceiling are excluded
+by the hypotheses; five of them have period four. All other $102$ orbits have
+the predicted counts and lie within the bound; $93$ have $n_e = 1$, the others
+$n_e \in \{2, 3, 4, 5, 9, 24\}$. Three of P1's, thirteen of P2's and fifteen
+of P4's orbits have $K_d$ on the floor, where passed-on cuts keep the table
+intact. From the AMIGO start every plant closes an orbit of period eight after
+$9$ to $19$ experiments.
 
-Table~\ref{tab:duty} tests these predictions on the whole battery and every
-plant confirms them exactly, the shares matching
-$(\tfrac18,\tfrac12,\tfrac14,\tfrac18)$ to three decimal places in all four
-cases. Three plants close a period-$8$ orbit; P3 closes a period-$16$ orbit
-with counts $(2,8,4,2)$. Corollary~\ref{cor:period} predicts not merely
-period $8$ but any multiple of eight with counts $n_e(1,4,2,1)$, and P3 is the
-only member of the battery that tests the multiple.
+The table \eqref{eq:moves} is not an arbitrary choice.
 
-\begin{observation}[Ordering is Plant-Dependent]
-\label{obs:ruler}
-The counts are universal but the order of the moves is not: each plant closes a
-different sequence. P2 gives the ruler ordering $d_0 d_1 d_0 d_2 d_0 d_1 d_0 e$,
-a cube of side $h$ (Fig.~\ref{fig:cycle}); P4 gives
-$d_0 e\, d_0 d_2 d_0 d_1 d_0 d_1$ and P1 gives
-$d_1 d_1 e\, d_0 d_2 d_0 d_0 d_0$, flatter polygons of the same period and
-counts.
-\end{observation}
+\begin{proposition}[The table is forced]\label{prop:forced}
+Among tables for $n$ bands with entries in $\{-1, 0, 1\}$, $g = (1, \dots, 1)$
+and $d_k[k] = -1$, the staircase table ($d_k[j] = 1$ for $j < k$, $0$ for
+$j > k$), which is \eqref{eq:moves} for $n = 3$, is the only one whose balance
+weights equal the frequencies with which the priority logic selects the
+moves when the $n$ signs $N_k \gtrless \Nbar_k$ are equally likely.
+\end{proposition}
 
-Corollaries~\ref{cor:triple} and~\ref{cor:period} fix the frequencies and the
-length; which ordering a plant selects is a property of its switching surfaces
-and remains a measurement. For practice this does not matter, because the
-counts alone bound the excursion whatever the ordering turns out to be.
+\begin{proof}
+The logic selects $g$ on $1$ of the $2^n$ sign patterns and $d_k$ on
+$2^{n-k-1}$. Matching requires $g + \sum_k 2^{n-k-1} d_k = 0$; coordinate $j$
+reads $\sum_k 2^{n-k-1} d_k[j] = -1$, a signed-binary representation of $-1$.
+The $n$ such representations have a single $-1$ digit at a position $m$,
+with $d_k[j] = +1$ for $k > m$ and $0$ for $k < m$. The hypothesis
+$d_j[j] = -1$ forces $m = j$, which is the staircase.
+\end{proof}
 
-\begin{corollary}[Excursion Bound]
-\label{cor:excursion}
-Let a closed orbit have counts $n_e(1,4,2,1)$. Then over every ordering of
-those moves the coordinate span is at most $n_e(4,2,1)\,h$, so each coordinate
-of the orbit lies within
-\begin{equation}
-n_e\,(2,\; 1,\; \tfrac12)\,h
-\label{eq:excursion}
-\end{equation}
-of the orbit centre, in $(\log K_i, \log K_p, \log K_d)$.
+A consequence for noise: if noise makes the comparisons independent fair
+coins, the moves occur at the balance weights and the expected displacement
+is zero. The balance point does not drift; only the spread grows.
+
+% =====================================================================
+\section{Localization and the Small-Step Limit}
+\label{sec:limit}
+
+Let $\Sigma_k$ be the boundary of the set
+$\{\theta \in \Theta : N_k(\theta) > \Nbar_k\}$: the switching boundary of
+band $k$. No continuity of $N$ is assumed.
+
+\begin{proposition}[Localization]\label{prop:local}
+Let a closed orbit satisfy Theorem~\ref{thm:orbit}, and let $B$ be its
+bounding box. Then $B$ meets $\Sigma_2$. If no cut on the orbit is passed
+on, $B$ meets $\Sigma_0$, $\Sigma_1$ and $\Sigma_2$.
+\end{proposition}
+
+\begin{proof}
+The orbit contains a quiet step, taken where $N \le \Nbar$, and a $d_2$-step,
+taken only where $N_2 > \Nbar_2$. Without passed-on cuts, a $d_k$-step is
+taken only where $N_k > \Nbar_k$. The box is connected and contains points of
+$\{N_k > \Nbar_k\}$ and of its complement, so it meets the boundary.
+\end{proof}
+
+\begin{corollary}[Small-step limit]\label{cor:limit}
+Let $\beta_j \to 0$, and let the orbits $O_j$ satisfy
+Proposition~\ref{prop:local} without passed-on cuts, with
+$n_e^{(j)} h_j \to 0$. Every accumulation point of $O_j$ lies in
+$\mathcal{T} = \Sigma_0 \cap \Sigma_1 \cap \Sigma_2$.
 \end{corollary}
 
 \begin{proof}
-Exhaustion over the orderings of $\{e, d_0^4, d_1^2, d_2\}$; the extreme spans
-are attained, so the bound is tight. The asymmetry reflects the table: $K_i$ is
-moved by all four moves, $K_d$ by two.
+The diameter of $B_j$ is at most $\sqrt{21}\, n_e^{(j)} h_j \to 0$ by
+Theorem~\ref{thm:orbit}; each $B_j$ meets each closed set $\Sigma_k$.
 \end{proof}
 
-Table~\ref{tab:duty} reports the measured half-spans: every plant lies inside
-the bound, and P1 attains it in the proportional and derivative coordinates.
+\begin{remark}[Transversal case]\label{rem:transversal}
+If $N$ is $C^1$ near a point $\theta^*$ with $N(\theta^*) = \Nbar$ and a
+nonsingular Jacobian $J^*$, then $\mathcal{T}$ is locally $\{\theta^*\}$. A box
+$B$ near $\theta^*$ that meets the three level sets satisfies
+$|N_k - \Nbar_k| \le \lVert \nabla N_k \rVert \operatorname{diam} B$ at its
+centre by the mean-value theorem, and the inverse function theorem turns this
+into a distance $O(\lVert (J^*)^{-1} \rVert \lVert J^* \rVert
+\operatorname{diam} B)$ from $\theta^*$. For orbits of bounded multiplicity
+without passed-on cuts this is a rate $O(h)$.
+\end{remark}
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.82\linewidth]{fig_limit_cycle}
-\caption{One period of the terminal orbit of P2, at $\beta = 0.10$ under the
-regularized index. Its measured ordering is the ruler sequence
-$d_0 d_1 d_0 d_2 d_0 d_1 d_0 e$, so the eight points are the corners of a cube
-of side $h$ visited in binary counting order: $\log K_i$ is the least
-significant bit, $\log K_p$ and $\log K_d$ the higher bits, and $e$ the carry
-that closes the period. The cross marks the centre. This is the tightest of the
-four orbits of Table~\ref{tab:duty}.}
-\label{fig:cycle}
-\end{figure}
+The existence and attraction of a terminal orbit remain open; what the
+results above fix is where any closed orbit can be, and where small-step
+orbits must end up. On the battery, from the AMIGO start, halving $\beta$ from
+$0.1$ to $0.00625$ moves the orbit centre by $0.39$, $0.031$, $0.015$ and
+$0.007$ on P1 and by $0.18$, $0.041$, $0.020$ and $0.002$ on P2 (in
+$\log$-gain): the centres converge. On P3 the centre jumps once ($0.25$ at
+$\beta = 0.025$) and then moves by less than $0.01$; on P4 the orbits reach the
+$K_d$ ceiling for $\beta \le 0.05$. What $\mathcal{T}$ looks like depends on
+the count.
+
+% =====================================================================
+\section{The Published Count as a Limit}
+\label{sec:count}
+
+The published count is a composition of discrete steps: the window start
+$k_1$, the window end $k_\delta$, the peak normalization over the window,
+the reference value of $\Gamma_0$'s integral axis at $k_\delta$, and the cut
+at the last disc contact. Each makes $N$ jump. We replace each by a smooth
+version. Let $\psi$ be the logistic function and
+$A_n = \max_{m \ge n} |e_m| / \max_m |e_m|$ the \emph{future envelope} of the
+error. Sample $n$ is before the window end with weight
+$P_n = \psi(p \log(A_{n-1}/\delta))$, the smooth version of $n \le k_\delta$,
+and after the window start with weight
+$Q_n = \psi(p_s (0.9 - \min_{m \le n - \kappa} e_m))$, $\kappa$ the padding.
+Each portrait axis is normalized by $\max_n Q_n P_n |a_n|$, and $\Gamma_0$'s
+reference value is $\sum_n (P_n - P_{n+1}) E_n$. Segment $n$ of a portrait,
+from $(a_n, b_n)$ to $(a_{n+1}, b_{n+1})$, turns by
+$\varphi_n = \operatorname{atan2}(a_n b_{n+1} - b_n a_{n+1},\,
+a_n a_{n+1} + b_n b_{n+1})$ and counts with the weight
+$\omega_n = Q_n P_{n+1} V_n\, \rho_n^2/(\rho_n^2 + r_0^2)$. Here $\rho_n$ is
+the segment's distance from the origin, and $V_n$ is the smooth version of
+``a later segment touches the disc, or no segment does'', built from
+$\psi(p \log(\varepsilon/\rho_m))$. The continuous count of band $k$ is
+\begin{equation}
+N_{k,p} = \frac{1}{2\pi} \sum_n \omega_n \varphi_n
+\label{eq:smooth}
+\end{equation}
+over the portrait $\Gamma_k$. We use $p = 32$, $p_s = 200$ and
+$r_0 = \varepsilon/100$.
+
+\begin{proposition}[Continuity and limit]\label{prop:smooth}
+For finite $p$, $p_s$ and $r_0 > 0$, $N_p$ is a continuous function of the
+record wherever the record and the portrait axes are not identically zero;
+under Assumption~\ref{ass:loop} it is therefore continuous in $\theta$. As
+$p, p_s \to \infty$ and $r_0 \to 0$, $N_p$ tends to the published count at
+every record without ties ($|e_n| = \delta \max|e|$, the output exactly at the
+$10\,\%$ level, a segment at distance exactly $\varepsilon$ or through the
+origin), except when the last disc contact is on the second segment, where
+the published count is set to zero.
+\end{proposition}
+
+\begin{proof}
+Envelopes, extrema, logistics and products are continuous. The segment angle
+is discontinuous only where the segment passes through the origin, where
+$\rho_n = 0$ and its weight vanishes, so the product is continuous. A finite
+linear recursion makes the record continuous in the gains. As the
+sharpnesses grow, each logistic tends to the indicator it smooths, off the
+ties.
+\end{proof}
+
+Table~\ref{tab:fidelity} measures the limit and the agreement on the states
+visited in the first $120$ iterations from each of the $27$ starts. The hard
+limit coincides with the published count on $8791$ of $8792$ states, the
+exception being the second-segment case. At $p = 32$ the continuous count makes
+the rule's move on $98.5$--$99.5\,\%$ of the states, and driving the rule with
+it reaches the same terminal orbit from $67$--$100\,\%$ of the starts; from the
+others it reaches another orbit of the kind described next.
 
 \begin{table}[t]
-\small
-\centering
-\caption{Terminal orbits of the whole battery, from $2000$-iteration runs at
-$\beta = 0.10$ from unit gains with the regularized index \eqref{eq:neps}.
-Every plant closes an \emph{exactly} periodic orbit, no block departing from
-the pattern over the second half of the run, with move shares matching
-Proposition~\ref{prop:balance} to three decimals and counts $n_e(1,4,2,1)$ as
-Corollary~\ref{cor:period} requires. Half-spans are in units of $h$, in
-$(\log K_i, \log K_p, \log K_d)$. Under the published hard count the same runs
-miss the shares by up to $0.04$ and close no orbit at all.}
-\label{tab:duty}
-\begin{tabular}{lccccc}
+\centering\small
+\caption{The continuous count against the published one, on the states
+visited in the first $120$ iterations from each of $27$ starts per plant.}
+\label{tab:fidelity}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrcccc}
 \toprule
-Plant & period & $n_e$ & counts & half-span & bound \\
+ & states & hard limit & \multicolumn{2}{c}{same move} & same orbit \\
+ & & exact & $p=8$ & $p=32$ & $p=32$ \\
 \midrule
-P1 & $8$  & $1$ & $(1,4,2,1)$ & $(1.5,1,\tfrac12)$ & $(2,1,\tfrac12)$ \\
-P2 & $8$  & $1$ & $(1,4,2,1)$ & $(\tfrac12,\tfrac12,\tfrac12)$ & $(2,1,\tfrac12)$ \\
-P3 & $16$ & $2$ & $(2,8,4,2)$ & $(3,1.5,1)$ & $(4,2,1)$ \\
-P4 & $8$  & $1$ & $(1,4,2,1)$ & $(\tfrac12,1,\tfrac12)$ & $(2,1,\tfrac12)$ \\
+P1 & 1926 & 1926 & $95.6\,\%$ & $98.8\,\%$ & $20/27$ \\
+P2 & 2332 & 2332 & $96.2\,\%$ & $98.9\,\%$ & $21/27$ \\
+P3 & 2216 & 2215 & $96.4\,\%$ & $98.5\,\%$ & $18/27$ \\
+P4 & 2318 & 2318 & $97.6\,\%$ & $99.5\,\%$ & $27/27$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Boundary Case} If $\theta^*$ lies outside the gain box the
-trajectory settles instead where, for each band, either the index sits on its
-threshold or the gain sits on a bound: a complementarity point. The companion
-paper's P2 run ends this way with $K_d$ on the floor of $0.01$, whereas from
-unit gains under the regularized index the same plant reaches an interior orbit
-(Table~\ref{tab:duty}) --- so this is a property of the starting gains, not of
-the plant.
-
-% =====================================================================
-\section{The Move Table Is Forced}
-\label{sec:why}
-
-The results so far describe the cycle produced by one particular table of
-moves. It is natural to ask whether that table could have been chosen
-differently. It could not. Once the priority order is fixed, the table of
-Section~\ref{sec:rule} is the only one possible.
-
-\begin{proposition}[The Move Table is Forced]
-\label{prop:unique}
-Fix the priority order of the rule. Among move tables in which
-(i) every entry lies in $\{-1, 0, +1\}$, so that each gain is multiplied by
-$\gamma^{\pm 1}$ or left alone; (ii) $e = (1, \dots, 1)$; and (iii) each
-cut $d_k$ decreases its own gain, $d_k[k] = -1$; the staircase table
-\eqref{eq:moves} is the \emph{unique} one whose balance weights
-\eqref{eq:weights} coincide with the branch frequencies of the priority
-logic.
-\end{proposition}
-
-\begin{proof}
-Counting sign patterns, the priority logic selects $e$ on $1$ of the $2^n$
-patterns and $d_k$ on $2^{\,n-k-1}$ of them, so matching requires
-$e + \sum_k 2^{\,n-k-1} d_k = 0$. Coordinate $j$ of this reads
-$\sum_k 2^{\,n-k-1} d_k[j] = -1$: a signed-binary representation of $-1$ with
-digits in $\{-1,0,1\}$. Exactly $n$ such representations exist, indexed by the
-position $m$ of the single $-1$ digit, namely $d_m[j] = -1$, $d_k[j] = +1$
-for $k > m$ and $0$ for $k < m$. Hypothesis (iii) forces $m = j$, giving
-$d_k[j] = +1$ for $j < k$, $-1$ for $j = k$, and $0$ for $j > k$. This is
-exactly the table \eqref{eq:moves}.
-\end{proof}
-
-Hypotheses (i) and (iii) are both needed: without (iii) there are $n^n$
-matching tables, and relaxing (i) to entries in $\{-2, \dots, 2\}$ gives six for
-$n = 3$. The triangular shape is therefore not a design choice but the only
-shape that fits the selection logic together with the balance condition. The
-weights are powers of two because the selection tree is binary.
-
-Two consequences follow. First, the matching gives a useful pairing:
-$\lVert d_k \rVert = \sqrt{k+1}$, while $d_k$ occurs with frequency
-$2^{-(k+1)}$, so the most frequent move is always the smallest one. Second,
-the matching also says something about measurement noise. If noise removes all information from the three signs, the moves occur
-at the branch frequencies, and those frequencies are the balance weights. The
-expected displacement is then zero, so the iteration stays at $\theta^*$
-instead of drifting away. This is a property of the move table and is proved
-here by counting. A full stochastic treatment, including the case of
-correlated noise where this argument no longer holds, is left to future work.
-
-% =====================================================================
-\section{Choosing the Step}
-\label{sec:size}
-
-The fixed-step iteration cannot converge to a point, and by
-Section~\ref{sec:cycle} it should not be expected to. The practical question is
-how far from the target it leaves the gains, and
-Corollary~\ref{cor:excursion} answers it without needing the ordering of the
-orbit: the excursion is bounded coordinate by coordinate, in units of the step.
-Halving $\beta$ therefore halves it exactly.
-
-\begin{corollary}[Design Rule]
-\label{cor:design}
-On a terminal orbit with $n_e = 1$, the gains stay within the multiplicative
-factors
-\begin{equation}
-K_i : \gamma^{2}, \qquad K_p : \gamma, \qquad K_d : \gamma^{1/2},
-\qquad \gamma = (1-\beta)^{-1},
-\label{eq:designfwd}
-\end{equation}
-of their values at the orbit centre, at every iteration. To hold every gain
-within a common factor $\rho$ it is therefore enough to choose
-\begin{equation}
-\boxed{\;\beta \;\le\; 1 - \rho^{-1/2}\;}
-\label{eq:designrule}
-\end{equation}
-\end{corollary}
-
-The bound contains no plant parameter and is deliberately asymmetric: the
-integral gain is moved by all four moves and the derivative gain by two, so
-$K_i$ is the loosest coordinate and $K_d$ the tightest. At the companion
-paper's default $\beta = 0.1$ the guarantees are $23.5\,\%$ on $K_i$,
-$11.1\,\%$ on $K_p$ and $5.4\,\%$ on $K_d$; holding all three within
-$5\,\%$ requires $\beta \le 0.024$. The multiplicity $n_e$ is not assumed but
-read from the run, being the number of expand moves per period: it is $1$ on
-three plants of the battery and $2$ on P3 (Table~\ref{tab:duty}), and the
-factors compound with it.
-
-Three conditions come with \eqref{eq:designrule}. It is exact when the
-switching surfaces are locally flat, and curvature adds a term of order $h^2$.
-It assumes that $\theta^*$ lies inside the gain box; if it does not, the
-boundary case of Section~\ref{sec:cycle} applies. Under measurement noise it
-holds down to the noise floor, below which the spread around $\theta^*$ is set
-by the noise and not by $\beta$.
-
-It is also worth saying which error is bounded. Equation
-\eqref{eq:designrule} bounds the error in the \emph{gains}, and this bound is
-the same for every plant. The corresponding error in the turn index is
-$|N_k - \Nbar_k| \approx \|J_k\| \, \tfrac{\sqrt{3}}{2} h$, where $J$ is the
-local Jacobian of Section~\ref{sec:structure}, and this does depend on the
-plant. The indices are the measuring instrument; the gains are the result.
-
-We measure this from far starting points, with the gains detuned by a factor
-of $16$. With a constant $\beta$ the run reaches the cycle quickly, and the
-final error of $0.074$ is the radius of that cycle. This is a few percent in
-each gain, which for
-% TODO-REGEN: state beta of this run and compare 0.074 against
-% (sqrt(3)/2)*log(gamma) explicitly once the schedule script exists;
-% also tabulate the Corollary 3 factor rho for the beta values used.
-plant-floor use is indistinguishable from the target. This is the theoretical
-support for the companion paper's constant-step recommendation: the fixed-step
-rule is guaranteed to leave the gains within one cycle radius of a
-plant-determined point, and that radius is set by $\beta$ alone.
-
-% =====================================================================
-\section{Local Structure}
-\label{sec:structure}
-
-Two facts about the neighborhood of $\theta^*$ shape a proof. The
-central-difference Jacobians $\partial N_j/\partial\theta_i$ of the regularized
-index are nonsingular on every interior-target plant, with determinants $1.2$,
-$5.9$ and $4.3$ on P1, P3, P4, so the center is locally unique. But they are
-neither diagonal nor diagonally dominant: on P1 the proportional gain moves the
-band-2 index harder than the derivative gain does, and on P4 the own-gain entry
-of band~1 is negative. The picture in which each move repairs its own band is
-therefore wrong at the center, and a per-move argument fails on two of three
-plants --- yet on all three the cycle forms, centers correctly, and shrinks.
-% TODO-REGEN: add units/normalization to reproduce script.
-
-The resolution is that the cycle is a property of the \emph{averaged} motion.
-Near $\theta^*$ the iteration switches rapidly between the four regions and its
-mean motion is the convex combination of their velocities weighted by residence
-time, which is the Filippov regularization of the switched system
-\cite{Filippov1988}; the measured shares of Table~\ref{tab:duty} are direct
-evidence, being exactly the balance weights \eqref{eq:weights}. A proof should
-therefore show that $\theta^*$ is a stable equilibrium of the Filippov field
-and recover the discrete cycle by averaging. We leave this as the open problem.
-Note also that any scheme treating the bands separately, one step size or
-momentum term per band, assumes the diagonal structure that is missing here.
-
-\section{The Drift Meter}
-\label{sec:detector}\label{sec:accel}
-
-Everything so far describes where the cycle is and how big it is. What the
-running rule needs is different: it needs to know \emph{whether it has got
-there yet}. This section shows that the balance condition answers that
-question too, and that the answer is already contained in the moves the rule
-has made, so no extra experiment is required.
-
-The idea is a counting argument. Over a window of recent iterations, count how
-often each of the four moves was applied. If the shares match the balance
-weights $w$ of \eqref{eq:weights} then by Proposition~\ref{prop:balance} the
-moves cancel: the gains have returned where they began and the state is
-circling the triple point. If they do not match, the gains are still
-travelling --- and the \emph{size} of the mismatch is not a flag but the speed
-of travel.
-
-\begin{proposition}[Drift Meter]
-\label{prop:meter}
-Let $p$ be the vector of observed move shares over any window and $M$ the move
-table \eqref{eq:moves}. The mean displacement of the gains per iteration is
-\begin{equation}
-d \;=\; h\,M^{\!\top} p \;=\; h\,M^{\!\top}(p - w),
-\label{eq:meter}
-\end{equation}
-and its size is fixed by the mismatch $\lVert p-w\rVert$ within a factor
-of $1.30$:
-\begin{equation}
-\sqrt{2}\;h\,\lVert p - w\rVert \;\le\; \lVert d \rVert \;\le\;
-1.841\;h\,\lVert p - w\rVert .
-\label{eq:meterbound}
-\end{equation}
-\end{proposition}
-
-\begin{proof}
-Each move $v$ is applied a fraction $p_v$ of the time and shifts $\theta$ by
-$h\,v$, which is the first equality. The second is $M^{\!\top}w = 0$, that is
-\eqref{eq:weights}. Since $p$ and $w$ are both share vectors, $p-w$ sums to
-zero; the two constants are the least and greatest singular values of
-$M^{\!\top}$ on that subspace, obtained from the move table alone.
-\end{proof}
-
-A run climbing reads $\sqrt3\,h$ per iteration, one cutting only the lowest
-band reads $1\,h$, one on the cycle reads zero (Fig.~\ref{fig:meter}).
+\emph{Where the orbits sit.} Let the overshoot be the largest excursion of the
+output above the setpoint, relative to $\max|e|$. While it is below $\delta$,
+the window ends before the overshoot lobe and the portraits do not contain
+it; once it exceeds $\delta$, the window end $k_\delta$ jumps past the lobe, and
+since the window is shared by the three portraits, all three counts jump
+together (Fig.~\ref{fig:index}). This \emph{overshoot event} is where every
+orbit sits. All $108$ terminal orbits straddle it: each has points with
+overshoot below and above $\delta$. Every quiet step on every orbit has an
+overshoot below $\delta$ (at most $1.96\,\%$), while $68$--$75\,\%$ of the
+corrective steps, by plant, have one above it (median $3.5$--$7.6\,\%$). Where
+the jump carries a count across its threshold, as for $N_0$ in
+Fig.~\ref{fig:index}, the switching boundary of that band is a piece of the
+event surface.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{fig_meter}
-\caption{The meter on a run of the published rule (P1, $\beta=0.1$, unit-gain
-start). Above, the gains; below, the meter over a sliding window of eight
-iterations. While the gains travel it reads of order one; at iteration $81$
-the moves begin to cancel and it falls identically to zero, the same instant
-the gains stop climbing and begin to cycle. Nothing but the move sequence
-enters the lower curve.}
-\label{fig:meter}
+\includegraphics[width=\linewidth]{fig_index}
+\caption{The three counts along the direction $(1,1,1)$ through the centre of
+P1's terminal orbit from the AMIGO start, published (thin) and continuous
+(thick, $p = 32$), divided by their thresholds. At $-0.28h$ the overshoot
+reaches $\delta$, the window end $k_\delta$ jumps past the overshoot lobe, and
+all three counts jump with it; $N_0$ crosses its threshold there. Dotted:
+jumps of the published count.}
+\label{fig:index}
 \end{figure}
 
+\emph{Consequence: the destination is not a point.} With jumps, $\mathcal{T}$
+is not the zero set of a continuous map, and Remark~\ref{rem:transversal} does
+not apply to the published count. Moreover the counts determine $K_d$ only
+weakly. The distinct terminal orbits of a plant spread over $5.0$--$9.2$ in
+$\log K_d$ but only $0.25$--$0.69$ in $\log K_i$ and $\log K_p$, and the
+continuous count's Jacobian at the orbit centres away from the $K_d$ bounds has
+a median $\sigma_{\min}/\sigma_{\max}$ of $0.009$--$0.034$ by plant (on P4 a
+single such centre). The start selects the orbit: $4$ to $9$ distinct orbits
+per plant (Table~\ref{tab:battery}).
 
+% =====================================================================
+\section{Robustness}
+\label{sec:robust}
 
-Three things make the meter practical. It contains no plant: the constants
-come from $M$, which the rule fixes, so they hold for every loop --- unlike
-the local Jacobians of Section~\ref{sec:structure}, whose condition numbers
-run into the hundreds. Its natural window is the period, since a closed orbit
-has counts $n_e(1,4,2,1)$ by Corollary~\ref{cor:period} and eight iterations
-therefore read identically zero. And it costs nothing, because the rule
-already records which row it fired.
+The orbits differ, but not in robustness (Table~\ref{tab:battery}): over all
+$108$ runs the largest sensitivity peak $M_s$ on an orbit lies within
+$1.54$--$2.10$. Among $500$ states sampled from the first $60$ iterations of
+the runs, $M_s$ does not exceed $1.64$--$1.88$ (by plant) on those where all
+three counts are within their thresholds, and the rank correlation of
+$\max_k N_k/\Nbar_k$ with $M_s$ over all stable sampled states is
+$0.70$--$0.84$. Three observations explain this.
 
-\paragraph{Two uses} \emph{Shrink the step:} while the reading is large the
-state is travelling and the step should stay large; once it falls to zero the
-step buys no further progress and can be halved, handing the state to a
-concentric cycle of half the radius. \emph{Stop tuning:} a zero reading also
-means nothing more can be learned by iterating, so the tuner may hold the gains
-and stop stepping the plant. Since the reading rises again as soon as the moves
-cease to cancel, the same statistic re-arms the tuner if the plant later
-drifts, two thresholds giving the hysteresis that avoids chatter.
+\emph{The event is a damping condition on $S$.} Under
+Assumption~\ref{ass:loop} the record is the step response of $S$, so the
+counts and the window are functionals of $S$ alone. The orbits sit where the
+overshoot of that step response equals $\delta$. For a dominant pole pair with
+damping $\zeta$ the overshoot is $\exp(-\pi\zeta/\sqrt{1-\zeta^2})$, so the
+event is a damping level, $\zeta \approx 0.78$ for $\delta = 0.02$, and a
+damping level is a robustness specification. In this setting the quiet region
+lies inside $\{\text{overshoot} < \delta\}$: the settling band $\delta$, more
+than the thresholds $\Nbar$, fixes how damped the destination is. The
+continuous count of Section~\ref{sec:count} is this condition made smooth:
+its window weight $P_n$ is a logistic in $\log(A_{n-1}/\delta)$.
 
-\paragraph{Why a fixed schedule will not do} A step shrinking with the
-iteration number needs no detector, but does not work. From a $16\times$
-detuned start the schedules $\beta_n \propto n^{-1/2}$ and $n^{-3/4}$ do reach
-$\theta^*$, to $0.010$ and $0.001$, confirming the center; they are analysis
-instruments rather than recommendations. The classical $n^{-1}$ stops early at
-error $0.197$, for a reason that is a limit on total travel, not noise.
+\emph{The record must be the step response of $S$.} If the derivative acts on
+the measurement, the setpoint step reaches the plant through the proportional
+and integral terms only, and the record is the step response of
+$(1 + P C_D) S$, with $C_D$ the derivative term, not of $S$. Its overshoot is
+then no damping condition on $S$. On the same starts, $M_s$ reaches $2.95$ on
+P1, $2.41$ on P2 and $2.35$ on P3 (Table~\ref{tab:battery}). No safeguard in
+the rule is needed when the record is the step response of $S$. If the
+derivative must stay on the measurement, a step $\xi$ added to the measured
+signal gives $e = -S\xi$, because the controller then sees the whole step.
+Assumption~\ref{ass:loop} is also what the certified bound on $M_s$ from the
+same record requires \cite{Certified}.
 
-\begin{lemma}[Logarithmic Travel]
-\label{lem:travel}
-Let $\beta_n = c/n$. The total distance covered in $n$ steps is then
-$\sum_{m \le n} \log\gamma_m = -\sum_{m \le n}\log(1 - c/m) = O(\log n)$.
-A target at distance $D$ therefore cannot be reached in fewer than about
-$n \approx e^{D/c}$ iterations, even if every step points the right way.
+\emph{Robustness of the decisions.} Near the event the published count jumps
+when the overshoot crosses $\delta$, so a perturbation of the record of size
+$\eta \max|e|$ can flip a decision when the overshoot lies within $\eta$ of
+$\delta$. The continuous count replaces the jump $\Delta N$ by a slope of order
+$p\,|\Delta N|/4$ in $\log(A/\delta)$: $p$ sets how sharply the decisions
+respond to perturbations of the record, and $\delta$ sets their scale. A small
+$p$ trades fidelity to the published rule (Table~\ref{tab:fidelity}) for
+decisions that change continuously with the record.
+
+\begin{table}[t]
+\centering\small
+\caption{Terminal orbits from $27$ starts per plant: distinct orbits, range of
+$K_i$ (mean over each orbit), range over the orbits of the largest $M_s$ on
+each, orbits with $K_d$ on the floor/ceiling, and the largest $M_s$ with the
+derivative on the measurement, same starts.}
+\label{tab:battery}
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{lccccc}
+\toprule
+ & orbits & $K_i$ & $M_s$ & $K_d$ & $M_s$, $D$ on $y$ \\
+\midrule
+P1 & 9 & 0.122--0.220 & 1.54--1.79 & 3/0 & 2.95 \\
+P2 & 7 & 0.024--0.038 & 1.73--1.97 & 13/0 & 2.41 \\
+P3 & 6 & 0.054--0.070 & 1.88--2.10 & 0/0 & 2.35 \\
+P4 & 4 & 0.016--0.028 & 1.70--1.84 & 15/6 & 1.81 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =====================================================================
+\section{Choosing the Step and Stopping}
+\label{sec:step}
+
+\begin{corollary}[Step rule]\label{cor:design}
+On an orbit with $n_e = 1$, $K_i$, $K_p$ and $K_d$ stay within the factors
+$\gamma^2$, $\gamma$ and $\gamma^{1/2}$ of the orbit centre. To hold every gain
+within a factor $\rho$ it suffices that $\beta \le 1 - \rho^{-1/2}$.
+\end{corollary}
+
+The rule contains no plant parameter. At $\beta = 0.1$ the factors are
+$23.5\,\%$, $11.1\,\%$ and $5.4\,\%$. The centre is one of several, all with
+similar robustness; the rule bounds the excursion around the one the start
+selects.
+
+\begin{proposition}[Drift meter]\label{prop:meter}
+Over a window of iterations that apply table moves at a fixed step $h$, let
+$s$ be the share of each move and $M$ the matrix with rows \eqref{eq:moves}.
+The mean displacement per iteration is
+$\bar v = h M^{\top} s = h M^{\top}(s - w)$,
+$w = (\tfrac18, \tfrac12, \tfrac14, \tfrac18)$, and
+$\sqrt{2}\, h \lVert s - w \rVert \le \lVert \bar v \rVert \le 1.841\, h
+\lVert s - w \rVert$.
+\end{proposition}
+
+\begin{proof}
+$M^\top w = 0$ by Proposition~\ref{prop:balance}. Since $s - w$ sums to zero,
+the constants are the extreme singular values of $M^\top$ on that
+subspace, $\sqrt{2}$ and $1.841$.
+\end{proof}
+
+The meter reads the progress of the rule from the moves it has made, without
+an experiment. By Theorem~\ref{thm:orbit} it reads zero over every full
+period of a closed orbit, which is a stopping test: stop once it reads zero
+over a period at the step one is willing to keep. While the gains travel it
+does not read zero, and the step should not shrink.
+
+\begin{lemma}[Logarithmic travel]\label{lem:travel}
+With $\beta_n = c_0/n$, $0 < c_0 < 1$, the distance covered in $n$ steps is
+at most $-\sum_{m \le n} \log(1 - c_0/m) = c_0 \log n + O(1)$, so crossing a
+distance $D$ takes at least $e^{D/c_0 - O(1)}$ steps.
 \end{lemma}
 
-With $D \approx \log 16$ per gain the required $n$ is enormous --- the same
-borderline case as in stochastic approximation, but arising here because the
-iteration is deterministic and the path is too short, not because of noise.
+A schedule should therefore shrink the step only when the gains have stopped
+travelling. We halve $h$ once every band has moved both up and down since the
+last halving. From the AMIGO start the step falls below $10^{-3}$ of its
+initial value after $153$ (P1), $153$ (P2) and $224$ (P3) experiments, at
+$M_s$ of $1.70$, $1.76$ and $1.77$; on P4 the run reaches the $K_d$ ceiling.
+Between two halvings $K_d$ has moved up and down, so a quiet step and a
+$d_2$-step were taken and, as in Proposition~\ref{prop:local}, the box of those
+iterates meets $\Sigma_2$. If the halvings recur indefinitely and the
+iterates converge, the limit therefore lies on $\Sigma_2$, and on all three
+boundaries if no cut is passed on. In our runs the halvings recur on P1 and P3
+($34$ and $19$ in $600$ experiments); on P2 the last halving is at experiment
+$496$ and the run ends in a stretch of $d_1$ moves, during which $K_d$ does not
+move and the step cannot shrink.
 
-
-
-\paragraph{Application: a schedule that shrinks only when shrinking helps}
-A schedule fixed in advance is either too slow or too weak
-as just shown. Proposition~\ref{prop:meter} removes the guesswork.
-While $\lVert p - w \rVert$ is large the state is traveling and the step should
-stay large; when it falls to the noise floor of the window the state is
-orbiting, the step is no longer buying progress, and it can be cut. In the
-limiting form of this test one halves $\beta$ once every band has reversed,
-which is the cheapest sufficient condition for $p$ to have visited all four
-moves. Each halving hands the state from one orbit to a concentric orbit of
-half the size, so the error falls geometrically at a bounded number of iterations
-per stage. On the interior-target plants this reaches $10^{-4}$ in $36$ to
-$98$ iterations, three orders of magnitude better than the constant step for a
-comparable number of experiments. This is a global relative of the sign-based Rprop
-update with step adaptation on reversal \cite{Riedmiller1993}.
-
-\paragraph{What the meter cannot see} Under noise heavy enough to randomize the
-three comparisons, the priority logic fires at its branch frequencies, which by
-Proposition~\ref{prop:unique} are the balance weights themselves: the meter
-then reads zero although the state is not orbiting, reporting arrival when it
-has gone blind. The discriminating feature is the \emph{ordering}, a genuine
-orbit being periodic at lag $8$ while noise-driven moves share its marginals in
-independent order. A complete detector pairs \eqref{eq:meterbound} with a
-periodicity test, left to the stochastic treatment.
+\begin{remark}[Travel certificate]
+By Theorem~\ref{thm:orbit}, a run of more than $n_e \kappa_v$ consecutive moves
+$v$, $\kappa = (1, 4, 2, 1)$, cannot occur on a closed orbit of multiplicity
+$n_e$ or less. Such a run certifies travel, and the step may be enlarged
+during it without altering any such orbit. Doubling on every repeated move
+alters every orbit whose ordering repeats a move.
+\end{remark}
 
 % =====================================================================
 \section{Conclusions}
 
-SPIN tuning with a fixed step ends in a limit cycle, and that cycle is now
-fully described. It circles the triple point, the gain vector fixed by the
-plant at which all three turn indices sit on their thresholds. Its move
-frequencies $(\tfrac18, \tfrac12, \tfrac14, \tfrac18)$ follow from a single
-balance condition, and the same condition over the integers gives the shortest
-possible period of $8$. The cycle is realized as a binary counter on the
-orbit whose length is a multiple of eight with counts $n_e(1,4,2,1)$, and
-those counts alone bound how far each gain strays from its centre. All four
-plants of the battery close such an orbit exactly, three with $n_e=1$ and one
-with $n_e=2$. If the
-triple point lies outside the gain box, the cycle instead settles at a
-complementarity point, as in the P2 run of the companion paper. Two tools made
-the analysis possible: the balance condition, which locates the center, and the
-$\varepsilon$-regularized winding index, which makes that center well defined.
+The limit cycle of \spin{} has a combinatorial core that does not depend on
+how the turns are counted: the move shares
+$(\tfrac18, \tfrac12, \tfrac14, \tfrac18)$, periods $8 n_e$, an excursion of
+$n_e (2, 1, \tfrac12)$ steps, and a bounding box that meets the switching
+boundaries, so that small-step orbits end on their intersection. This needs
+every applied move to belong to the table, which is why a blocked cut must
+pass to a lower band rather than raise the bands below it.
 
-The results support practice directly. The excursion bound keeps $K_i$, $K_p$
-and $K_d$ within the factors $\gamma^{2}$, $\gamma$, $\gamma^{1/2}$ of their
-values at the centre, so a common accuracy $\rho$ follows from
-$\beta \le 1-\rho^{-1/2}$. This contains no plant parameter; at the companion
-paper's default $\beta = 0.1$ it guarantees $23.5\,\%$, $11.1\,\%$ and
-$5.4\,\%$ on the three gains.
-
-The balance condition then closes the circle. Used forwards it locates the
-cycle; used backwards it measures the distance to it, since by
-Proposition~\ref{prop:meter} the deviation of the observed move frequencies
-from the balance weights is the drift rate, to within a factor of $1.30$ and
-with constants that involve no plant. The rule can therefore read its own
-progress from the sequence of moves it has already made, needing no extra
-experiment, and shrink its step only when shrinking it helps: the resulting
-schedule reaches $10^{-4}$ accuracy in fewer than a hundred iterations. One
-theoretical step remains open, the existence and stability of the cycle
-through the averaged Filippov dynamics; and one practical limitation is known,
-that the meter cannot distinguish a true orbit from comparisons randomized by
-noise, for which the ordering of the moves rather than their frequencies is
-the discriminating statistic.
+Where the boundaries meet depends on the count. The published count is a
+winding number over a window that ends when the error settles, and the limit
+of a continuous count that reproduces the rule's decisions on
+$98.5$--$99.5\,\%$ of the states it visits. Through that count the destination
+becomes visible: every terminal orbit on the battery sits on the event at
+which the overshoot of the step response equals the settling band. The
+destination is therefore not a point, and $K_d$ in particular is weakly
+determined; but the event is a damping condition on $S$, and the orbits share
+its robustness, $M_s$ within $1.54$--$2.10$. That reading holds only when the
+record is the step response of $S$, the same condition under which the record
+certifies $M_s$ \cite{Certified}. The existence and attraction of the
+terminal orbit, and the stochastic case, remain open.
 
 % =====================================================================
 \footnotesize
 \begin{thebibliography}{10}
-\setlength{\itemsep}{-4pt}\setlength{\parsep}{0pt}\setlength{\labelsep}{3pt}
-\itemsep0pt
+\setlength{\itemsep}{-1pt}
 
 \bibitem{Paper1}
 D. Pachner, P. Otta, J. Dost\'al, V. Havlena, Model-free PID tuning by
-step-response inspection, submitted to J. Process Control, 2026.
+step-response inspection, arXiv:2609.15711, 2026.
+
+\bibitem{Certified}
+P. Otta, D. Pachner, J. Dost\'al, V. Havlena, Certified robustness from one
+setpoint step: a safe acceptance test for model-free PID tuning, submitted
+to ECC 2027.
 
 \bibitem{ZN1942}
 J.~G. Ziegler, N.~B. Nichols, Optimum settings for automatic controllers,
@@ -709,15 +614,6 @@ tuning: theory and applications, IEEE Control Syst. Mag. 18 (4) (1998)
 \bibitem{Killingsworth2006}
 N.~J. Killingsworth, M. Krsti{\'c}, PID tuning using extremum seeking,
 IEEE Control Syst. Mag. 26 (1) (2006) 70--79.
-
-\bibitem{Riedmiller1993}
-M. Riedmiller, H. Braun, A direct adaptive method for faster backpropagation
-learning: the RPROP algorithm, in: Proc. IEEE Int. Conf. Neural Networks,
-1993, pp. 586--591.
-
-\bibitem{Filippov1988}
-A.~F. Filippov, Differential Equations with Discontinuous Righthand Sides,
-Kluwer, 1988.
 
 \end{thebibliography}
 

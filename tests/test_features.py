@@ -45,6 +45,18 @@ def test_encirc_degenerate_inputs():
     assert encirc(np.array([1.0]), np.array([1.0])) == 0.0
 
 
+def test_encirc_counts_a_coarse_turn_across_the_negative_axis():
+    """One counter-clockwise turn, sampled so coarsely that one segment crosses
+    the negative x-axis from a point with x >= 0. The winding number is the sum
+    of the segment angles, ~1 turn; correcting the endpoint angle only by
+    crossings with both ends at x < 0 missed this one and returned ~0."""
+    x = np.array([1.0, 0.3, -0.9, 0.5, 1.0])
+    y = np.array([0.0, 0.5, -0.4, -1.0, -0.01])     # both axes already at peak 1
+    dphi = np.arctan2(x[:-1] * y[1:] - y[:-1] * x[1:], x[:-1] * x[1:] + y[:-1] * y[1:])
+    assert encirc(x, y, eps=0.01) == pytest.approx(np.sum(dphi) / (2 * np.pi))
+    assert encirc(x, y, eps=0.01) == pytest.approx(1.0, abs=0.01)
+
+
 def test_find_disc_entrypoint_truncates_at_last_entry():
     x, y = _spiral(3.0, decay=4.0)          # spirals inward
     j = find_disc_entrypoint(x, y, EPSILON)

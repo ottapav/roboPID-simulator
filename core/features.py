@@ -103,10 +103,20 @@ def encirc(x: np.ndarray, y: np.ndarray, eps: float = EPSILON) -> float:
     Compute the signed encirclement count of the trajectory around the origin.
 
     Implements Definition 1 (Encirclement count) of docs/JPC26_basic/main.tex:
-    per-axis peak normalization, truncation at the last entry into the
-    epsilon-disc, then winding number as the endpoint angle difference
-    corrected by signed crossings of the negative horizontal semi-axis.
-    Returns a float (partial revolutions count fractionally).
+    per-axis peak normalization, truncation at the last segment that touches the
+    epsilon-disc, then the winding number up to there. Returns a float (partial
+    revolutions count fractionally).
+
+    The winding number is the sum of the signed angles of the segments, each
+    taken as atan2(cross, dot) in (-pi, pi]. An earlier version read the angle
+    between the endpoints and corrected it by the crossings of the negative
+    x-axis, counting only segments with both ends at x < 0, and only up to
+    segment j-2. A segment that crosses the axis with one end at x >= 0 (a large
+    turn between two samples, close to the origin), or the last segment, then
+    went uncorrected, and the count was off by one or two whole turns: 41 of
+    the 8792 states visited by the rule on the plant battery
+    (docs/ECC27_limit_cycle/scripts/lc_results.py, 'encirc_v1_wrong'). The two
+    agree everywhere else.
     """
     x = np.asarray(x, dtype=float).ravel()
     y = np.asarray(y, dtype=float).ravel()
@@ -124,20 +134,9 @@ def encirc(x: np.ndarray, y: np.ndarray, eps: float = EPSILON) -> float:
     if j <= 1:
         return 0.0
 
-    # Angle swept from start to j
-    angle = np.arctan2(y[j], x[j]) - np.arctan2(y[0], x[0])
-
-    # Count negative-x-axis crossings (full winding counts)
-    xp = x[:j - 1]
-    xn = x[1:j]
-    yp = y[:j - 1]
-    yn = y[1:j]
-
-    in_neg_x = (xp < 0) & (xn < 0)
-    n1 = float(np.sum(in_neg_x & (yp < 0) & (yn >= 0)))   # CCW crossing
-    n2 = float(np.sum(in_neg_x & (yp >= 0) & (yn < 0)))   # CW crossing
-
-    return angle / (2.0 * np.pi) - n1 + n2
+    xp, yp, xn, yn = x[:j], y[:j], x[1:j + 1], y[1:j + 1]
+    dphi = np.arctan2(xp * yn - yp * xn, xp * xn + yp * yn)
+    return float(np.sum(dphi) / (2.0 * np.pi))
 
 
 # Swappable trajectory-scoring algorithms: (x, y, eps) -> N. Register a new

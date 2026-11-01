@@ -1,5 +1,15 @@
 # Is the terminal orbit unique? — findings on the current algorithm, 1 Nov 2026
 
+> **Status.** This is the investigation log. The draft
+> (`conference_draft_ecc.tex`) now uses a different setting — derivative on
+> the error, linear loop, starts around the AMIGO gains — and its numbers come
+> from `scripts/lc_results.py` / `lc_results.json`. Two findings below were
+> refined there: the event the orbits sit on is the **overshoot** reaching the
+> δ band (not the undershoot), and `encirc` had a second error (crossings by a
+> segment with one end at x ≥ 0), now fixed together with the last-segment one.
+> The complex-zero guard of §5 was not adopted: with the derivative on the
+> error the orbits it addressed do not occur.
+
 The measurements in the ECC draft predate small changes to the algorithm and
 are not used here; everything below is from the current code. Script:
 `docs/scripts/orbit_uniqueness.py`, results: `orbit_uniqueness.json`.
