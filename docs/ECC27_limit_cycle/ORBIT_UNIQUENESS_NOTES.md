@@ -205,9 +205,76 @@ M_s ≈ 11 orbit. On P1 some starts reach a second, more aggressive orbit
 come from the normalization (full window instead of [k1, k_δ]) and from Γ0's
 integral axis being taken relative to k2 instead of k_δ.
 
-**Recommendation for the ECC draft.** Replace the radius-weighted N_ε by the
-envelope-weighted index: it is continuous (so the switching surfaces exist and
-Sec. 3's argument goes through) and it is a regularization *of the count the
-rule actually uses*, agreeing on 88–97 % of the decisions, instead of a
-different instrument agreeing on 30–50 %. The one remaining discrepancy to
-close is P1's second orbit.
+The envelope index was a first step; §7 completes it.
+
+## 7. A smooth count that explains the rule
+
+Scripts: `docs/scripts/regindex_soft.py` (definition),
+`regindex_soft_check.py` (hard limit), `regindex_soft_eval.py` (finite
+sharpness; results in `regindex_soft_eval.json`).
+
+**Construction.** The published count is the composition of discrete steps:
+window start k1, window end k_δ, per-axis peak normalization over the window,
+Γ0's reference value at k_δ, the cut at the last segment touching the ε-disc,
+and the winding sum itself, which jumps when a segment passes through the
+origin. `soft_counts` replaces each by a smooth version with one sharpness p:
+
+| published step | smooth version |
+|---|---|
+| start k1 = first(e ≥ −0.9) + pad | B_k = logistic(p_s · (max_{m≤k−pad} e_m + 0.9)) |
+| end k_δ | P_k = 1/(1 + (δ/E_{k−1})^p), E_k = max_{m≥k}\|e_m\| / peak\|e\| |
+| peak over [k1, k_δ] | max_k B_k P_k \|x_k\| |
+| Γ0 reference y(k_δ) | Σ π_k y_k, π_k = P_k − P_{k+1} |
+| cut at last disc touch | V_k = smooth "a later segment touches the disc" |
+| segment through the origin | angle weighted by d_k²/(d_k² + r0²), r0 = ε/100 |
+
+Every weight is a continuous function of the record, so the index is
+continuous in the gains for every finite p, and it is the published count as
+p → ∞.
+
+**The hard limit is exact.** On 7459 states visited by hard-count runs (P1–P4,
+27 starts × 120 iterations), the p → ∞ limit equals the published count to
+rounding on 7447. The other 12 are all explained, none is open:
+
+- 6: `encirc` misses a crossing of the negative x-axis on the last segment
+  (its crossing loop runs over segments 0..j−2 while the angle is read at
+  point j) — a one-turn error of the published implementation;
+- 3: a segment through the origin, where the winding number is ambiguous;
+- 3: the corner case j ≤ 1, where `encirc` returns 0 (difference 0.011).
+
+**Finite sharpness.**
+
+| plant | p | same move | median \|ΔN\| | Ki of terminal orbits (hard → smooth) | worst M_s (hard → smooth) |
+|---|---|---|---|---|---|
+| P1 | 8 | 96.7 % | 0.026 | 0.110–0.130 → 0.113–0.130 | 1.55–1.62 → 1.59–1.62 |
+| P1 | 32 | 98.5 % | 0.008 | → 0.110–0.130 | → 1.55–1.62 |
+| P2 | 32 | 98.7 % | 0.006 | 0.023–0.025 → 0.023–0.026 | 1.75–1.88 → 1.75–1.92 |
+| P2 | 128 | 99.8 % | 0.005 | → 0.023–0.026 | → 1.75–1.88 |
+| P3 | 8 | 96.9 % | 0.023 | 0.023–0.058 → 0.050–0.059 | 1.85–11.39 → 1.80–2.13 |
+| P3 | 32 | 99.3 % | 0.007 | → 0.023–0.057 | → 1.85–11.39 |
+| P4 | 32 | 99.6 % | 0.014 | 0.015–0.017 → 0.015–0.017 | 1.73–1.89 → 1.73–1.89 |
+
+From p = 32 the smooth count reaches the hard count's destinations on all four
+plants, including the M_s ≈ 11 orbit on P3, i.e. it reproduces the rule's
+failure as well as its successes. (At p = 8 that orbit disappears: a softer
+count is a different, and here better, rule — but then it no longer explains
+the published one.) The second, aggressive P1 orbit of the envelope index (§6)
+is gone; it came from the missing start, normalization and reference pieces.
+
+**Continuity.** On the P1 line where the δ-guarded index jumped, at 1/400 of a
+rule step, the hard count changes by up to 1.01 between neighbours, the smooth
+count (p = 32) by up to 0.22. Refining that interval 10×, 100×, 1000× shrinks
+the step to 0.025, 0.0025, 0.0002: continuous, and steep there because a Γ0
+segment passes 0.0009 from the origin, inside r0. With r0 = ε/10 the same
+interval is flat to 0.0002 at 100×: r0 trades smoothness near the origin
+against agreement with the rule.
+
+**Recommendation for the ECC draft.** Sec. 3 should define the analysed index
+as this smooth count (p = 32, r0 = ε/100), replacing the radius-weighted N_ε:
+the switching surfaces of the rule are then level sets of a continuous function
+that makes the rule's own decision on ≈ 99 % of the states the rule visits and
+leads to the rule's own destinations. The radius-weighted N_ε explained 30–50 %.
+
+**For the algorithm.** The `encirc` last-segment error is an off-by-one in the
+published code (6 of 7459 states, one turn each); fixing it changes the rule
+only there. Not applied.
