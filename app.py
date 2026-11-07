@@ -37,6 +37,9 @@ def parse_args():
     p.add_argument('--ctype', default='PID', choices=['I', 'PI', 'PID'],
                    help='Controller type')
     p.add_argument('--port', type=int, default=8050, help='Port')
+    p.add_argument('--host', default=None,
+                   help='Interface to listen on (default: 127.0.0.1, or 0.0.0.0 '
+                        'when $PORT is set by a hosting platform)')
     p.add_argument('--debug', action='store_true', help='Enable Dash debug mode')
     # parse_known_args so this doesn't choke on argv it doesn't own (e.g. Gunicorn's).
     args, _ = p.parse_known_args()
@@ -189,6 +192,17 @@ _POSTER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            'docs', 'SPIN_poster')
 
 
+@server.after_request
+def _security_headers(response):
+    """Baseline browser hardening for the public deployment. No CSP: the Dash
+    renderer and Plotly need inline config and scripts, and a policy loose
+    enough to allow them would add little."""
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    return response
+
+
 @server.route('/poster')
 def poster_html():
     return send_from_directory(_POSTER_DIR, 'spin_poster.html')
@@ -218,8 +232,11 @@ register_callbacks(app)
 
 def main():
     # Render assigns the listen port dynamically via $PORT and expects the
-    # app to bind on 0.0.0.0, not localhost.
+    # app to bind on 0.0.0.0, not localhost. A plain local run stays on the
+    # loopback interface: with --debug, Flask's interactive debugger would
+    # otherwise be reachable from the whole network.
     port = int(os.environ.get('PORT', args.port))
+    host = args.host or ('0.0.0.0' if 'PORT' in os.environ else '127.0.0.1')
 
     print(f'\n  RoboPID running at http://localhost:{port}')
     print(f'  Plant: tau={args.tau}, K={args.K}, L={args.L}')
@@ -229,7 +246,7 @@ def main():
     print(f'  Grid: N={N_POINTS}, Tsim={_default_tsim:.4g}, Ts={fmt2(_default_ts)}')
     print(f'  Controller: {args.ctype}\n')
 
-    app.run(debug=args.debug, host='0.0.0.0', port=port, threaded=True)
+    app.run(debug=args.debug, host=host, port=port, threaded=True)
 
 
 if __name__ == '__main__':

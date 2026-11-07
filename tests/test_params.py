@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from core.params import (
-    DEFAULT_TAU, GAIN_BOX, N_ITER_BY_CTYPE, NBAR, TAU_MIN,
+    DEFAULT_TAU, GAIN_BOX, N_ITER_BY_CTYPE, NBAR, TAU_MAX_CHARS, TAU_MAX_COUNT, TAU_MIN,
     fmt2, gain_slider_marks, parse_tau,
 )
 from core.plant import plant_tf
@@ -50,6 +50,20 @@ def test_parse_tau_drops_non_finite():
     tau, notes = parse_tau("[float('nan')]") if False else parse_tau('[1e400, 2]')
     assert np.all(np.isfinite(tau))
     assert any('non-finite' in n for n in notes)
+
+
+def test_parse_tau_caps_the_number_of_lags():
+    """Each lag costs a polymul on every redraw, so an unauthenticated client
+    must not be able to type thousands of them into the field."""
+    tau, notes = parse_tau('[' + ', '.join(['1'] * (TAU_MAX_COUNT + 5)) + ']')
+    assert tau.size == TAU_MAX_COUNT
+    assert any(str(TAU_MAX_COUNT) in n for n in notes)
+
+
+def test_parse_tau_refuses_oversized_input_before_parsing():
+    tau, notes = parse_tau('[' + '1,' * TAU_MAX_CHARS + '1]')
+    np.testing.assert_allclose(tau, DEFAULT_TAU)
+    assert any('characters' in n for n in notes)
 
 
 @pytest.mark.parametrize('text', ['0', '[0, 5]', '-3', '[]', 'abc', '1e400'])

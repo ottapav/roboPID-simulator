@@ -78,6 +78,13 @@ def time_grid(Tsim: float, Ts: float) -> np.ndarray:
 # construction. Both are clamped away rather than allowed to reach the solver.
 TAU_MIN = 1e-3
 
+# The tau field is free text from an unauthenticated browser, and every figure
+# redraw multiplies the plant out with one polymul per lag: 400 lags already
+# cost ~0.1 s, 3000 cost ~30 s of a Gunicorn thread per keystroke. The battery
+# plants need six, so these bounds only ever stop input nobody means to tune.
+TAU_MAX_COUNT = 20
+TAU_MAX_CHARS = 500
+
 # ── Paper constants (docs/JPC26_basic/main.tex) ───────────────────────────────
 NBAR = (0.5, 0.75, 1.0)   # loop limits N̄0, N̄1, N̄2
 EPS = 0.1                 # truncation disc radius (Definition 1)
@@ -119,13 +126,20 @@ def parse_tau(tau_str, default=DEFAULT_TAU) -> tuple[np.ndarray, list[str]]:
     of silently simulating something the user did not ask for.
     """
     fallback = np.asarray(default, dtype=float)
+    text = str(tau_str).strip()
+    if len(text) > TAU_MAX_CHARS:
+        return fallback, [f'τ: longer than {TAU_MAX_CHARS} characters — using [5.0]']
     try:
-        arr = np.atleast_1d(
-            np.asarray(ast.literal_eval(str(tau_str).strip()), dtype=float))
+        arr = np.atleast_1d(np.asarray(ast.literal_eval(text), dtype=float))
     except Exception:
         return fallback, ["τ: couldn't parse — using [5.0]"]
 
     notes: list[str] = []
+    if arr.ndim != 1:
+        arr = arr.ravel()
+    if arr.size > TAU_MAX_COUNT:
+        notes.append(f'τ: only the first {TAU_MAX_COUNT} time constants used')
+        arr = arr[:TAU_MAX_COUNT]
     finite = arr[np.isfinite(arr)]
     if finite.size < arr.size:
         notes.append('τ: non-finite entries dropped')
