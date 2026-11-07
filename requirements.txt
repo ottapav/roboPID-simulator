@@ -3,7 +3,9 @@ scipy>=1.10
 # 4.4.1 signs background-callback job ids; earlier versions let any client
 # SIGKILL an arbitrary server PID through DiskcacheManager (?oldJob=/cancelJob=).
 dash>=4.4.1
-dash-bootstrap-components>=1.5
+# 2.0 is the first release built for Dash 3+; an existing 1.x install would
+# otherwise satisfy the old floor and be kept next to the new Dash.
+dash-bootstrap-components>=2.0
 plotly>=5.18
 diskcache>=5.6
 psutil>=5.9
