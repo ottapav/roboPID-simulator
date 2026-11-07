@@ -1,4 +1,16 @@
+<p align="center">
+  <img src="assets/robopid-icon.svg" width="112" alt="RoboPID icon: a setpoint step winding into a P-shaped phase portrait">
+</p>
+
 # roboPID-simulator
+
+[![Live demo](https://img.shields.io/website?url=https%3A%2F%2Frobopid-simulator.uceeb.cvut.cz&label=live%20demo&up_message=online&down_message=offline)](https://robopid-simulator.uceeb.cvut.cz/)
+[![arXiv](https://img.shields.io/badge/arXiv-2609.15711-b31b1b.svg)](https://arxiv.org/abs/2609.15711)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-0065BD?logo=python&logoColor=white)](#requirements)
+[![Built with Dash](https://img.shields.io/badge/built%20with-Dash-0065BD?logo=plotly&logoColor=white)](https://dash.plotly.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0065BD)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/ottapav/robopid-simulator?color=0065BD)](https://github.com/ottapav/robopid-simulator/commits)
+[![ČVUT UCEEB](https://img.shields.io/badge/%C4%8CVUT-UCEEB-0065BD)](https://www.uceeb.cz/)
 
 **RoboPID** is an interactive Dash web app implementing model-free PID
 tuning by inspection of the step response, the method described in
@@ -213,7 +225,7 @@ pip install -r requirements.txt
 ## Usage
 
 ```
-python app.py [--tau "5,5,5,5"] [--K 1.25] [--L 8] [--ctype PID] [--port 8050] [--debug]
+python app.py [--tau "5,5,5,5"] [--K 1.25] [--L 8] [--ctype PID] [--port 8050] [--host 127.0.0.1] [--debug]
 ```
 
 Then open `http://localhost:8050` in your browser.
@@ -225,7 +237,8 @@ Then open `http://localhost:8050` in your browser.
 | `--L` | `8.0` | Plant dead time |
 | `--ctype` | `PID` | Controller type: `I`, `PI`, or `PID` |
 | `--port` | `8050` | Server port |
-| `--debug` | off | Enable Dash debug mode |
+| `--host` | `127.0.0.1` | Listen interface; `0.0.0.0` exposes the app to the network (the default when `$PORT` is set) |
+| `--debug` | off | Enable Dash debug mode — local use only, never with `--host 0.0.0.0` |
 
 These flags only seed the initial values shown in the GUI — all parameters
 can be changed live in the browser afterward. `$PORT`, if set, overrides
@@ -247,6 +260,11 @@ and the button looks dead. The cache is cleared once per launch rather than
 once per process (keyed on systemd's `INVOCATION_ID`, under a startup lock), so
 a worker respawned by max-requests or a timeout can't wipe another worker's
 in-flight job. `app._make_cache` has the details.
+
+Dash signs the background-job handles it sends to the browser (Dash ≥ 4.4.1,
+pinned in `requirements.txt`). Set `DASH_SECRET_KEY` to the same random value
+for every worker (e.g. `Environment=DASH_SECRET_KEY=…` in the systemd unit) so
+the key does not depend on the shared cache surviving.
 
 ## Configuration
 
@@ -293,7 +311,7 @@ roboPID-simulator/
 ├── robopid.config        # Runtime simulation settings (see Configuration)
 ├── Procfile              # Gunicorn command for the hosted deployment
 ├── requirements.txt
-├── assets/               # Client-side JS (slider tooltips, figure download)
+├── assets/               # Client-side JS (slider tooltips, figure download), favicon + app icon
 ├── docs/                 # Paper sources, posters and figure scripts
 │   └── JPC26_basic/        # The Journal of Process Control manuscript
 ├── core/                 # Pure simulation/control logic, no UI dependencies
