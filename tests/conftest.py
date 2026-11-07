@@ -51,10 +51,19 @@ RTOL, ATOL = 1e-9, 1e-9
 # 2e-8 relative over a 521-sample record. Measured against exact rational
 # arithmetic neither is systematically better (on P4, dlsim 2.3e-9 vs lfilter
 # 3.6e-9; on P2 the ordering reverses) -- this is float64 noise at the
-# conditioning these polynomials permit, not a behaviour difference. The bound
-# below sits ~50x above the worst observed drift, which still leaves it orders
-# of magnitude tighter than any real change would be.
-SIM_RTOL, SIM_ATOL = 1e-6, 1e-7
+# conditioning these polynomials permit, not a behaviour difference.
+#
+# The same noise also differs between platforms. On the current 500-sample
+# grid, P4's linear response computed on Linux and the goldens (recorded on
+# Windows) differ by up to 1.4e-7 in u and 2.7e-7 in the integral channel,
+# identically for numpy 2.2-2.5 and scipy 1.15-1.18, and every discrete
+# outcome still matches exactly. Against a 60-digit mpmath re-derivation of
+# the same loop the Linux result errs by 6e-8 and the goldens by 1.2e-7, so
+# both sit at P4's float64 floor and neither is wrong. ATOL is set ~4x above
+# that cross-platform drift -- still three orders of magnitude below what one
+# tuning notch (an 11% step in any single gain) moves y or u on any battery
+# plant (at least 1.6e-3, on P1).
+SIM_RTOL, SIM_ATOL = 1e-6, 1e-6
 
 
 @pytest.fixture(params=sorted(BATTERY), ids=sorted(BATTERY))

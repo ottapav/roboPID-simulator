@@ -336,7 +336,7 @@ pip install pytest
 python -m pytest tests/ -q
 ```
 
-326 tests, about five seconds. They come in two kinds.
+365 tests, about five seconds. They come in two kinds.
 
 The **golden regressions** pin the simulation against recorded outputs for the
 four battery plants P1–P4: step responses (`test_pid.py`), loop signals and the
@@ -359,7 +359,11 @@ Note on tolerances: discrete outcomes (window indices, tuning trajectories,
 which rule branch fired) are reproduced exactly. Floating step responses carry
 a looser bound, because the closed-loop denominators are high-order and near
 the unit circle — P4 is degree 12 — so any change to summation order moves the
-last few digits without changing behaviour.
+last few digits without changing behaviour. That includes the platform: on
+Linux P4 differs from the recorded goldens by ~1e-7, while both are within
+1.2e-7 of a 60-digit reference, so the bound covers it and the goldens never
+need regenerating for another OS or numpy; `tests/conftest.py` has the
+measurements.
 
 ## Citation
 
